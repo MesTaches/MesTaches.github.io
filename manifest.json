@@ -1,0 +1,16 @@
+{
+  "name": "Gestionnaire de Tâches",
+  "short_name": "Mes Tâches",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F7F6F2",
+  "theme_color": "#102A63",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

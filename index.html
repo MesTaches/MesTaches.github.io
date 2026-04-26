@@ -1,0 +1,2061 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mes Tâches</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+  <meta name="theme-color" content="#102A63"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-title" content="Mes Tâches"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'Lora',serif;background:#F7F6F2;-webkit-font-smoothing:antialiased}
+    @keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+    @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+    ::-webkit-scrollbar{width:5px;height:5px}
+    ::-webkit-scrollbar-track{background:#f1f1f1}
+    ::-webkit-scrollbar-thumb{background:#D0D0D0;border-radius:3px}
+    [contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}
+    button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+    input,select,textarea{font-size:16px !important}
+  </style>
+  <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
+</head>
+<body>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+const _fbApp = firebase.initializeApp({
+  apiKey: "AIzaSyAigQeZBObjPtqfxr6MrJZxtrORlQ-OStM",
+  authDomain: "mes-taches-632e4.firebaseapp.com",
+  projectId: "mes-taches-632e4",
+  storageBucket: "mes-taches-632e4.firebasestorage.app",
+  messagingSenderId: "302859991450",
+  appId: "1:302859991450:web:9eb287d1fd570a7ed66223"
+});
+const _db = firebase.firestore();
+const _auth = firebase.auth();
+
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1"];
+let _uid = null;
+let _debounce = {};
+let _reactMounted = false;
+let _remoteCheckInterval = null;
+// Timestamp of the LAST time THIS device wrote to Firestore
+// Remote check only reloads if Firestore ts > this value + 10s buffer
+let _myLastWriteTs = 0;
+
+const _origSetItem = Storage.prototype.setItem;
+const _origGetItem = Storage.prototype.getItem;
+const _origRemoveItem = Storage.prototype.removeItem;
+
+Storage.prototype.setItem = function(key, value) {
+  _origSetItem.call(this, key, value);
+  if (this === window.localStorage && _uid && SYNC_KEYS.includes(key)) {
+    clearTimeout(_debounce[key]);
+    _debounce[key] = setTimeout(() => {
+      const ts = Date.now();
+      _myLastWriteTs = ts; // Record when WE wrote
+      const docKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
+      _db.collection('users').doc(_uid).collection('ls').doc(docKey)
+        .set({ value: value, ts: ts })
+        .catch(e => console.error('Firestore save error:', e));
+    }, 1000);
+  }
+};
+
+function showScreen(id) {
+  document.querySelectorAll('.fb-screen').forEach(el => el.style.display = 'none');
+  const el = document.getElementById(id);
+  if (el) el.style.display = 'flex';
+}
+
+function mountReact() {
+  showScreen('fb-app');
+  _reactMounted = true;
+  if (window._doMount) window._doMount();
+  else window._pendingMount = true;
+}
+
+// Check for remote changes every 10s
+// Only reload if the remote timestamp is significantly newer than our last write
+function startRemoteCheck(uid) {
+  if (_remoteCheckInterval) clearInterval(_remoteCheckInterval);
+  _remoteCheckInterval = setInterval(async () => {
+    if (!_reactMounted || !_uid) return;
+    try {
+      const key = 'taskmanager_v4';
+      const docKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
+      const snap = await _db.collection('users').doc(uid).collection('ls').doc(docKey).get();
+      if (snap.exists && snap.data() && snap.data().ts) {
+        const remoteTs = snap.data().ts;
+        const now = Date.now();
+        // Only reload if:
+        // - remote is newer than our last write by more than 15 seconds
+        // - remote is not from the future (sanity check)
+        if (remoteTs > _myLastWriteTs + 15000 && remoteTs <= now + 5000) {
+          const localVal = _origGetItem.call(localStorage, key);
+          const remoteVal = snap.data().value;
+          if (localVal !== remoteVal) {
+            console.log('Remote change from another device - reloading');
+            window.location.reload();
+          }
+        }
+      }
+    } catch(e) {}
+  }, 10000);
+}
+
+async function loadAndMount(uid) {
+  _uid = uid;
+  _myLastWriteTs = Date.now(); // Treat load as a "write" to avoid immediate reload
+  showScreen('fb-loading');
+  try {
+    for (const key of SYNC_KEYS) {
+      const docKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
+      const snap = await _db.collection('users').doc(uid).collection('ls').doc(docKey).get();
+      if (snap.exists && snap.data() && snap.data().value) {
+        _origSetItem.call(localStorage, key, snap.data().value);
+      }
+    }
+  } catch(e) { console.warn('Load error:', e); }
+  startRemoteCheck(uid);
+  mountReact();
+}
+
+_auth.onAuthStateChanged(user => {
+  if (user) {
+    loadAndMount(user.uid);
+  } else {
+    _uid = null;
+    _reactMounted = false;
+    if (_remoteCheckInterval) clearInterval(_remoteCheckInterval);
+    SYNC_KEYS.forEach(k => _origRemoveItem.call(localStorage, k));
+    showScreen('fb-login');
+    document.getElementById('root').innerHTML = '';
+  }
+});
+
+async function fbSubmit(isRegister) {
+  const email = document.getElementById('fb-email').value;
+  const password = document.getElementById('fb-password').value;
+  const btn = document.getElementById('fb-btn');
+  btn.disabled = true; btn.textContent = '⟳ Connexion…';
+  document.getElementById('fb-error').style.display = 'none';
+  try {
+    if (isRegister) await _auth.createUserWithEmailAndPassword(email, password);
+    else await _auth.signInWithEmailAndPassword(email, password);
+  } catch(err) {
+    const msgs = {
+      'auth/user-not-found':'Aucun compte avec cet email.',
+      'auth/wrong-password':'Mot de passe incorrect.',
+      'auth/email-already-in-use':'Cet email est déjà utilisé.',
+      'auth/weak-password':'Mot de passe trop court (6 caractères min).',
+      'auth/invalid-email':'Adresse email invalide.',
+      'auth/invalid-credential':'Email ou mot de passe incorrect.',
+    };
+    document.getElementById('fb-error').textContent = msgs[err.code] || err.message;
+    document.getElementById('fb-error').style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = isRegister ? '✦ Créer mon compte' : '→ Se connecter';
+  }
+}
+
+let _fbIsRegister = false;
+function toggleMode() {
+  _fbIsRegister = !_fbIsRegister;
+  document.getElementById('fb-btn').textContent = _fbIsRegister ? '✦ Créer mon compte' : '→ Se connecter';
+  document.getElementById('fb-btn').onclick = () => fbSubmit(_fbIsRegister);
+  document.getElementById('fb-toggle').textContent = _fbIsRegister ? "J'ai déjà un compte → Se connecter" : "Pas encore de compte → S'inscrire";
+  document.getElementById('fb-title').textContent = _fbIsRegister ? 'CRÉER UN COMPTE' : 'CONNEXION';
+}
+
+async function fbLogout() {
+  if (!window._logoutConfirm) {
+    window._logoutConfirm = true;
+    const btn = document.getElementById('fb-logout-btn');
+    if (btn) { btn.style.background='#B91C1C'; btn.textContent='⚠ Confirmer ?'; }
+    setTimeout(() => {
+      window._logoutConfirm = false;
+      const b = document.getElementById('fb-logout-btn');
+      if (b) { b.style.background='#102A63'; b.textContent='⏻ Déconnexion'; }
+    }, 3000);
+  } else {
+    await _auth.signOut();
+  }
+}
+</script>
+<div id="fb-loading" class="fb-screen" style="display:none;align-items:center;justify-content:center;height:100vh;background:#F7F6F2;flex-direction:column;gap:16px;position:fixed;inset:0;z-index:10000;">
+  <div style="font-size:28px;font-family:'Lora',serif;color:#102A63">✦ Mes Tâches</div>
+  <div style="font-size:12px;font-family:'DM Mono',monospace;color:#AAA;letter-spacing:0.08em">SYNCHRONISATION…</div>
+</div>
+<div id="fb-login" class="fb-screen" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#F7F6F2;padding:20px;position:fixed;inset:0;z-index:10000;">
+  <div style="background:white;border-radius:16px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.12);border-top:4px solid #102A63;">
+    <div style="padding:28px 28px 20px">
+      <div style="text-align:center;margin-bottom:24px">
+        <div style="font-size:28px;font-family:'Lora',serif;color:#102A63;margin-bottom:4px">✦ Mes Tâches</div>
+        <div id="fb-title" style="font-size:11px;font-family:'DM Mono',monospace;color:#AAA;letter-spacing:0.08em">CONNEXION</div>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:11px;font-family:'DM Mono',monospace;color:#888;display:block;margin-bottom:4px">EMAIL</label>
+        <input id="fb-email" type="email" required placeholder="votre@email.com" onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
+          style="border:1px solid #E8E8E8;border-radius:8px;padding:10px 12px;font-size:16px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#2C3E50;background:#FAFAFA"/>
+      </div>
+      <div style="margin-bottom:16px">
+        <label style="font-size:11px;font-family:'DM Mono',monospace;color:#888;display:block;margin-bottom:4px">MOT DE PASSE</label>
+        <input id="fb-password" type="password" required placeholder="••••••••" minlength="6" onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
+          style="border:1px solid #E8E8E8;border-radius:8px;padding:10px 12px;font-size:16px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#2C3E50;background:#FAFAFA"/>
+      </div>
+      <div id="fb-error" style="display:none;background:#FEE2E2;border-radius:8px;padding:8px 12px;font-size:12px;color:#B91C1C;font-family:'DM Mono',monospace;margin-bottom:12px"></div>
+      <button id="fb-btn" onclick="fbSubmit(false)"
+        style="border:none;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer;background:#102A63;color:white;font-family:'DM Mono',monospace;letter-spacing:0.04em;width:100%;margin-bottom:12px;touch-action:manipulation">
+        → Se connecter
+      </button>
+      <div style="text-align:center">
+        <button id="fb-toggle" onclick="toggleMode()"
+          style="border:none;background:none;font-size:12px;color:#102A63;cursor:pointer;font-family:'DM Mono',monospace;text-decoration:underline;touch-action:manipulation">
+          Pas encore de compte → S'inscrire
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="fb-app" class="fb-screen" style="display:none;height:100vh;width:100%;flex-direction:column;">
+  <div id="root" style="flex:1;overflow:auto;height:100%;"></div>
+  <button id="fb-logout-btn" onclick="fbLogout()"
+    style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation">
+    ⏻ Déconnexion
+  </button>
+</div>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef } = React;
+
+
+/* ─── RESPONSIVE HOOK ─── */
+function useIsMobile() {
+  const [m, setM] = useState(() => window.innerWidth < 640);
+  useEffect(() => {
+    const h = () => setM(window.innerWidth < 640);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
+  }, []);
+  return m;
+}
+
+/* ─── STORAGE KEYS ─── */
+const STORAGE_KEY = "taskmanager_v4";
+const COL_WIDTHS_KEY = "taskmanager_colwidths";
+const MEETING_STORAGE = "taskmanager_meetings_v1";
+const SETTINGS_KEY = "taskmanager_settings_v1";
+
+/* ─── DEFAULT SETTINGS (1: configurable categories, types, statuses) ─── */
+const DEFAULT_SETTINGS = {
+  categories: [
+    { id: "cc", name: "Crédit clients", bg: "#E8F4FD", accent: "#2980B9" },
+    { id: "tr", name: "Trésorerie",     bg: "#E8F8F5", accent: "#27AE60" },
+    { id: "re", name: "Recouvrement",   bg: "#FEF9E7", accent: "#E67E22" },
+    { id: "ad", name: "Administratif",  bg: "#F4ECF7", accent: "#8E44AD" },
+    { id: "eq", name: "Equipe",         bg: "#FDEDEC", accent: "#C0392B" },
+  ],
+  types: [
+    { id: "task",    name: "Tâche",        icon: "✓" },
+    { id: "analyse", name: "Analyse",      icon: "◎" },
+    { id: "report",  name: "Reporting",    icon: "≡" },
+    { id: "meeting", name: "Réunion",      icon: "◷" },
+    { id: "quick",   name: "Tâche rapide", icon: "⚡" },
+  ],
+  // 3) statuses
+  statuses: [
+    { id: "todo",       name: "À faire",    bg: "#F0F0F0", color: "#888888" },
+    { id: "inprogress", name: "En cours",   bg: "#DBEAFE", color: "#1D4ED8" },
+    { id: "waiting",    name: "En attente", bg: "#FEF9C3", color: "#A16207" },
+    { id: "blocked",    name: "Bloqué",     bg: "#FEE2E2", color: "#B91C1C" },
+    { id: "cancelled",  name: "Annulé",     bg: "#F5E6DC", color: "#92400E" },
+    { id: "done",       name: "Fait",       bg: "#D1FAE5", color: "#065F46" },
+  ],
+  // 8) tab visibility
+  hiddenTabs: [],
+};
+
+function loadSettings() {
+  try {
+    const s = localStorage.getItem(SETTINGS_KEY);
+    if (!s) return DEFAULT_SETTINGS;
+    const parsed = JSON.parse(s);
+    return {
+      categories: parsed.categories || DEFAULT_SETTINGS.categories,
+      types: parsed.types || DEFAULT_SETTINGS.types,
+      statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
+      hiddenTabs: parsed.hiddenTabs || [],
+    };
+  } catch { return DEFAULT_SETTINGS; }
+}
+function saveSettings(s) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+}
+
+/* ─── PRIORITY ─── */
+const PRIORITY_ICONS  = { haute: "▲", normale: "▬", basse: "▼" };
+const PRIORITY_COLORS = { haute: "#C0392B", normale: "#95A5A6", basse: "#27AE60" };
+
+const uid = () => Math.random().toString(36).substr(2, 9);
+const today = () => new Date().toISOString().split("T")[0];
+const fmtDate = (d) =>
+  d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const isOverdue  = (d) => d && new Date(d) < new Date(new Date().toDateString());
+const isToday    = (d) => d && new Date(d).toDateString() === new Date().toDateString();
+const daysBefore = (d, n) => { if (!d) return false; const diff = (new Date(d) - new Date()) / 864e5; return diff >= 0 && diff <= n; };
+const fmtTime = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${String(m).padStart(2,"0")}:${String(ss).padStart(2,"0")}`; };
+
+/* ─── SAMPLE DATA ─── */
+function sampleTasks(cats) {
+  const t = today(),
+    tom  = new Date(Date.now() + 864e5).toISOString().split("T")[0],
+    yest = new Date(Date.now() - 864e5).toISOString().split("T")[0],
+    in3  = new Date(Date.now() + 3 * 864e5).toISOString().split("T")[0];
+  return [
+    { id: uid(), title: "Relancer clients +30j retard",     category: "Recouvrement",  type: "Tâche",    dueDate: t,    completed: false, status: "inprogress", priority: "haute",   notes: "Contacter en priorité les clients > 30 jours.", reminder: "30min", recurrence: { type: "none" }, subtasks: [{ id: uid(), title: "Extraire liste impayés", completed: true }, { id: uid(), title: "Envoyer mails de relance", completed: false }, { id: uid(), title: "Appels téléphoniques", completed: false }], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: true },
+    { id: uid(), title: "Reporting mensuel trésorerie",     category: "Trésorerie",    type: "Reporting", dueDate: tom,  completed: false, status: "todo",       priority: "normale", notes: "Préparer tableau de bord direction.", reminder: "1h", recurrence: { type: "monthly", interval: 1, monthMode: "day", monthDay: 1, endType: "never" }, subtasks: [{ id: uid(), title: "Consolider données bancaires", completed: false }, { id: uid(), title: "Mettre à jour le prévisionnel", completed: false }], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false },
+    { id: uid(), title: "Analyse encours clients",          category: "Crédit clients",type: "Analyse",   dueDate: yest, completed: false, status: "blocked",    priority: "haute",   notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false },
+    { id: uid(), title: "Mise à jour fiches équipe",        category: "Equipe",        type: "Tâche",     dueDate: in3,  completed: true,  status: "done",       priority: "basse",   notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false },
+    { id: uid(), title: "Contrôle factures fournisseurs",   category: "Administratif", type: "Tâche",     dueDate: in3,  completed: false, status: "waiting",    priority: "normale", notes: "", reminder: "2h",  recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: true },
+  ];
+}
+
+/* ─── STYLES ─── */
+const S = {
+  input: { border: "1px solid #E8E8E8", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50", background: "#FAFAFA" },
+  btn: (bg, color = "#fff") => ({ border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 12, cursor: "pointer", background: bg, color, fontFamily: "'DM Mono',monospace", letterSpacing: "0.04em" }),
+  ghost: { border: "1px dashed #D0D0D0", background: "none", borderRadius: 6, padding: "5px 10px", fontSize: 12, color: "#999", cursor: "pointer", fontFamily: "'DM Mono',monospace" },
+};
+
+/* ─── TOAST (notifications) ─── */
+function Toast({ notifs, onDismiss }) {
+  if (!notifs.length) return null;
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, maxWidth: 340 }}>
+      {notifs.map((n) => (
+        <div key={n.id} style={{ background: "#2C3E50", color: "white", borderRadius: 12, padding: "12px 16px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)", display: "flex", gap: 12, alignItems: "flex-start", animation: "slideIn 0.3s ease" }}>
+          <span style={{ fontSize: 18 }}>🔔</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'DM Mono',monospace", opacity: 0.6, marginBottom: 2 }}>RAPPEL</div>
+            <div style={{ fontSize: 13, fontFamily: "'Lora',serif", lineHeight: 1.4 }}>{n.title}</div>
+          </div>
+          <button onClick={() => onDismiss(n.id)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 18, padding: 0 }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ─── 2) UNDO DELETE BANNER ─── */
+function UndoBanner({ task, onUndo, onDismiss }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 10000);
+    return () => clearTimeout(t);
+  }, [task]);
+  if (!task) return null;
+  return (
+    <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 9998, background: "#2C3E50", color: "white", borderRadius: 12, padding: "12px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", gap: 16, fontFamily: "'DM Mono',monospace", fontSize: 12, animation: "slideUp 0.3s ease" }}>
+      <span>🗑 <strong>"{task.title.slice(0, 30)}{task.title.length > 30 ? "…" : ""}"</strong> supprimée</span>
+      <button onClick={onUndo} style={{ background: "#27AE60", border: "none", borderRadius: 6, color: "white", padding: "5px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: 700 }}>↩ Annuler</button>
+      <button onClick={onDismiss} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
+    </div>
+  );
+}
+
+/* ─── 7) STOPWATCH WIDGET ─── */
+function StopwatchWidget({ task, onStop, onClose }) {
+  const [running, setRunning] = useState(true);
+  const [elapsed, setElapsed] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (running) ref.current = setInterval(() => setElapsed(e => e + 1), 1000);
+    else clearInterval(ref.current);
+    return () => clearInterval(ref.current);
+  }, [running]);
+  const handleStop = () => { clearInterval(ref.current); onStop(elapsed); };
+  return (
+    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9000, background: "white", borderRadius: 14, boxShadow: "0 8px 32px rgba(0,0,0,0.18)", padding: "14px 18px", minWidth: 240, border: "2px solid #102A63" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#AAA", letterSpacing: "0.08em" }}>⏱ CHRONOMÈTRE</div>
+        <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", color: "#BDC3C7", fontSize: 16 }}>×</button>
+      </div>
+      <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 10, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.title}</div>
+      <div style={{ fontSize: 32, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#102A63", textAlign: "center", marginBottom: 12 }}>{fmtTime(elapsed)}</div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={() => setRunning(r => !r)} style={{ ...S.btn(running ? "#E67E22" : "#27AE60"), flex: 1, padding: "7px 0", fontSize: 11 }}>{running ? "⏸ Pause" : "▶ Reprendre"}</button>
+        <button onClick={handleStop} style={{ ...S.btn("#C0392B"), flex: 1, padding: "7px 0", fontSize: 11 }}>⏹ Arrêter</button>
+      </div>
+      {task.totalTime > 0 && (
+        <div style={{ marginTop: 8, fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>Temps cumulé : {fmtTime(task.totalTime)}</div>
+      )}
+    </div>
+  );
+}
+
+/* ─── RICH TEXT AREA (4: checklist + text color) ─── */
+function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
+  const ref = useRef(null);
+  useEffect(() => { if (ref.current && ref.current.innerHTML !== (value || "")) ref.current.innerHTML = value || ""; }, []);
+  const exec = (cmd, val = null) => { ref.current.focus(); document.execCommand(cmd, false, val); onChange(ref.current.innerHTML); };
+  const insertChecklist = () => {
+    ref.current.focus();
+    document.execCommand("insertHTML", false, '<ul style="list-style:none;padding-left:0"><li><input type="checkbox"> </li></ul>');
+    onChange(ref.current.innerHTML);
+  };
+  const ToolBtn = ({ cmd, label, title, val }) => (
+    <button type="button" onMouseDown={(e) => { e.preventDefault(); exec(cmd, val); }} title={title}
+      style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5, minWidth: 24 }}>{label}</button>
+  );
+  return (
+    <div style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "#FAFAFA" }}>
+      <div style={{ display: "flex", gap: 4, padding: "5px 8px", borderBottom: "1px solid #F0F0F0", background: "white", flexWrap: "wrap", alignItems: "center" }}>
+        <ToolBtn cmd="bold"   label={<strong>G</strong>} title="Gras" />
+        <ToolBtn cmd="underline" label={<u>S</u>} title="Souligner" />
+        <ToolBtn cmd="italic" label={<em>I</em>} title="Italique" />
+        <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
+        <ToolBtn cmd="insertUnorderedList" label="• Liste" title="Liste à puces" />
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); insertChecklist(); }} title="Check-list"
+          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>☑ Check</button>
+        <ToolBtn cmd="indent"  label="→" title="Retrait" />
+        <ToolBtn cmd="outdent" label="←" title="Ôter retrait" />
+        <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
+        {/* 4) text color */}
+        {["#C0392B","#2980B9","#27AE60","#E67E22","#8E44AD","#2C3E50"].map(c => (
+          <button key={c} type="button" onMouseDown={(e) => { e.preventDefault(); exec("foreColor", c); }} title={c}
+            style={{ width: 16, height: 16, background: c, border: "1px solid #E0E0E0", borderRadius: 3, cursor: "pointer", padding: 0, flexShrink: 0 }} />
+        ))}
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("foreColor", "#2C3E50"); }} title="Couleur normale"
+          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 5px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555" }}>A</button>
+      </div>
+      <div ref={ref} contentEditable suppressContentEditableWarning
+        onInput={(e) => onChange(e.currentTarget.innerHTML)}
+        data-placeholder={placeholder}
+        style={{ minHeight: rows * 22, padding: "8px 12px", fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", outline: "none", lineHeight: 1.7 }} />
+      <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}`}</style>
+    </div>
+  );
+}
+
+/* ─── SUBTASK DETAIL MODAL ─── */
+function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
+  const [d, setD] = useState({ title: sub.title || "", category: sub.category || "", type: sub.type || "", priority: sub.priority || "normale", dueDate: sub.dueDate || "", notes: sub.notes || "", id: sub.id, completed: sub.completed });
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", borderTop: "4px solid #102A63" }}>
+        <div style={{ padding: "16px 20px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#AAA", letterSpacing: "0.1em" }}>DÉTAIL SOUS-TÂCHE</div>
+            <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+          </div>
+          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre…" style={{ ...S.input, fontSize: 14, marginBottom: 10 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.category ? "#2C3E50" : "#AAA" }}>
+              <option value="">— Catégorie —</option>
+              {cats.map((c) => <option key={c.id} style={{ color: "#2C3E50" }}>{c.name}</option>)}
+            </select>
+            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.type ? "#2C3E50" : "#AAA" }}>
+              <option value="">— Type —</option>
+              {types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
+            </select>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, cursor: "pointer" }}>
+              <option value="haute">Priorité haute</option>
+              <option value="normale">Priorité normale</option>
+              <option value="basse">Priorité basse</option>
+            </select>
+            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+          </div>
+          <textarea value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder="Notes…" rows={3} style={{ ...S.input, resize: "none", marginBottom: 10 }} />
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #F0F0F0", display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={() => { onPromote(d); onClose(); }} style={{ ...S.btn("#F0F3FF", "#102A63"), border: "1px solid #C7D2FE", fontSize: 11, padding: "6px 12px" }}>↑ Convertir en tâche</button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), fontSize: 11, padding: "6px 12px" }}>Annuler</button>
+            <button onClick={() => { onSave(d); onClose(); }} style={{ ...S.btn("#102A63"), fontSize: 11, padding: "6px 12px" }}>Enregistrer</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── SUBTASK ROW ─── */
+function SubtaskRow({ sub, onChange, onDelete, onOpenDetail }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 0", borderBottom: "1px solid #f5f5f5" }}>
+      <button onClick={() => onChange({ ...sub, completed: !sub.completed })} style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${sub.completed ? "#27AE60" : "#BDC3C7"}`, background: sub.completed ? "#27AE60" : "white", cursor: "pointer", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white" }}>{sub.completed ? "✓" : ""}</button>
+      <input value={sub.title} onChange={(e) => onChange({ ...sub, title: e.target.value })} placeholder="Sous-tâche…" style={{ flex: 1, border: "none", outline: "none", fontSize: 13, color: sub.completed ? "#aaa" : "#333", textDecoration: sub.completed ? "line-through" : "none", background: "transparent", fontFamily: "'Lora',serif" }} />
+      <button onClick={() => onOpenDetail(sub)} title="Détails / Convertir" style={{ border: "1px solid #E0E0E0", background: "none", borderRadius: 4, cursor: "pointer", color: "#AAA", fontSize: 10, padding: "1px 7px", lineHeight: 1.5, fontFamily: "'DM Mono',monospace" }}>⋯</button>
+      <button onClick={onDelete} style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 14, padding: 0 }}>×</button>
+    </div>
+  );
+}
+
+/* ─── 10) AI ASSISTANT POPOVER ─── */
+function AIAssistant({ text, onApply, onClose }) {
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("correct");
+  const run = async () => {
+    setLoading(true); setResult("");
+    const stripped = text ? text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+    const prompts = {
+      correct:   `Corrige les fautes d'orthographe et de grammaire du texte suivant en conservant exactement le sens et le style. Renvoie uniquement le texte corrigé, sans commentaire ni explication :\n\n${stripped}`,
+      rephrase:  `Reformule le texte suivant de façon plus claire et professionnelle. Renvoie uniquement le texte reformulé, sans commentaire ni explication :\n\n${stripped}`,
+      summarize: `Résume le texte suivant en 2-3 phrases. Renvoie uniquement le résumé, sans commentaire ni explication :\n\n${stripped}`,
+      bullets:   `Transforme le texte suivant en une liste à puces concise. Renvoie uniquement la liste, sans commentaire ni explication :\n\n${stripped}`,
+    };
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1000,
+          messages: [{ role: "user", content: prompts[mode] }],
+        }),
+      });
+      if (!resp.ok) { const err = await resp.json().catch(() => ({})); setResult(`Erreur API (${resp.status}) : ${err?.error?.message || "inconnue"}`); setLoading(false); return; }
+      const data = await resp.json();
+      setResult(data.content?.map((c) => c.text || "").join("") || "Erreur : réponse vide.");
+    } catch (e) { setResult(`Erreur de connexion : ${e.message}`); }
+    setLoading(false);
+  };
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 4000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(3px)", background: "rgba(0,0,0,0.3)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", borderTop: "4px solid #102A63" }}>
+        <div style={{ padding: "16px 20px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>🤖 Assistant IA</div>
+            <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+          </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+            {[{ v: "correct", l: "✓ Corriger" }, { v: "rephrase", l: "↺ Reformuler" }, { v: "summarize", l: "◎ Résumer" }, { v: "bullets", l: "• Lister" }].map(o => (
+              <button key={o.v} onClick={() => setMode(o.v)} style={{ border: `1px solid ${mode === o.v ? "#102A63" : "#E0E0E0"}`, background: mode === o.v ? "#102A63" : "white", color: mode === o.v ? "white" : "#666", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{o.l}</button>
+            ))}
+          </div>
+          <div style={{ background: "#F8F8F6", borderRadius: 8, padding: "10px 12px", fontSize: 12, fontFamily: "'Lora',serif", color: "#888", marginBottom: 10, maxHeight: 80, overflowY: "auto" }}>
+            <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "#AAA", marginBottom: 4 }}>TEXTE ORIGINAL</div>
+            <div dangerouslySetInnerHTML={{ __html: text || "(vide)" }} style={{ lineHeight: 1.5 }} />
+          </div>
+          <button onClick={run} disabled={!text || loading} style={{ ...S.btn(text && !loading ? "#102A63" : "#CCC"), width: "100%", padding: "9px 0", fontSize: 12, marginBottom: 10 }}>
+            {loading ? "⟳ Traitement en cours…" : "✨ Lancer"}
+          </button>
+          {result && (
+            <div>
+              <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "#AAA", marginBottom: 4 }}>RÉSULTAT</div>
+              <div style={{ background: "#F0F5FF", borderRadius: 8, padding: "10px 12px", fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", lineHeight: 1.6, whiteSpace: "pre-wrap", maxHeight: 160, overflowY: "auto", border: "1px solid #C7D2FE" }}>{result}</div>
+            </div>
+          )}
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), fontSize: 11, padding: "6px 12px" }}>Fermer</button>
+          {result && <button onClick={() => { onApply(result); onClose(); }} style={{ ...S.btn("#27AE60"), fontSize: 11, padding: "6px 12px" }}>✓ Appliquer</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── 3) RECURRENCE MODULE (Outlook-style) ─── */
+// recurrence stored as object: { type, interval, weekDays, monthDay, monthWeek, monthWeekDay, endType, endCount, endDate }
+// or "none" string for no recurrence
+
+function parseRec(v) {
+  if (!v || v === "none") return { type: "none" };
+  if (typeof v === "string") return { type: v, interval: 1 }; // legacy
+  return v;
+}
+function recLabel(v) {
+  const r = parseRec(v);
+  if (r.type === "none") return null;
+  const types = { daily: "Quotidienne", weekly: "Hebdomadaire", monthly: "Mensuelle", yearly: "Annuelle" };
+  const base = types[r.type] || r.type;
+  const intv = r.interval > 1 ? ` (tous les ${r.interval} ${r.type === "daily" ? "jours" : r.type === "weekly" ? "semaines" : r.type === "monthly" ? "mois" : "ans"})` : "";
+  return `🔄 ${base}${intv}`;
+}
+
+const WEEK_DAYS = [
+  { v: 1, l: "Lun" }, { v: 2, l: "Mar" }, { v: 3, l: "Mer" },
+  { v: 4, l: "Jeu" }, { v: 5, l: "Ven" }, { v: 6, l: "Sam" }, { v: 0, l: "Dim" },
+];
+const MONTH_WEEKS = [
+  { v: 1, l: "1ère" }, { v: 2, l: "2ème" }, { v: 3, l: "3ème" }, { v: 4, l: "4ème" }, { v: -1, l: "Dernière" },
+];
+
+function RecurrenceModule({ value, dueDate, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [r, setR] = useState(() => parseRec(value));
+
+  // Sync external value
+  useEffect(() => { setR(parseRec(value)); }, []);
+
+  const upd = (patch) => { const next = { ...r, ...patch }; setR(next); onChange(next); };
+
+  // Toggle weekday
+  const toggleDay = (d) => {
+    const days = r.weekDays || [];
+    const next = days.includes(d) ? days.filter(x => x !== d) : [...days, d];
+    upd({ weekDays: next });
+  };
+
+  const label = recLabel(value);
+
+  const SelStyle = { ...S.input, padding: "5px 8px", fontSize: 12, cursor: "pointer", width: "auto" };
+  const NumInput = ({ val, onCh, min = 1, max = 99 }) => (
+    <input type="number" min={min} max={max} value={val || 1} onChange={e => onCh(Math.max(min, Math.min(max, parseInt(e.target.value) || 1)))}
+      style={{ ...S.input, width: 56, padding: "5px 8px", fontSize: 12, textAlign: "center" }} />
+  );
+
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ ...S.input, cursor: "pointer", textAlign: "left", display: "flex", alignItems: "center", justifyContent: "space-between", background: open ? "#F0F5FF" : "#FAFAFA", borderColor: open ? "#C7D2FE" : "#E8E8E8" }}>
+        <span style={{ color: label ? "#102A63" : "#999", fontSize: 13 }}>{label || "🔄 Récurrence — aucune"}</span>
+        <span style={{ fontSize: 10, color: "#AAA" }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div style={{ border: "1px solid #E8E8E8", borderTop: "none", borderRadius: "0 0 8px 8px", background: "white", padding: "14px 14px 10px" }}>
+          {/* Type */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12, flexWrap: "wrap" }}>
+            {[{ v: "none", l: "Aucune" }, { v: "daily", l: "Journalière" }, { v: "weekly", l: "Hebdomadaire" }, { v: "monthly", l: "Mensuelle" }, { v: "yearly", l: "Annuelle" }].map(o => (
+              <button key={o.v} type="button" onClick={() => upd({ type: o.v })}
+                style={{ border: `1px solid ${r.type === o.v ? "#102A63" : "#E0E0E0"}`, background: r.type === o.v ? "#102A63" : "white", color: r.type === o.v ? "white" : "#666", borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{o.l}</button>
+            ))}
+          </div>
+
+          {r.type !== "none" && (
+            <>
+              {/* Interval */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555", whiteSpace: "nowrap" }}>Répéter toutes les</span>
+                <NumInput val={r.interval || 1} onCh={v => upd({ interval: v })} />
+                <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>
+                  {{ daily: "jour(s)", weekly: "semaine(s)", monthly: "mois", yearly: "an(s)" }[r.type]}
+                </span>
+              </div>
+
+              {/* Weekly: day picker */}
+              {r.type === "weekly" && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>JOURS DE LA SEMAINE</div>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {WEEK_DAYS.map(d => {
+                      const active = (r.weekDays || []).includes(d.v);
+                      return (
+                        <button key={d.v} type="button" onClick={() => toggleDay(d.v)}
+                          style={{ border: `1px solid ${active ? "#102A63" : "#E0E0E0"}`, background: active ? "#102A63" : "white", color: active ? "white" : "#666", borderRadius: 6, padding: "4px 8px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{d.l}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Monthly: day of month OR week position */}
+              {r.type === "monthly" && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>OCCURRENCE MENSUELLE</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {/* Option 1: day N of month */}
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                      <input type="radio" name="monthMode" checked={r.monthMode !== "weekday"} onChange={() => upd({ monthMode: "day" })} />
+                      <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Le jour</span>
+                      <NumInput val={r.monthDay || (dueDate ? new Date(dueDate).getDate() : 1)} onCh={v => upd({ monthDay: v, monthMode: "day" })} min={1} max={31} />
+                      <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>du mois</span>
+                    </label>
+                    {/* Option 2: Nth weekday of month */}
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", flexWrap: "wrap" }}>
+                      <input type="radio" name="monthMode" checked={r.monthMode === "weekday"} onChange={() => upd({ monthMode: "weekday" })} />
+                      <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Le</span>
+                      <select value={r.monthWeek || 1} onChange={e => upd({ monthWeek: parseInt(e.target.value), monthMode: "weekday" })} style={SelStyle}>
+                        {MONTH_WEEKS.map(w => <option key={w.v} value={w.v}>{w.l}</option>)}
+                      </select>
+                      <select value={r.monthWeekDay ?? 1} onChange={e => upd({ monthWeekDay: parseInt(e.target.value), monthMode: "weekday" })} style={SelStyle}>
+                        {WEEK_DAYS.map(d => <option key={d.v} value={d.v}>{d.l}</option>)}
+                      </select>
+                      <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>du mois</span>
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {/* Yearly: month + day */}
+              {r.type === "yearly" && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Chaque année le</span>
+                  <NumInput val={r.yearDay || (dueDate ? new Date(dueDate).getDate() : 1)} onCh={v => upd({ yearDay: v })} min={1} max={31} />
+                  <select value={r.yearMonth ?? (dueDate ? new Date(dueDate).getMonth() : 0)} onChange={e => upd({ yearMonth: parseInt(e.target.value) })} style={SelStyle}>
+                    {["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"].map((m, i) => <option key={i} value={i}>{m}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* End condition */}
+              <div style={{ borderTop: "1px solid #F0F0F0", paddingTop: 10, marginTop: 2 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 8 }}>FIN DE RÉCURRENCE</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="radio" name="endType" checked={!r.endType || r.endType === "never"} onChange={() => upd({ endType: "never" })} />
+                    <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Jamais</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="radio" name="endType" checked={r.endType === "count"} onChange={() => upd({ endType: "count" })} />
+                    <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Après</span>
+                    <NumInput val={r.endCount || 10} onCh={v => upd({ endCount: v, endType: "count" })} min={1} max={999} />
+                    <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>occurrence(s)</span>
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+                    <input type="radio" name="endType" checked={r.endType === "date"} onChange={() => upd({ endType: "date" })} />
+                    <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>Le</span>
+                    <input type="date" value={r.endDate || ""} onChange={e => upd({ endDate: e.target.value, endType: "date" })}
+                      style={{ ...S.input, width: "auto", padding: "4px 8px", fontSize: 12, cursor: "pointer" }} />
+                  </label>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── TASK MODAL ─── */
+function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
+  const isNew = !task.title;
+  const [d, setD] = useState({ ...task, category: task.category || "", type: task.type || "", status: task.status || "todo", recurrence: task.recurrence || "none", totalTime: task.totalTime || 0, inMyDay: task.inMyDay || false });
+  const [subDetail, setSubDetail] = useState(null);
+  const [showAI, setShowAI] = useState(false);
+  const [stopwatch, setStopwatch] = useState(false); // 7)
+
+  const catObj   = settings.categories.find(c => c.name === d.category);
+  const catAccent = catObj?.accent || "#102A63";
+
+  const addSub = () => setD({ ...d, subtasks: [...d.subtasks, { id: uid(), title: "", completed: false }] });
+  const updSub = (s) => setD({ ...d, subtasks: d.subtasks.map((x) => (x.id === s.id ? s : x)) });
+  const delSub = (id) => setD({ ...d, subtasks: d.subtasks.filter((x) => x.id !== id) });
+  const promoteSub = (sub) => {
+    setD((prev) => ({ ...prev, subtasks: prev.subtasks.filter((x) => x.id !== sub.id) }));
+    onAddTask({ id: uid(), title: sub.title, category: sub.category || "", type: sub.type || "", dueDate: sub.dueDate || "", priority: sub.priority || "normale", status: "todo", notes: sub.notes || "", completed: false, reminder: "none", recurrence: "none", subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false });
+  };
+
+  // 5) send by mail
+  const sendMail = () => {
+    const body = encodeURIComponent(`Tâche : ${d.title}\nCatégorie : ${d.category || "-"}\nType : ${d.type || "-"}\nPriorité : ${d.priority}\nÉchéance : ${fmtDate(d.dueDate)}\n\nNotes :\n${d.notes ? d.notes.replace(/<[^>]+>/g, "") : "-"}`);
+    window.location.href = `mailto:?subject=${encodeURIComponent(d.title)}&body=${body}`;
+  };
+
+  const statusObj = settings.statuses.find(s => s.id === d.status) || settings.statuses[0];
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", borderTop: `4px solid ${catAccent}`, transition: "border-color 0.2s" }}>
+        <div style={{ padding: "20px 24px 0" }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
+            <div style={{ display: "flex", gap: 6 }}>
+              {/* 9) Add to My Day */}
+              <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} title={d.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
+                style={{ border: `1px solid ${d.inMyDay ? "#E67E22" : "#E0E0E0"}`, background: d.inMyDay ? "#FEF9E7" : "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: d.inMyDay ? "#E67E22" : "#BDC3C7" }}>☀</button>
+              {/* 7) Stopwatch */}
+              {!isNew && <button onClick={() => setStopwatch(true)} title="Chronomètre"
+                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: "#BDC3C7" }}>⏱</button>}
+              {/* 5) Send mail */}
+              <button onClick={sendMail} title="Envoyer par mail"
+                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "#BDC3C7", fontFamily: "'DM Mono',monospace" }}>@</button>
+              <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+            </div>
+          </div>
+
+          {/* Time tracked */}
+          {d.totalTime > 0 && (
+            <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "#F0F5FF", borderRadius: 8 }}>
+              <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#102A63" }}>⏱ Temps enregistré : <strong>{fmtTime(d.totalTime)}</strong></span>
+            </div>
+          )}
+
+          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 15, marginBottom: 12 }} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
+              <option value="">— Catégorie —</option>
+              {settings.categories.map((c) => <option key={c.id} style={{ color: "#2C3E50" }}>{c.name}</option>)}
+            </select>
+            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
+              <option value="">— Type —</option>
+              {settings.types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
+            </select>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, cursor: "pointer" }}>
+              <option value="haute">Priorité haute</option>
+              <option value="normale">Priorité normale</option>
+              <option value="basse">Priorité basse</option>
+            </select>
+            {/* 3) Status in modal */}
+            <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
+              {settings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          {/* 3) Full recurrence module */}
+          <RecurrenceModule value={d.recurrence} dueDate={d.dueDate} onChange={rec => setD({ ...d, recurrence: rec })} />
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE DE CRÉATION</div>
+              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, cursor: "pointer" }} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE D'ÉCHÉANCE</div>
+              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+            </div>
+          </div>
+
+          <select value={d.reminder} onChange={(e) => setD({ ...d, reminder: e.target.value })} style={{ ...S.input, cursor: "pointer", marginBottom: 10 }}>
+            <option value="none">Pas de rappel</option>
+            <option value="same">Le jour même</option>
+            <option value="30min">30 minutes avant</option>
+            <option value="1h">1 heure avant</option>
+            <option value="2h">2 heures avant</option>
+            <option value="1d">La veille</option>
+            <option value="2d">2 jours avant</option>
+          </select>
+
+          {/* Notes with AI button */}
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>NOTES</div>
+              {/* 10) AI assistant trigger */}
+              <button onClick={() => setShowAI(true)} style={{ border: "1px solid #C7D2FE", background: "#EEF2FF", borderRadius: 6, padding: "2px 8px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#4F46E5" }}>🤖 IA</button>
+            </div>
+            <RichTextArea value={d.notes} onChange={(v) => setD({ ...d, notes: v })} placeholder="Notes optionnelles…" rows={5} />
+          </div>
+
+          {/* Subtasks */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#999", letterSpacing: "0.08em", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>SOUS-TÂCHES</div>
+            {d.subtasks.map((s) => <SubtaskRow key={s.id} sub={s} onChange={updSub} onDelete={() => delSub(s.id)} onOpenDetail={setSubDetail} />)}
+            <button onClick={addSub} style={{ ...S.ghost, marginTop: 6 }}>+ Ajouter une sous-tâche</button>
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666") }}>Annuler</button>
+          <button onClick={() => { if (d.title.trim()) { onSave(d); onClose(); } }} style={{ ...S.btn(catAccent), opacity: d.title.trim() ? 1 : 0.5 }}>
+            {isNew ? "Créer la tâche" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+
+      {subDetail && <SubtaskDetailModal sub={subDetail} cats={settings.categories} types={settings.types} onSave={updSub} onPromote={promoteSub} onClose={() => setSubDetail(null)} />}
+      {showAI && <AIAssistant text={d.notes} onApply={(v) => setD({ ...d, notes: v })} onClose={() => setShowAI(false)} />}
+      {stopwatch && <StopwatchWidget task={d} onStop={(secs) => { setD(prev => ({ ...prev, totalTime: (prev.totalTime || 0) + secs })); setStopwatch(false); }} onClose={() => setStopwatch(false)} />}
+    </div>
+  );
+}
+
+/* ─── COMMENT POPOVER ─── */
+function CommentPopover({ task, catBg, catAccent, onSave, onClose }) {
+  const [text, setText] = useState(task.comment || "");
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)", background: "rgba(0,0,0,0.25)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "white", borderRadius: 12, width: 320, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", overflow: "hidden", borderTop: `3px solid ${catAccent}` }}>
+        <div style={{ padding: "14px 16px 0" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240 }}>💬 {task.title}</div>
+            <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+          </div>
+          <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Ajouter un commentaire…" rows={4}
+            style={{ border: "1px solid #E8E8E8", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50", background: "#FAFAFA", resize: "vertical" }} />
+        </div>
+        <div style={{ padding: "10px 16px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "6px 12px", fontSize: 11 }}>Annuler</button>
+          <button onClick={() => { onSave(text); onClose(); }} style={{ ...S.btn("#102A63"), padding: "6px 12px", fontSize: 11 }}>Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── TASK CARD ─── */
+function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWidths, settings }) {
+  const [hovered, setHovered] = useState(false);
+  const [showComment, setShowComment] = useState(false);
+  const catObj  = settings.categories.find(c => c.name === task.category);
+  const typeObj = settings.types.find(t => t.name === task.type);
+  const catBg     = catObj?.bg      || "#F0F0F0";
+  const catAccent = catObj?.accent  || "#888";
+  const statusObj = settings.statuses.find(s => s.id === task.status) || settings.statuses[0];
+  const doneSubs  = task.subtasks?.filter(s => s.completed).length || 0;
+  const totalSubs = task.subtasks?.length || 0;
+  const ds  = isOverdue(task.dueDate) && !task.completed ? "overdue" : isToday(task.dueDate) ? "today" : daysBefore(task.dueDate, 2) ? "soon" : "ok";
+  const dc  = { overdue: "#C0392B", today: "#E67E22", soon: "#F39C12", ok: "#95A5A6" };
+  const prioColor = PRIORITY_COLORS[task.priority] || "#DDD";
+  const prioIcon  = PRIORITY_ICONS[task.priority]  || "▬";
+  const hasComment = task.comment && task.comment.trim().length > 0;
+  // 3) Blocked tasks are dimmed
+  const isBlocked = task.status === "blocked";
+
+  return (
+    <>
+      <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => onEdit(task)}
+        style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 6, borderLeft: `2px solid ${catAccent}`, marginBottom: 1, background: hovered ? "#F5F7FB" : task.completed ? "#FAFAFA" : "white", opacity: task.completed ? 0.45 : isBlocked ? 0.6 : 1, cursor: "pointer", transition: "background 0.1s", borderRadius: "0 3px 3px 0", height: 28, overflow: "hidden" }}>
+        <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
+          style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
+        <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace", flexShrink: 0, minWidth: 16, textAlign: "right" }}>{num}</span>
+        <span title={`Priorité ${task.priority}`} style={{ fontSize: 10, color: prioColor, flexShrink: 0, fontWeight: 700, lineHeight: 1, minWidth: 12, textAlign: "center" }}>{prioIcon}</span>
+        <span style={{ fontSize: 13, fontWeight: 500, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: colWidths.title, flexShrink: 0 }}>{task.title}</span>
+        {totalSubs > 0 ? <span style={{ fontSize: 9, color: "#BBB", fontFamily: "'DM Mono',monospace", flexShrink: 0, minWidth: 28 }}>{doneSubs}/{totalSubs}✓</span> : <span style={{ minWidth: 28, flexShrink: 0 }} />}
+        {/* 3) Status badge */}
+        <span style={{ fontSize: 8, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.status || 72, overflow: "hidden", textOverflow: "ellipsis" }}>{statusObj.name}</span>
+        <span style={{ fontSize: 9, fontWeight: 700, background: catBg, color: catAccent, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.category, overflow: "hidden", textOverflow: "ellipsis" }}>{task.category}</span>
+        <span style={{ fontSize: 9, color: "#555", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.type, overflow: "hidden", textOverflow: "ellipsis" }}>{typeObj?.icon || ""} {task.type}</span>
+        <div style={{ flex: 1 }} />
+        {task.inMyDay && <span title="Ma journée" style={{ fontSize: 10, flexShrink: 0, opacity: 0.7 }}>☀</span>}
+        {parseRec(task.recurrence).type !== "none" && <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 9, flexShrink: 0, opacity: 0.5 }}>🔄</span>}
+        {task.totalTime > 0 && <span title={`Temps : ${fmtTime(task.totalTime)}`} style={{ fontSize: 8, color: "#102A63", fontFamily: "'DM Mono',monospace", flexShrink: 0, opacity: 0.6 }}>⏱{fmtTime(task.totalTime)}</span>}
+        {task.reminder && task.reminder !== "none" && <span style={{ fontSize: 9, flexShrink: 0, opacity: 0.4 }}>🔔</span>}
+        {task.createdAt && <span style={{ fontSize: 9, color: "#BDC3C7", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.created, textAlign: "right" }}>+ {fmtDate(task.createdAt.split("T")[0])}</span>}
+        <span style={{ width: 16, flexShrink: 0 }} />
+        {task.dueDate ? <span style={{ fontSize: 9, color: dc[ds], fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
+        <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? task.comment : "Ajouter un commentaire"}
+          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, padding: "0 3px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : hovered ? "#BDC3C7" : "transparent", transition: "color 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
+        <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
+          style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
+      </div>
+      {showComment && <CommentPopover task={task} catBg={catBg} catAccent={catAccent} onSave={(txt) => onSaveComment(task.id, txt)} onClose={() => setShowComment(false)} />}
+    </>
+  );
+}
+
+/* ─── MOBILE TASK CARD ─── */
+function MobileTaskCard({ task, onToggle, onEdit, onDelete, onSaveComment, settings }) {
+  const [showComment, setShowComment] = useState(false);
+  const catObj  = settings.categories.find(c => c.name === task.category);
+  const typeObj = settings.types.find(t => t.name === task.type);
+  const catBg     = catObj?.bg     || "#F0F0F0";
+  const catAccent = catObj?.accent || "#888";
+  const statusObj = settings.statuses.find(s => s.id === task.status) || settings.statuses[0];
+  const doneSubs  = task.subtasks?.filter(s => s.completed).length || 0;
+  const ds  = isOverdue(task.dueDate) && !task.completed ? "overdue" : isToday(task.dueDate) ? "today" : daysBefore(task.dueDate, 2) ? "soon" : "ok";
+  const dc  = { overdue: "#C0392B", today: "#E67E22", soon: "#F39C12", ok: "#95A5A6" };
+  const hasComment = task.comment && task.comment.trim().length > 0;
+  return (
+    <>
+      <div onClick={() => onEdit(task)} style={{ background: "white", borderRadius: 12, marginBottom: 8, borderLeft: `4px solid ${catAccent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden", opacity: task.completed ? 0.55 : 1 }}>
+        <div style={{ padding: "12px 14px" }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+            <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
+              style={{ width: 20, height: 20, borderRadius: "50%", flexShrink: 0, border: `2px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "white", marginTop: 1 }}>{task.completed ? "✓" : ""}</button>
+            <span style={{ fontSize: 14, fontWeight: 600, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", flex: 1, lineHeight: 1.4 }}>{task.title}</span>
+            <span style={{ fontSize: 11, color: PRIORITY_COLORS[task.priority], fontWeight: 700, flexShrink: 0 }}>{PRIORITY_ICONS[task.priority]}</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 4, padding: "2px 6px", fontFamily: "'DM Mono',monospace" }}>{statusObj.name}</span>
+            {task.category && <span style={{ fontSize: 10, fontWeight: 700, background: catBg, color: catAccent, borderRadius: 4, padding: "2px 7px", fontFamily: "'DM Mono',monospace" }}>{task.category}</span>}
+            {task.type && <span style={{ fontSize: 10, color: "#777", fontFamily: "'DM Mono',monospace", background: "#F5F5F5", borderRadius: 4, padding: "2px 7px" }}>{typeObj?.icon} {task.type}</span>}
+            {task.subtasks?.length > 0 && <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace", background: "#F5F5F5", borderRadius: 4, padding: "2px 7px" }}>{doneSubs}/{task.subtasks.length}✓</span>}
+            {task.inMyDay && <span style={{ fontSize: 10, color: "#E67E22", background: "#FEF9E7", borderRadius: 4, padding: "2px 7px", fontFamily: "'DM Mono',monospace" }}>☀ Ma journée</span>}
+          </div>
+          {(task.dueDate || task.createdAt) && (
+            <div style={{ display: "flex", gap: 12 }}>
+              {task.createdAt && <span style={{ fontSize: 10, color: "#BDC3C7", fontFamily: "'DM Mono',monospace" }}>+ {fmtDate(task.createdAt.split("T")[0])}</span>}
+              {task.dueDate && <span style={{ fontSize: 10, color: dc[ds], fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span>}
+            </div>
+          )}
+          {hasComment && <div style={{ marginTop: 6, fontSize: 11, color: "#888", fontFamily: "'Lora',serif", fontStyle: "italic", borderTop: "1px solid #F5F5F5", paddingTop: 6 }}>💬 {task.comment}</div>}
+        </div>
+        <div style={{ borderTop: "1px solid #F5F5F5", display: "flex" }}>
+          <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} style={{ flex: 1, border: "none", background: "none", padding: "8px 0", fontSize: 11, color: hasComment ? "#102A63" : "#AAA", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>💬 Commenter</button>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }} style={{ flex: 1, border: "none", borderLeft: "1px solid #F5F5F5", background: "none", padding: "8px 0", fontSize: 11, color: "#E8A0A0", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>× Supprimer</button>
+        </div>
+      </div>
+      {showComment && <CommentPopover task={task} catBg={catBg} catAccent={catAccent} onSave={(txt) => onSaveComment(task.id, txt)} onClose={() => setShowComment(false)} />}
+    </>
+  );
+}
+
+/* ─── DASHBOARD ─── */
+function Dashboard({ tasks, onNavigate, settings }) {
+  const isMobile = useIsMobile();
+  const active  = tasks.filter(t => !t.completed);
+  const overdue = active.filter(t => isOverdue(t.dueDate));
+  const todayT  = active.filter(t => isToday(t.dueDate));
+  const done    = tasks.filter(t => t.completed);
+  const total   = tasks.length || 1;
+  const byCat   = settings.categories.map(c => ({ name: c.name, total: tasks.filter(t => t.category === c.name).length, done: tasks.filter(t => t.category === c.name && t.completed).length, color: c.accent }));
+  const byType  = settings.types.map(tp => ({ name: tp.name, icon: tp.icon, count: active.filter(t => t.type === tp.name).length }));
+  const pct = n => Math.round((n / total) * 100);
+
+  const StatCard = ({ label, value, pctVal, color, onClick }) => (
+    <div onClick={onClick} style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "18px 20px", border: "1px solid #ECEAE5", cursor: onClick ? "pointer" : "default", transition: "transform 0.15s,box-shadow 0.15s", borderTop: `3px solid ${color}` }}
+      onMouseEnter={e => { if (onClick && !isMobile) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.08)"; } }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, lineHeight: 1 }}>
+        <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>{value}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color, fontFamily: "'DM Mono',monospace", opacity: 0.55 }}>{pctVal}%</div>
+      </div>
+      <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 600, color: "#2C3E50", fontFamily: "'Lora',serif", marginTop: 5 }}>{label}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div style={{ marginBottom: isMobile ? 16 : 24 }}>
+        <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 4 }}>Tableau de bord</div>
+        <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 24 }}>
+        <StatCard label="Tâches actives"  value={active.length}  pctVal={pct(active.length)}  color="#2C3E50" onClick={() => onNavigate("tasks")} />
+        <StatCard label="En retard"        value={overdue.length} pctVal={pct(overdue.length)} color="#C0392B" onClick={() => onNavigate("tasks")} />
+        <StatCard label="Aujourd'hui"      value={todayT.length}  pctVal={pct(todayT.length)}  color="#E67E22" onClick={() => onNavigate("calendar")} />
+        <StatCard label="Complétées"       value={done.length}    pctVal={pct(done.length)}    color="#27AE60" />
+      </div>
+      <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5", marginBottom: isMobile ? 12 : 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Avancement global</span>
+          <span style={{ fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#27AE60" }}>{Math.round((done.length / total) * 100)}%</span>
+        </div>
+        <div style={{ height: 10, background: "#F0F0F0", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${(done.length / total) * 100}%`, background: "linear-gradient(90deg,#27AE60,#2ECC71)", borderRadius: 10, transition: "width 0.5s" }} />
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 8 }}>
+          <span>{done.length} complétées</span><span>{active.length} restantes</span>
+        </div>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 12 : 20 }}>
+        <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 14 }}>Par catégorie</div>
+          {byCat.map(c => (
+            <div key={c.name} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>{c.name}</span>
+                <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{c.done}/{c.total}</span>
+              </div>
+              <div style={{ height: 6, background: "#F0F0F0", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${c.total ? (c.done / c.total) * 100 : 0}%`, background: c.color, borderRadius: 6, transition: "width 0.5s" }} />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 12 : 16 }}>
+          <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 12 }}>Par type</div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {byType.map(t => (
+                <div key={t.name} style={{ flex: 1, minWidth: 55, textAlign: "center", background: "#F8F8F6", borderRadius: 10, padding: "10px 6px" }}>
+                  <div style={{ fontSize: 16, marginBottom: 2 }}>{t.icon}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#2C3E50" }}>{t.count}</div>
+                  <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "#AAA", marginTop: 1 }}>{t.name}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5", flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 10 }}>Priorités hautes</div>
+            {active.filter(t => t.priority === "haute").slice(0, 3).map(t => {
+              const co = settings.categories.find(c => c.name === t.category);
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #F5F5F5" }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: co?.accent || "#888", flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, fontFamily: "'Lora',serif", color: "#444", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                  {t.dueDate && <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#AAA", flexShrink: 0 }}>{fmtDate(t.dueDate)}</span>}
+                </div>
+              );
+            })}
+            {!active.filter(t => t.priority === "haute").length && <div style={{ fontSize: 12, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>Aucune tâche haute priorité</div>}
+          </div>
+        </div>
+      </div>
+      {(todayT.length > 0 || overdue.length > 0) && (
+        <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 12 }}>⚡ À traiter maintenant</div>
+          {[...overdue, ...todayT].slice(0, 5).map(t => {
+            const co = settings.categories.find(c => c.name === t.category);
+            return (
+              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F5F5F5" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, background: isOverdue(t.dueDate) ? co?.bg : "#FEF9E7", color: isOverdue(t.dueDate) ? co?.accent : "#E67E22", borderRadius: 4, padding: "2px 7px", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>{t.category}</span>
+                <span style={{ fontSize: 13, fontFamily: "'Lora',serif", color: "#333", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
+                <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#E67E22", flexShrink: 0 }}>{isOverdue(t.dueDate) ? "⚠" : "●"}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── 9) MY DAY VIEW ─── */
+function MyDayView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
+  const todayTasks = tasks.filter(t => !t.completed && (isToday(t.dueDate) || t.inMyDay));
+  const isMobile = useIsMobile();
+  return (
+    <div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 4 }}>☀ Ma journée</div>
+        <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} — {todayTasks.length} tâche{todayTasks.length !== 1 ? "s" : ""}</div>
+      </div>
+      {todayTasks.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "#CCC" }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>☀</div>
+          <div style={{ fontFamily: "'Lora',serif", fontSize: 15, color: "#AAA" }}>Aucune tâche pour aujourd'hui</div>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, marginTop: 6 }}>Ajoutez des tâches à "Ma journée" depuis leur détail</div>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+          {todayTasks.map(t => {
+            const catObj = settings.categories.find(c => c.name === t.category);
+            const statusObj = settings.statuses.find(s => s.id === t.status) || settings.statuses[0];
+            const isOv = isOverdue(t.dueDate);
+            return (
+              <div key={t.id} onClick={() => onEdit(t)} style={{ background: "white", borderRadius: 12, border: `1px solid ${isOv ? "#FEE2E2" : "#ECEAE5"}`, borderTop: `3px solid ${catObj?.accent || "#102A63"}`, padding: "14px 16px", cursor: "pointer", transition: "box-shadow 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.08)"}
+                onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
+                <div style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 8 }}>
+                  <button onClick={e => { e.stopPropagation(); onToggle(t.id); }}
+                    style={{ width: 18, height: 18, borderRadius: "50%", flexShrink: 0, border: `2px solid ${catObj?.accent || "#CCC"}`, background: "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, color: "white", marginTop: 2 }}>
+                  </button>
+                  <span style={{ fontFamily: "'Lora',serif", fontSize: 14, fontWeight: 600, color: "#2C3E50", flex: 1, lineHeight: 1.4 }}>{t.title}</span>
+                  <span style={{ fontSize: 10, color: PRIORITY_COLORS[t.priority], fontWeight: 700 }}>{PRIORITY_ICONS[t.priority]}</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 4, padding: "1px 6px", fontFamily: "'DM Mono',monospace" }}>{statusObj.name}</span>
+                  {t.category && <span style={{ fontSize: 9, fontWeight: 700, background: catObj?.bg || "#F0F0F0", color: catObj?.accent || "#888", borderRadius: 4, padding: "1px 6px", fontFamily: "'DM Mono',monospace" }}>{t.category}</span>}
+                </div>
+                {t.dueDate && <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: isOv ? "#C0392B" : isToday(t.dueDate) ? "#E67E22" : "#95A5A6" }}>{isOv ? "⚠ En retard" : "● Aujourd'hui"} — {fmtDate(t.dueDate)}</div>}
+                {t.subtasks?.length > 0 && (
+                  <div style={{ marginTop: 8, borderTop: "1px solid #F5F5F5", paddingTop: 8 }}>
+                    {t.subtasks.slice(0, 3).map(s => (
+                      <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                        <div style={{ width: 10, height: 10, borderRadius: "50%", border: `1.5px solid ${s.completed ? "#27AE60" : "#CCC"}`, background: s.completed ? "#27AE60" : "white", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, color: "white" }}>{s.completed ? "✓" : ""}</div>
+                        <span style={{ fontSize: 11, fontFamily: "'Lora',serif", color: s.completed ? "#AAA" : "#555", textDecoration: s.completed ? "line-through" : "none" }}>{s.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── CALENDAR VIEW ─── */
+function CalendarView({ tasks, onEdit, onAdd, settings }) {
+  const [curDate, setCurDate] = useState(new Date());
+  const year = curDate.getFullYear(), month = curDate.getMonth();
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startPad = (firstDay + 6) % 7;
+  const cells = [];
+  for (let i = 0; i < startPad; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  const tasksByDay = {};
+  tasks.forEach(t => {
+    if (!t.dueDate) return;
+    const td = new Date(t.dueDate);
+    if (td.getFullYear() === year && td.getMonth() === month) {
+      const k = td.getDate(); if (!tasksByDay[k]) tasksByDay[k] = []; tasksByDay[k].push(t);
+    }
+  });
+  const [selectedDay, setSelectedDay] = useState(null);
+  const todayDate = new Date();
+  const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Calendrier</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button onClick={() => setCurDate(new Date(year, month - 1, 1))} style={{ ...S.btn("#F0F0F0", "#555"), padding: "6px 12px" }}>‹</button>
+          <span style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", minWidth: 160, textAlign: "center" }}>{MONTHS[month]} {year}</span>
+          <button onClick={() => setCurDate(new Date(year, month + 1, 1))} style={{ ...S.btn("#F0F0F0", "#555"), padding: "6px 12px" }}>›</button>
+          <button onClick={() => setCurDate(new Date())} style={{ ...S.btn("#102A63"), padding: "6px 14px", fontSize: 11 }}>Aujourd'hui</button>
+        </div>
+      </div>
+      <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", background: "#F8F7F4" }}>
+          {DAYS.map(d => <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>{d}</div>)}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
+          {cells.map((d, i) => {
+            if (!d) return <div key={`e${i}`} style={{ minHeight: 90, borderRight: "1px solid #F0F0F0", borderBottom: "1px solid #F0F0F0", background: "#FAFAFA" }} />;
+            const isCurrentDay = todayDate.getDate() === d && todayDate.getMonth() === month && todayDate.getFullYear() === year;
+            const dayTasks = tasksByDay[d] || [];
+            const hasOverdue = dayTasks.some(t => !t.completed && isOverdue(t.dueDate));
+            return (
+              <div key={d} onClick={() => setSelectedDay(selectedDay === d ? null : d)}
+                style={{ minHeight: 90, borderRight: "1px solid #F0F0F0", borderBottom: "1px solid #F0F0F0", padding: "8px 6px", cursor: "pointer", background: selectedDay === d ? "#F0F5FF" : isCurrentDay ? "#FFFBF0" : "white", transition: "background 0.15s" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <span style={{ fontSize: 13, fontWeight: isCurrentDay ? 700 : 400, fontFamily: "'DM Mono',monospace", color: isCurrentDay ? "#E67E22" : "#555", background: isCurrentDay ? "#FEF3E2" : undefined, borderRadius: isCurrentDay ? "50%" : undefined, width: isCurrentDay ? 24 : undefined, height: isCurrentDay ? 24 : undefined, display: "flex", alignItems: "center", justifyContent: "center" }}>{d}</span>
+                  {hasOverdue && <span style={{ fontSize: 9, color: "#C0392B" }}>⚠</span>}
+                </div>
+                {dayTasks.slice(0, 3).map(t => {
+                  const co = settings.categories.find(c => c.name === t.category);
+                  return (
+                    <div key={t.id} onClick={e => { e.stopPropagation(); onEdit(t); }}
+                      style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", background: co?.bg || "#F0F0F0", color: co?.accent || "#888", borderRadius: 4, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: t.completed ? "line-through" : "none", opacity: t.completed ? 0.6 : 1 }}>
+                      {t.title}
+                    </div>
+                  );
+                })}
+                {dayTasks.length > 3 && <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>+{dayTasks.length - 3} autres</div>}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      {selectedDay && tasksByDay[selectedDay] && (
+        <div style={{ marginTop: 16, background: "white", borderRadius: 14, padding: "20px 24px", border: "1px solid #ECEAE5" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{selectedDay} {MONTHS[month]} {year}</div>
+            <button onClick={() => onAdd(`${year}-${String(month + 1).padStart(2, "0")}-${String(selectedDay).padStart(2, "0")}`)} style={{ ...S.btn("#102A63"), fontSize: 11, padding: "6px 12px" }}>+ Ajouter</button>
+          </div>
+          {tasksByDay[selectedDay].map(t => {
+            const co = settings.categories.find(c => c.name === t.category);
+            return (
+              <div key={t.id} onClick={() => onEdit(t)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F5F5F5", cursor: "pointer" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: co?.accent || "#888", flexShrink: 0, display: "block" }} />
+                <span style={{ fontSize: 13, fontFamily: "'Lora',serif", color: t.completed ? "#AAA" : "#333", textDecoration: t.completed ? "line-through" : "none", flex: 1 }}>{t.title}</span>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", background: co?.bg || "#F0F0F0", color: co?.accent || "#888", borderRadius: 4, padding: "2px 6px" }}>{t.category}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── NOTIFICATIONS VIEW ─── */
+const REMINDER_LABELS = { none: "Aucun", same: "Le jour même", "30min": "30 min avant", "1h": "1h avant", "2h": "2h avant", "1d": "La veille", "2d": "2 jours avant" };
+function NotificationsView({ tasks, onUpdate, settings }) {
+  const withReminder = tasks.filter(t => !t.completed && t.reminder && t.reminder !== "none" && t.dueDate);
+  const triggered = withReminder.filter(t => {
+    const diff = (new Date(t.dueDate) - new Date()) / 864e5;
+    if (t.reminder === "same") return isToday(t.dueDate);
+    if (t.reminder === "30min" || t.reminder === "1h" || t.reminder === "2h") return isToday(t.dueDate) || isOverdue(t.dueDate);
+    if (t.reminder === "1d") return diff <= 1;
+    if (t.reminder === "2d") return diff <= 2;
+    return false;
+  });
+  const upcoming = withReminder.filter(t => !triggered.includes(t));
+  return (
+    <div>
+      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 4 }}>Notifications & Rappels</div>
+      <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 24 }}>{withReminder.length} tâche(s) avec rappel configuré</div>
+      {triggered.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#E67E22", letterSpacing: "0.08em", fontFamily: "'DM Mono',monospace", marginBottom: 10 }}>🔔 RAPPELS ACTIFS ({triggered.length})</div>
+          {triggered.map(t => {
+            const co = settings.categories.find(c => c.name === t.category);
+            return (
+              <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #E8E8E8", borderLeft: `4px solid ${co?.accent || "#888"}`, padding: "14px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
+                <span style={{ fontSize: 22 }}>🔔</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 3 }}>{t.title}</div>
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", background: co?.bg || "#F0F0F0", color: co?.accent || "#888", borderRadius: 4, padding: "2px 7px" }}>{t.category}</span>
+                    <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#E67E22" }}>{isOverdue(t.dueDate) ? "⚠ En retard" : "● Aujourd'hui"} — {fmtDate(t.dueDate)}</span>
+                  </div>
+                </div>
+                <button onClick={() => onUpdate({ ...t, completed: true, status: "done" })} style={{ ...S.btn("#27AE60"), fontSize: 11, padding: "6px 12px", flexShrink: 0 }}>Marquer fait</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#AAA", letterSpacing: "0.08em", fontFamily: "'DM Mono',monospace", marginBottom: 10 }}>PROCHAINS RAPPELS ({upcoming.length})</div>
+        {upcoming.length === 0 && triggered.length === 0 && (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>🔕</div>
+            <div style={{ fontFamily: "'Lora',serif", fontSize: 14 }}>Aucun rappel configuré</div>
+          </div>
+        )}
+        {upcoming.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate)).map(t => {
+          const co = settings.categories.find(c => c.name === t.category);
+          const diff = Math.ceil((new Date(t.dueDate) - new Date()) / 864e5);
+          return (
+            <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #ECEAE5", padding: "12px 16px", marginBottom: 6, display: "flex", gap: 10, alignItems: "center" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: co?.bg || "#F0F0F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🔔</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{t.title}</div>
+                <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA", marginTop: 2 }}>{fmtDate(t.dueDate)} · dans {diff}j</div>
+              </div>
+              <select value={t.reminder} onChange={e => onUpdate({ ...t, reminder: e.target.value })}
+                style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", border: "1px solid #E0E0E0", borderRadius: 6, padding: "4px 8px", background: "white", cursor: "pointer", color: "#555" }}>
+                <option value="none">Désactiver</option><option value="same">Le jour même</option>
+                <option value="30min">30 min avant</option><option value="1h">1h avant</option>
+                <option value="2h">2h avant</option><option value="1d">La veille</option><option value="2d">2 jours avant</option>
+              </select>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── MEETINGS VIEW ─── */
+function MeetingsView({ onAddTask }) {
+  const [meetings, setMeetings] = useState(() => { try { const s = localStorage.getItem(MEETING_STORAGE); return s ? JSON.parse(s) : []; } catch { return []; } });
+  const [selected, setSelected] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+  const [newM, setNewM] = useState(null);
+  const [recap, setRecap] = useState(null);
+  const [loadingRecap, setLoadingRecap] = useState(false);
+  useEffect(() => { try { localStorage.setItem(MEETING_STORAGE, JSON.stringify(meetings)); } catch {} }, [meetings]);
+  const saveMeeting = m => { const exists = meetings.find(x => x.id === m.id); if (exists) setMeetings(p => p.map(x => x.id === m.id ? m : x)); else setMeetings(p => [m, ...p]); setSelected(m); };
+  const delMeeting = id => { setMeetings(p => p.filter(x => x.id !== id)); if (selected?.id === id) setSelected(null); };
+  const generateRecap = async m => {
+    setLoadingRecap(true); setRecap(null);
+    try {
+      const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
+      const data = await resp.json();
+      setRecap(data.content?.map(c => c.text || "").join("") || "Erreur de génération.");
+    } catch { setRecap("Erreur de connexion."); }
+    setLoadingRecap(false);
+  };
+  const upcoming = meetings.filter(m => m.date >= today()).sort((a, b) => a.date.localeCompare(b.date));
+  const past = meetings.filter(m => m.date < today()).sort((a, b) => b.date.localeCompare(a.date));
+  const [tab, setTab] = useState("prep");
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 16px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
+  );
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Réunions</div>
+        <button onClick={() => { setNewM({ id: uid(), title: "", date: today(), time: "", participants: "", agenda: "", notes: "", docs: "" }); setShowNew(true); setSelected(null); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>+ Nouvelle réunion</button>
+      </div>
+      <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 11, color: "#4F46E5", fontFamily: "'DM Mono',monospace", lineHeight: 1.6 }}>
+        💡 <strong>Import Outlook :</strong> Exportez votre réunion depuis Outlook (Fichier → Enregistrer sous → .ics) puis renseignez manuellement. Une connexion directe Microsoft 365 nécessiterait une intégration OAuth.
+      </div>
+      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
+        <div style={{ width: 240, flexShrink: 0 }}>
+          {upcoming.length > 0 && <><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", marginBottom: 6 }}>À VENIR</div>
+            {upcoming.map(m => <div key={m.id} onClick={() => { setSelected(m); setShowNew(false); setRecap(null); }} style={{ background: selected?.id === m.id ? "#EEF2FF" : "white", border: `1px solid ${selected?.id === m.id ? "#C7D2FE" : "#ECEAE5"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title || "Sans titre"}</div>
+              <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(m.date)}{m.time ? " · " + m.time : ""}</div>
+            </div>)}</>}
+          {past.length > 0 && <><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", marginTop: 12, marginBottom: 6 }}>PASSÉES</div>
+            {past.map(m => <div key={m.id} onClick={() => { setSelected(m); setShowNew(false); setRecap(null); }} style={{ background: selected?.id === m.id ? "#EEF2FF" : "white", border: `1px solid ${selected?.id === m.id ? "#C7D2FE" : "#ECEAE5"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", opacity: 0.65 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title || "Sans titre"}</div>
+              <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(m.date)}</div>
+            </div>)}</>}
+          {meetings.length === 0 && !showNew && <div style={{ textAlign: "center", padding: "30px 0", color: "#CCC" }}><div style={{ fontSize: 28, marginBottom: 8 }}>◷</div><div style={{ fontFamily: "'Lora',serif", fontSize: 13 }}>Aucune réunion</div></div>}
+        </div>
+        <div style={{ flex: 1, minWidth: 300 }}>
+          {showNew && newM && (
+            <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "20px 24px" }}>
+              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 14 }}>Nouvelle réunion</div>
+              <input value={newM.title} onChange={e => setNewM({ ...newM, title: e.target.value })} placeholder="Titre…" style={{ ...S.input, fontSize: 14, marginBottom: 10 }} />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>DATE</div><input type="date" value={newM.date} onChange={e => setNewM({ ...newM, date: e.target.value })} style={{ ...S.input, cursor: "pointer" }} /></div>
+                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>HEURE</div><input type="time" value={newM.time} onChange={e => setNewM({ ...newM, time: e.target.value })} style={{ ...S.input, cursor: "pointer" }} /></div>
+              </div>
+              <input value={newM.participants} onChange={e => setNewM({ ...newM, participants: e.target.value })} placeholder="Participants…" style={{ ...S.input, marginBottom: 10 }} />
+              <textarea value={newM.agenda} onChange={e => setNewM({ ...newM, agenda: e.target.value })} rows={4} placeholder="Ordre du jour…" style={{ ...S.input, resize: "vertical", marginBottom: 10 }} />
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+                <button onClick={() => setShowNew(false)} style={{ ...S.btn("#F0F0F0", "#666") }}>Annuler</button>
+                <button onClick={() => { saveMeeting({ ...newM, notes: "", docs: "" }); setShowNew(false); }} style={{ ...S.btn("#102A63") }}>Créer</button>
+              </div>
+            </div>
+          )}
+          {selected && !showNew && (
+            <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
+              <div style={{ padding: "16px 20px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div style={{ flex: 1, marginRight: 8 }}>
+                  <input value={selected.title} onChange={e => { const m = { ...selected, title: e.target.value }; setSelected(m); saveMeeting(m); }} style={{ border: "none", outline: "none", fontSize: 16, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", background: "transparent", width: "100%", marginBottom: 4 }} />
+                  <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(selected.date)}{selected.time ? " · " + selected.time : ""}{selected.participants ? " · " + selected.participants : ""}</div>
+                </div>
+                <button onClick={() => delMeeting(selected.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 18 }}>×</button>
+              </div>
+              <div style={{ borderBottom: "1px solid #F0F0F0", display: "flex", paddingLeft: 8 }}>
+                <Tab id="prep" label="📋 Préparation" /><Tab id="notes" label="✏️ Notes" /><Tab id="recap" label="📄 Récap IA" />
+              </div>
+              <div style={{ padding: "16px 20px", minHeight: 300 }}>
+                {tab === "prep" && <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>ORDRE DU JOUR</div>
+                  <textarea value={selected.agenda || ""} onChange={e => { const m = { ...selected, agenda: e.target.value }; setSelected(m); saveMeeting(m); }} rows={5} placeholder="Points à aborder…" style={{ ...S.input, resize: "vertical", marginBottom: 12 }} />
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>PARTICIPANTS</div>
+                  <input value={selected.participants || ""} onChange={e => { const m = { ...selected, participants: e.target.value }; setSelected(m); saveMeeting(m); }} placeholder="Participants…" style={{ ...S.input, marginBottom: 12 }} />
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>DOCUMENTS / LIENS</div>
+                  <textarea value={selected.docs || ""} onChange={e => { const m = { ...selected, docs: e.target.value }; setSelected(m); saveMeeting(m); }} rows={2} placeholder="Fichiers, liens…" style={{ ...S.input, resize: "vertical" }} />
+                </>}
+                {tab === "notes" && <>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NOTES EN SÉANCE</div>
+                  <textarea value={selected.notes || ""} onChange={e => { const m = { ...selected, notes: e.target.value }; setSelected(m); saveMeeting(m); }} rows={12} placeholder={"Prenez vos notes ici…\n\nAstuce : utilisez '-' pour les décisions et '→' pour les actions."} style={{ ...S.input, resize: "vertical", lineHeight: 1.7, fontSize: 13 }} />
+                  <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={() => onAddTask({ id: uid(), title: `Actions — ${selected.title}`, category: "Equipe", type: "Réunion", dueDate: "", priority: "normale", status: "todo", notes: `Réunion du ${selected.date}\n${selected.notes || ""}`, completed: false, reminder: "none", recurrence: "none", subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false })} style={{ ...S.btn("#F0F0F0", "#555"), fontSize: 11, padding: "6px 14px" }}>↗ Créer une tâche</button>
+                  </div>
+                </>}
+                {tab === "recap" && <>
+                  {!recap && !loadingRecap && <div style={{ textAlign: "center", padding: "30px 0" }}>
+                    <div style={{ fontSize: 32, marginBottom: 10 }}>🤖</div>
+                    <button onClick={() => generateRecap(selected)} disabled={!selected.notes} style={{ ...S.btn(selected.notes ? "#102A63" : "#CCC"), padding: "10px 24px", fontSize: 13 }}>✨ Générer le récap</button>
+                    {!selected.notes && <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 10 }}>Ajoutez des notes d'abord</div>}
+                  </div>}
+                  {loadingRecap && <div style={{ textAlign: "center", padding: "40px 0" }}><div style={{ fontSize: 28, animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</div></div>}
+                  {recap && !loadingRecap && <>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Compte-rendu</div>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => generateRecap(selected)} style={{ ...S.btn("#F0F0F0", "#666"), fontSize: 10, padding: "4px 10px" }}>↺ Régénérer</button>
+                        <button onClick={() => setRecap(null)} style={{ border: "1px solid #E0E0E0", background: "none", borderRadius: 6, padding: "4px 10px", fontSize: 10, color: "#AAA", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>×</button>
+                      </div>
+                    </div>
+                    <div style={{ background: "#F8F9FC", borderRadius: 10, padding: 16, fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", lineHeight: 1.7, whiteSpace: "pre-wrap", border: "1px solid #ECEAE5" }}>{recap}</div>
+                    <button onClick={() => navigator.clipboard.writeText(recap)} style={{ ...S.btn("#102A63"), fontSize: 11, padding: "6px 14px", marginTop: 10 }}>📋 Copier</button>
+                  </>}
+                </>}
+              </div>
+            </div>
+          )}
+          {!selected && !showNew && <div style={{ textAlign: "center", padding: "60px 0", color: "#CCC" }}><div style={{ fontSize: 40, marginBottom: 12 }}>◷</div><div style={{ fontFamily: "'Lora',serif", fontSize: 15, color: "#AAA" }}>Sélectionnez ou créez une réunion</div></div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── 7) CATEGORY TASKS VIEW ─── */
+const CAT_ORDER_KEY = "taskmanager_catorder_v1";
+
+function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, settings }) {
+  const isMobile = useIsMobile();
+  const [filterStatus, setFilterStatus] = useState("Actives");
+  const [search, setSearch] = useState("");
+  const [selectedCats, setSelectedCats] = useState([]); // empty = all
+  const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
+
+  // Drag-to-reorder category blocks
+  const [catOrder, setCatOrder] = useState(() => {
+    try { const s = localStorage.getItem(CAT_ORDER_KEY); return s ? JSON.parse(s) : settings.categories.map(c => c.id); } catch { return settings.categories.map(c => c.id); }
+  });
+  const dragSrc = useRef(null);
+
+  // Keep catOrder in sync if settings.categories changes (new cat added)
+  const orderedCats = [
+    ...catOrder.map(id => settings.categories.find(c => c.id === id)).filter(Boolean),
+    ...settings.categories.filter(c => !catOrder.includes(c.id)),
+  ];
+
+  const saveCatOrder = (order) => { setCatOrder(order); try { localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(order)); } catch {} };
+
+  const toggleCat = id => setSelectedCats(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const showCats = selectedCats.length === 0 ? orderedCats : orderedCats.filter(c => selectedCats.includes(c.id));
+
+  const baseFilter = t => {
+    if (t.status === "blocked" && filterStatus !== "Toutes") return false;
+    if (filterStatus === "Actives" && t.completed) return false;
+    if (filterStatus === "Complétées" && !t.completed) return false;
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  };
+
+  const FBtn = ({ label, active, onClick, color }) => (
+    <button onClick={onClick} style={{ border: `1px solid ${active ? color || "#102A63" : "#E0E0E0"}`, background: active ? color || "#102A63" : "white", color: active ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", transition: "all 0.15s", whiteSpace: "nowrap" }}>{label}</button>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {/* Toolbar */}
+      <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: "7px 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input, width: 140, padding: "4px 8px", fontSize: 11 }} />
+        <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+        {["Actives", "Complétées", "Toutes"].map(o => <FBtn key={o} label={o} active={filterStatus === o} onClick={() => setFilterStatus(o)} />)}
+        <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+        <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FILTRER :</span>
+        {settings.categories.map(c => (
+          <button key={c.id} onClick={() => toggleCat(c.id)}
+            style={{ border: `1px solid ${selectedCats.includes(c.id) ? c.accent : "#E0E0E0"}`, background: selectedCats.includes(c.id) ? c.bg : "white", color: selectedCats.includes(c.id) ? c.accent : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: selectedCats.includes(c.id) ? 700 : 400 }}>{c.name}</button>
+        ))}
+        {selectedCats.length > 0 && <button onClick={() => setSelectedCats([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>⠿ Glissez les blocs pour réordonner</span>
+        <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: "4px 12px", fontSize: 11 }}>+ Nouvelle</button>
+      </div>
+
+      {/* Category blocks */}
+      <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
+        {showCats.map(cat => {
+          const catTasks = tasks.filter(t => t.category === cat.name && baseFilter(t));
+          return (
+            <div key={cat.id}
+              draggable
+              onDragStart={() => { dragSrc.current = cat.id; }}
+              onDragOver={e => e.preventDefault()}
+              onDrop={() => {
+                if (!dragSrc.current || dragSrc.current === cat.id) return;
+                const order = orderedCats.map(c => c.id);
+                const from = order.indexOf(dragSrc.current);
+                const to   = order.indexOf(cat.id);
+                const next = [...order];
+                next.splice(from, 1);
+                next.splice(to, 0, dragSrc.current);
+                saveCatOrder(next);
+                dragSrc.current = null;
+              }}
+              style={{ background: "white", borderRadius: 12, border: `1px solid ${cat.bg}`, borderLeft: `4px solid ${cat.accent}`, overflow: "hidden", cursor: "grab" }}>
+              {/* Block header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: cat.bg, borderBottom: `1px solid ${cat.accent}20` }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: cat.accent, fontFamily: "'DM Mono',monospace" }}>⠿</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: cat.accent, fontFamily: "'Lora',serif", flex: 1 }}>{cat.name}</span>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: cat.accent, opacity: 0.7 }}>{catTasks.length} tâche{catTasks.length !== 1 ? "s" : ""}</span>
+                <button onClick={() => onAdd()} title={`Nouvelle tâche dans ${cat.name}`}
+                  style={{ border: `1px solid ${cat.accent}`, background: "white", borderRadius: 6, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: cat.accent, fontFamily: "'DM Mono',monospace" }}>+</button>
+              </div>
+              {/* Tasks list */}
+              {catTasks.length === 0 ? (
+                <div style={{ padding: "12px 16px", fontSize: 11, color: "#CCC", fontFamily: "'Lora',serif", fontStyle: "italic" }}>Aucune tâche dans cette catégorie</div>
+              ) : isMobile ? (
+                <div style={{ padding: "8px" }}>
+                  {catTasks.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)}
+                </div>
+              ) : (
+                <div>
+                  {/* mini header row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "3px 12px 2px", background: "#FAFAF8", borderBottom: "1px solid #F0F0F0", userSelect: "none" }}>
+                    <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.title || 220, flexShrink: 0 }}>TÂCHE</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 28 }}>ST</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.status || 72, flexShrink: 0 }}>STATUT</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.type || 72, flexShrink: 0 }}>TYPE</span>
+                    <div style={{ flex: 1 }} />
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.created || 82, textAlign: "right" }}>CRÉATION</span>
+                    <span style={{ width: 16, flexShrink: 0 }} />
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.due || 82, textAlign: "right" }}>ÉCHÉANCE</span>
+                    <span style={{ width: 36, flexShrink: 0 }} />
+                  </div>
+                  <div style={{ padding: "3px 0 4px" }}>
+                    {catTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── 1) SETTINGS VIEW ─── */
+const ALL_TABS = [
+  { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
+  { id: "myday",         label: "Ma journée",       icon: "☀" },
+  { id: "tasks",         label: "Tâches",           icon: "☰" },
+  { id: "categorytasks", label: "Catégories",       icon: "◫" },
+  { id: "meetings",      label: "Réunions",         icon: "◷" },
+  { id: "calendar",      label: "Calendrier",       icon: "◻" },
+  { id: "notifications", label: "Rappels",          icon: "🔔" },
+];
+
+function SettingsView({ settings, onSave }) {
+  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [] })));
+  const [tab, setTab] = useState("categories");
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
+  );
+
+  const addCat  = () => setS({ ...s, categories: [...s.categories, { id: uid(), name: "Nouvelle catégorie", bg: "#F0F0F0", accent: "#888888" }] });
+  const updCat  = (id, field, val) => setS({ ...s, categories: s.categories.map(c => c.id === id ? { ...c, [field]: val } : c) });
+  const delCat  = (id) => setS({ ...s, categories: s.categories.filter(c => c.id !== id) });
+
+  const addType = () => setS({ ...s, types: [...s.types, { id: uid(), name: "Nouveau type", icon: "●" }] });
+  const updType = (id, field, val) => setS({ ...s, types: s.types.map(t => t.id === id ? { ...t, [field]: val } : t) });
+  const delType = (id) => setS({ ...s, types: s.types.filter(t => t.id !== id) });
+
+  const addStat = () => setS({ ...s, statuses: [...s.statuses, { id: uid(), name: "Nouveau statut", bg: "#F0F0F0", color: "#888888" }] });
+  const updStat = (id, field, val) => setS({ ...s, statuses: s.statuses.map(st => st.id === id ? { ...st, [field]: val } : st) });
+  const delStat = (id) => setS({ ...s, statuses: s.statuses.filter(st => st.id !== id) });
+
+  const toggleTab = id => {
+    const hidden = s.hiddenTabs || [];
+    setS({ ...s, hiddenTabs: hidden.includes(id) ? hidden.filter(x => x !== id) : [...hidden, id] });
+  };
+
+  const Row = ({ children }) => <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F5F5F5" }}>{children}</div>;
+
+  return (
+    <div>
+      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 20 }}>⚙ Paramètres</div>
+      <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
+        <div style={{ borderBottom: "1px solid #F0F0F0", display: "flex", paddingLeft: 8, flexWrap: "wrap" }}>
+          <Tab id="categories" label="📁 Catégories" />
+          <Tab id="types" label="🏷 Types" />
+          <Tab id="statuses" label="🔵 Statuts" />
+          <Tab id="tabs" label="👁 Onglets" />
+        </div>
+        <div style={{ padding: "20px 24px" }}>
+          {tab === "categories" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Gérez les catégories disponibles lors de la création de tâches.</div>
+            {s.categories.map(c => (
+              <Row key={c.id}>
+                <div style={{ width: 24, height: 24, borderRadius: 6, background: c.bg, border: `2px solid ${c.accent}`, flexShrink: 0 }} />
+                <input value={c.name} onChange={e => updCat(c.id, "name", e.target.value)} style={{ ...S.input, flex: 1, padding: "5px 8px", fontSize: 12 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={c.bg} onChange={e => updCat(c.id, "bg", e.target.value)} style={{ width: 28, height: 28, border: "1px solid #E0E0E0", borderRadius: 4, cursor: "pointer", padding: 2 }} />
+                  <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>Accent</span>
+                  <input type="color" value={c.accent} onChange={e => updCat(c.id, "accent", e.target.value)} style={{ width: 28, height: 28, border: "1px solid #E0E0E0", borderRadius: 4, cursor: "pointer", padding: 2 }} />
+                </div>
+                <button onClick={() => delCat(c.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 16 }}>×</button>
+              </Row>
+            ))}
+            <button onClick={addCat} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter une catégorie</button>
+          </>}
+          {tab === "types" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Gérez les types de tâches disponibles.</div>
+            {s.types.map(t => (
+              <Row key={t.id}>
+                <input value={t.icon} onChange={e => updType(t.id, "icon", e.target.value)} style={{ ...S.input, width: 44, padding: "5px 8px", fontSize: 16, textAlign: "center" }} />
+                <input value={t.name} onChange={e => updType(t.id, "name", e.target.value)} style={{ ...S.input, flex: 1, padding: "5px 8px", fontSize: 12 }} />
+                <button onClick={() => delType(t.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 16 }}>×</button>
+              </Row>
+            ))}
+            <button onClick={addType} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter un type</button>
+          </>}
+          {tab === "statuses" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Gérez les statuts disponibles pour vos tâches.</div>
+            {s.statuses.map(st => (
+              <Row key={st.id}>
+                <span style={{ fontSize: 11, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 4, padding: "2px 8px", fontFamily: "'DM Mono',monospace", minWidth: 70, textAlign: "center" }}>{st.name}</span>
+                <input value={st.name} onChange={e => updStat(st.id, "name", e.target.value)} style={{ ...S.input, flex: 1, padding: "5px 8px", fontSize: 12 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={st.bg} onChange={e => updStat(st.id, "bg", e.target.value)} style={{ width: 28, height: 28, border: "1px solid #E0E0E0", borderRadius: 4, cursor: "pointer", padding: 2 }} />
+                  <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>Texte</span>
+                  <input type="color" value={st.color} onChange={e => updStat(st.id, "color", e.target.value)} style={{ width: 28, height: 28, border: "1px solid #E0E0E0", borderRadius: 4, cursor: "pointer", padding: 2 }} />
+                </div>
+                <button onClick={() => delStat(st.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 16 }}>×</button>
+              </Row>
+            ))}
+            <button onClick={addStat} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter un statut</button>
+          </>}
+          {tab === "tabs" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Masquez les onglets que vous ne souhaitez pas afficher dans la navigation. Les onglets "Tâches" et "Paramètres" sont toujours visibles.</div>
+            {ALL_TABS.map(t => {
+              const hidden = (s.hiddenTabs || []).includes(t.id);
+              return (
+                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: "1px solid #F5F5F5" }}>
+                  <span style={{ fontSize: 16 }}>{t.icon}</span>
+                  <span style={{ flex: 1, fontSize: 13, fontFamily: "'Lora',serif", color: hidden ? "#AAA" : "#2C3E50" }}>{t.label}</span>
+                  <button onClick={() => toggleTab(t.id)}
+                    style={{ border: `1px solid ${hidden ? "#E0E0E0" : "#27AE60"}`, background: hidden ? "#F8F8F8" : "#D1FAE5", color: hidden ? "#AAA" : "#065F46", borderRadius: 20, padding: "4px 14px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: 700 }}>
+                    {hidden ? "Masqué" : "Visible"}
+                  </button>
+                </div>
+              );
+            })}
+          </>}
+        </div>
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
+          <button onClick={() => { onSave(s); }} style={{ ...S.btn("#102A63") }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── TASKS VIEW ─── */
+const DEFAULT_COL_WIDTHS = { title: 220, status: 72, category: 90, type: 72, created: 82, due: 82 };
+
+function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fullscreen, onToggleFullscreen, settings }) {
+  const isMobile = useIsMobile();
+  const [filterCat,    setFilterCat]    = useState("Toutes");
+  const [filterType,   setFilterType]   = useState("Tous");
+  const [filterStatus, setFilterStatus] = useState("Actives");
+  const [search,       setSearch]       = useState("");
+  const [grouped,      setGrouped]      = useState(false);
+  const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
+
+  const startResize = (col, e) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = colWidths[col];
+    const onMove = ev => { const nw = Math.max(40, startW + ev.clientX - startX); setColWidths(p => { const n = { ...p, [col]: nw }; try { localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(n)); } catch {} return n; }); };
+    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove); window.addEventListener("mouseup", onUp);
+  };
+
+  // 2) Blocked tasks: hidden when filterStatus="Actives", visible when filterStatus="Toutes"
+  const displayList = tasks.filter(t => {
+    // Hide blocked unless "Toutes" is selected
+    if (t.status === "blocked" && filterStatus !== "Toutes") return false;
+    if (filterCat !== "Toutes" && t.category !== filterCat) return false;
+    if (filterType !== "Tous" && t.type !== filterType) return false;
+    if (filterStatus === "Actives" && t.completed) return false;
+    if (filterStatus === "Complétées" && !t.completed) return false;
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  const blockedCount = tasks.filter(t => t.status === "blocked" && !t.completed).length;
+
+  const groups = {};
+  settings.categories.forEach(c => { const r = displayList.filter(t => t.category === c.name); if (r.length) groups[c.name] = r; });
+
+  const FBtn = ({ label, active, onClick, color }) => (
+    <button onClick={onClick} style={{ border: `1px solid ${active ? color || "#102A63" : "#E0E0E0"}`, background: active ? color || "#102A63" : "white", color: active ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", transition: "all 0.15s", whiteSpace: "nowrap" }}>{label}</button>
+  );
+  const ResizeHandle = ({ col }) => (
+    <span onMouseDown={e => startResize(col, e)} style={{ display: "inline-block", width: 6, cursor: "col-resize", userSelect: "none", flexShrink: 0, marginLeft: 2, alignSelf: "stretch", borderRight: "2px solid transparent", transition: "border-color 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = "#BDC3C7"} onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"} />
+  );
+  const ColHeader = ({ label, col, extra }) => (
+    <div style={{ display: "flex", alignItems: "center", flexShrink: 0, width: col ? colWidths[col] : undefined, ...extra }}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {col && <ResizeHandle col={col} />}
+    </div>
+  );
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: fullscreen ? "calc(100vh - 56px)" : "auto" }}>
+      {/* Toolbar */}
+      <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: isMobile ? "8px 10px" : "7px 12px", display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input, width: isMobile ? 110 : 140, padding: "4px 8px", fontSize: 11 }} />
+        <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+        {["Actives", "Complétées", "Toutes"].map(o => <FBtn key={o} label={isMobile ? o.slice(0, 4) : o} active={filterStatus === o} onClick={() => setFilterStatus(o)} />)}
+        {!isMobile && <>
+          <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+          {["Tous", ...settings.types.map(t => t.name)].map(o => <FBtn key={o} label={o} active={filterType === o} onClick={() => setFilterType(o)} />)}
+          <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+          {["Toutes", ...settings.categories.map(c => c.name)].map(c => { const co = settings.categories.find(x => x.name === c); return <FBtn key={c} label={c} active={filterCat === c} onClick={() => setFilterCat(c)} color={co?.accent} />; })}
+        </>}
+        <div style={{ flex: 1 }} />
+        {!isMobile && <>
+          <button onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem(COL_WIDTHS_KEY); }} title="Réinitialiser colonnes" style={{ border: "1px solid #E0E0E0", background: "white", color: "#AAA", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>↺</button>
+          <button onClick={() => setGrouped(!grouped)} style={{ border: `1px solid ${grouped ? "#2C3E50" : "#E0E0E0"}`, background: grouped ? "#102A63" : "white", color: grouped ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{grouped ? "☰ Groupé" : "≡ À plat"}</button>
+          <button onClick={onToggleFullscreen} style={{ border: "1px solid #E0E0E0", background: "white", color: "#888", borderRadius: 5, padding: "3px 9px", fontSize: 12, cursor: "pointer", lineHeight: 1 }}>{fullscreen ? "⤡" : "⤢"}</button>
+        </>}
+        <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: isMobile ? "6px 12px" : "4px 12px", fontSize: 11, whiteSpace: "nowrap" }}>+ {isMobile ? "Ajouter" : "Nouvelle"}</button>
+      </div>
+
+
+      {isMobile && (
+        <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: "6px 10px", display: "flex", gap: 6, overflowX: "auto", flexShrink: 0 }}>
+          {["Toutes", ...settings.categories.map(c => c.name)].map(c => { const co = settings.categories.find(x => x.name === c); return <FBtn key={c} label={c} active={filterCat === c} onClick={() => setFilterCat(c)} color={co?.accent} />; })}
+        </div>
+      )}
+
+      {/* Column headers */}
+      {!isMobile && (
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 12px 3px", borderBottom: "1px solid #ECEAE5", background: "#F8F8F6", flexShrink: 0, userSelect: "none" }}>
+          <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
+          <ColHeader label="TÂCHE" col="title" />
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 28 }}>ST</span>
+          <ColHeader label="STATUT" col="status" />
+          <ColHeader label="CATÉGORIE" col="category" />
+          <ColHeader label="TYPE" col="type" />
+          <div style={{ flex: 1 }} />
+          <ColHeader label="CRÉATION" col="created" extra={{ textAlign: "right" }} />
+          <span style={{ width: 16, flexShrink: 0 }} />
+          <ColHeader label="ÉCHÉANCE" col="due" extra={{ textAlign: "right" }} />
+          <span style={{ width: 36, flexShrink: 0 }} />
+        </div>
+      )}
+
+      {/* List */}
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 12px 8px" }}>
+        {displayList.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
+            <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
+            <div style={{ fontFamily: "'Lora',serif", fontSize: 14 }}>Aucune tâche trouvée</div>
+          </div>
+        ) : isMobile ? (
+          displayList.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)
+        ) : !grouped || filterCat !== "Toutes" ? (
+          displayList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)
+        ) : (
+          Object.entries(groups).map(([cat, catTasks]) => {
+            const co = settings.categories.find(c => c.name === cat);
+            return (
+              <div key={cat} style={{ marginBottom: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3, marginTop: 4 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: co?.accent || "#999" }} />
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#BBB", fontFamily: "'DM Mono',monospace" }}>{cat.toUpperCase()} — {catTasks.length}</span>
+                  <div style={{ flex: 1, height: 1, background: "#F0F0F0" }} />
+                </div>
+                {catTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+              </div>
+            );
+          })
+        )}
+      </div>
+      {/* Stats footer */}
+      <div style={{ padding: "5px 12px", borderTop: "1px solid #F0F0F0", background: "white", flexShrink: 0, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+        {(() => {
+          const total    = tasks.length;
+          const pct      = n => total > 0 ? Math.round((n / total) * 100) : 0;
+          const created  = total;
+          const active   = tasks.filter(t => !t.completed && t.status !== "cancelled").length;
+          const done     = tasks.filter(t => t.completed || t.status === "done").length;
+          const cancelled= tasks.filter(t => t.status === "cancelled").length;
+          const blocked  = tasks.filter(t => t.status === "blocked").length;
+          const overdue  = tasks.filter(t => !t.completed && isOverdue(t.dueDate)).length;
+          const stats = [
+            { label: "Créées",    val: created,   pct: 100,         color: "#2C3E50" },
+            { label: "Actives",   val: active,    pct: pct(active),    color: "#2980B9" },
+            { label: "Terminées", val: done,      pct: pct(done),      color: "#27AE60" },
+            { label: "Annulées",  val: cancelled, pct: pct(cancelled), color: "#92400E" },
+            { label: "Bloquées",  val: blocked,   pct: pct(blocked),   color: "#B91C1C" },
+            { label: "En retard", val: overdue,   pct: pct(overdue),   color: "#E67E22" },
+          ];
+          return stats.map(s => (
+            <span key={s.label} style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: s.val > 0 ? s.color : "#CCC", whiteSpace: "nowrap" }}>
+              <span style={{ fontWeight: 700 }}>{s.label}</span> {s.val} <span style={{ opacity: 0.6 }}>({s.pct}%)</span>
+            </span>
+          ));
+        })()}
+        <span style={{ flex: 1, textAlign: "right", fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>{displayList.length} affiché{displayList.length !== 1 ? "s" : ""}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── APP ─── */
+function App() {
+  const [settings, setSettings] = useState(() => loadSettings());
+  const [tasks, setTasks] = useState(() => { try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : sampleTasks(settings.categories); } catch { return sampleTasks(settings.categories); } });
+  const [view, setView] = useState("dashboard");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [modal, setModal] = useState(null);
+  const [toasts, setToasts] = useState([]);
+  const [undoTask, setUndoTask] = useState(null); // 2) undo
+  const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
+  const notifTimerRef = useRef(null);
+  const isMobile = useIsMobile();
+
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  useEffect(() => {
+    const check = () => {
+      const now = new Date();
+      const active = tasks.filter(t => !t.completed && t.reminder && t.reminder !== "none" && t.dueDate);
+      const fired = active.filter(t => {
+        const due = new Date(t.dueDate), diff = (due - now) / 60000;
+        if (t.reminder === "same") return isToday(t.dueDate);
+        if (t.reminder === "30min") return diff >= 0 && diff <= 30;
+        if (t.reminder === "1h") return diff >= 0 && diff <= 60;
+        if (t.reminder === "2h") return diff >= 0 && diff <= 120;
+        if (t.reminder === "1d") return diff >= 0 && diff <= 1440;
+        if (t.reminder === "2d") return diff >= 0 && diff <= 2880;
+        return false;
+      });
+      if (fired.length > 0) setToasts(prev => { const ids = prev.map(x => x.id); return [...prev, ...fired.filter(t => !ids.includes(t.id))].slice(-3); });
+    };
+    check(); notifTimerRef.current = setInterval(check, 60000);
+    return () => clearInterval(notifTimerRef.current);
+  }, [tasks]);
+
+  const addTask = t => setTasks(p => [t, ...p]);
+  const updTask = t => setTasks(p => p.map(x => x.id === t.id ? t : x));
+  // 2) soft delete with undo
+  const delTask = id => {
+    const task = tasks.find(x => x.id === id);
+    setTasks(p => p.filter(x => x.id !== id));
+    setUndoTask(task);
+  };
+  const undoDelete = () => { if (undoTask) { addTask(undoTask); setUndoTask(null); } };
+
+  // 3) Toggle: if toggling to complete → status = done; if uncompleting → status = inprogress
+  const togTask = id => setTasks(p => p.map(x => {
+    if (x.id !== id) return x;
+    const nowDone = !x.completed;
+    return { ...x, completed: nowDone, status: nowDone ? "done" : "inprogress" };
+  }));
+  const saveComment = (id, comment) => setTasks(p => p.map(x => x.id === id ? { ...x, comment } : x));
+
+  // Compute next due date from recurrence object
+  const nextOccurrence = (rec, fromDate) => {
+    const r = parseRec(rec);
+    if (!r || r.type === "none" || !fromDate) return null;
+    const d = new Date(fromDate);
+    const intv = r.interval || 1;
+    if (r.type === "daily") { d.setDate(d.getDate() + intv); }
+    else if (r.type === "weekly") {
+      // find next occurrence on one of the selected weekdays
+      const days = r.weekDays && r.weekDays.length > 0 ? r.weekDays : [d.getDay()];
+      let attempts = 0;
+      do { d.setDate(d.getDate() + 1); attempts++; } while (!days.includes(d.getDay()) && attempts < 7 * intv + 7);
+    }
+    else if (r.type === "monthly") {
+      if (r.monthMode === "weekday") {
+        d.setMonth(d.getMonth() + intv);
+        // find Nth weekday in new month
+        const targetDay = r.monthWeekDay ?? 1;
+        const targetWeek = r.monthWeek || 1;
+        const year = d.getFullYear(), month = d.getMonth();
+        if (targetWeek === -1) {
+          // last weekday of month
+          const last = new Date(year, month + 1, 0);
+          while (last.getDay() !== targetDay) last.setDate(last.getDate() - 1);
+          d.setDate(last.getDate());
+        } else {
+          let count = 0; const tmp = new Date(year, month, 1);
+          while (tmp.getMonth() === month) {
+            if (tmp.getDay() === targetDay) { count++; if (count === targetWeek) { d.setDate(tmp.getDate()); break; } }
+            tmp.setDate(tmp.getDate() + 1);
+          }
+        }
+      } else {
+        const day = r.monthDay || d.getDate();
+        d.setMonth(d.getMonth() + intv);
+        d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      }
+    }
+    else if (r.type === "yearly") { d.setFullYear(d.getFullYear() + intv); }
+    // Check end condition
+    if (r.endType === "date" && r.endDate && d > new Date(r.endDate)) return null;
+    return d.toISOString().split("T")[0];
+  };
+
+  // handle recurrence on save
+  const handleSave = t => {
+    if (tasks.find(x => x.id === t.id)) updTask(t);
+    else addTask(t);
+    // If recurrent and being completed, create next occurrence
+    if (t.completed && t.recurrence && parseRec(t.recurrence).type !== "none" && t.dueDate) {
+      const nextDate = nextOccurrence(t.recurrence, t.dueDate);
+      if (nextDate) {
+        const rec = parseRec(t.recurrence);
+        const newCount = rec.endType === "count" ? (rec.endCount > 1 ? { ...rec, endCount: rec.endCount - 1 } : null) : t.recurrence;
+        if (newCount !== null) {
+          const next = { ...t, id: uid(), completed: false, status: "todo", dueDate: nextDate, createdAt: new Date().toISOString(), totalTime: 0, recurrence: newCount };
+          setTimeout(() => addTask(next), 50);
+        }
+      }
+    }
+  };
+
+  const saveSettingsFn = s => { setSettings(s); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
+
+  const openNew = (dueDate = "") => setModal({ id: uid(), title: "", category: "", type: "", dueDate, completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false });
+  const openEdit = t => setModal({ ...t });
+
+  const activeCount  = tasks.filter(t => !t.completed).length;
+  const overdueCount = tasks.filter(t => !t.completed && isOverdue(t.dueDate)).length;
+  const remCount     = tasks.filter(t => !t.completed && t.reminder && t.reminder !== "none" && t.dueDate && daysBefore(t.dueDate, 2)).length;
+  const myDayCount   = tasks.filter(t => !t.completed && (isToday(t.dueDate) || t.inMyDay)).length;
+
+  // Full NAV definition (always includes tasks + settings)
+  const NAV = [
+    { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
+    { id: "myday",         label: "Ma journée",       icon: "☀",  badge: myDayCount },
+    { id: "tasks",         label: "Tâches",           icon: "☰",  badge: activeCount },
+    { id: "categorytasks", label: "Catégories",       icon: "◫" },
+    { id: "meetings",      label: "Réunions",         icon: "◷" },
+    { id: "calendar",      label: "Calendrier",       icon: "◻" },
+    { id: "notifications", label: "Rappels",          icon: "🔔", badge: remCount },
+    { id: "settings",      label: "Paramètres",       icon: "⚙" },
+  ];
+
+  // 8) Filter hidden tabs — tasks and settings are always visible
+  const hiddenTabs = settings.hiddenTabs || [];
+  const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
+
+  const isFullWidthView = view === "tasks" || view === "categorytasks";
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif" }}>
+      <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+      <style>{`
+        @keyframes slideIn  { from { transform: translateX(100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
+        @keyframes slideUp  { from { transform: translateX(-50%) translateY(20px); opacity: 0 } to { transform: translateX(-50%) translateY(0); opacity: 1 } }
+        @keyframes spin     { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+      `}</style>
+
+      {/* Nav — always centered, max-width 1200 */}
+      <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.05)" }}>
+        <div style={{ maxWidth: 1200, margin: "0 auto", display: "flex", alignItems: "center", height: 56, padding: "0 24px", gap: 4, boxSizing: "border-box" }}>
+          <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginRight: 8, flexShrink: 0 }}>✦ Liste de tâches</div>
+          {/* Centered nav tabs */}
+          <div style={{ flex: 1, display: "flex", justifyContent: "center", gap: 2, flexWrap: "nowrap", overflow: "hidden" }}>
+            {visibleNav.map(n => (
+              <button key={n.id} onClick={() => setView(n.id)}
+                style={{ display: "flex", alignItems: "center", gap: 5, border: "none", background: view === n.id ? "#EEF2FF" : "none", color: view === n.id ? "#102A63" : "#888", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: view === n.id ? 700 : 400, transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
+                <span>{n.icon}</span>
+                {!isMobile && n.label}
+                {!!n.badge && (
+                  <span style={{ background: "#C0392B", color: "white", borderRadius: 8, fontSize: 10, fontWeight: 800, padding: "0 5px", lineHeight: "17px", minWidth: 17, textAlign: "center", display: "inline-block" }}>
+                    {n.badge}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            + {isMobile ? "" : "Nouvelle tâche"}
+          </button>
+        </div>
+      </div>
+
+      {overdueCount > 0 && (
+        <div style={{ background: "#102A63", color: "white", padding: "8px 24px", textAlign: "center", fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.04em" }}>
+          ⚠ {overdueCount} tâche{overdueCount > 1 ? "s" : ""} en retard —{" "}
+          <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => setView("tasks")}>Voir les tâches</span>
+        </div>
+      )}
+
+      {/* Full-width views (tasks, categorytasks) vs contained views */}
+      {isFullWidthView ? (
+        <div style={{ width: "100%" }}>
+          {view === "tasks" && (
+            <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
+          )}
+          {view === "categorytasks" && (
+            <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
+          )}
+        </div>
+      ) : (
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px" }}>
+          {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
+          {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
+          {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
+          {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
+          {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
+          {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
+        </div>
+      )}
+
+      {modal && <TaskModal task={modal} onSave={handleSave} onClose={() => setModal(null)} onAddTask={addTask} settings={settings} />}
+      <Toast notifs={toasts} onDismiss={id => setToasts(p => p.filter(x => x.id !== id))} />
+      {undoTask && <UndoBanner task={undoTask} onUndo={undoDelete} onDismiss={() => setUndoTask(null)} />}
+    </div>
+  );
+}
+
+    window._reactRoot = null;
+    function doMount() {
+      if (!window._reactRoot) window._reactRoot = ReactDOM.createRoot(document.getElementById('root'));
+      window._reactRoot.render(<App />);
+    }
+    window._doMount = doMount;
+    if (window._pendingMount) doMount();
+  </script>
+</body>
+</html>
