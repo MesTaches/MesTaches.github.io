@@ -25,7 +25,7 @@
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     input,select,textarea{font-size:16px !important}
     .search-input-small{font-size:11px !important}
-    .modal-input-small{font-size:12px !important}
+    .modal-input-small{font-size:10px !important}
   </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 </head>
@@ -475,12 +475,12 @@ function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
               <option value="">— Type —</option>
               {types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
-            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }}>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }}>
               <option value="haute">Priorité haute</option>
               <option value="normale">Priorité normale</option>
               <option value="basse">Priorité basse</option>
             </select>
-            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
+            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
           </div>
           <textarea value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder="Notes…" rows={3} style={{ ...S.input, resize: "none", marginBottom: 10 }} />
         </div>
@@ -796,24 +796,24 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </div>
           )}
 
-          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 12, marginBottom: 12 }} />
+          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 10, marginBottom: 12 }} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
+            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
               <option value="">— Catégorie —</option>
               {settings.categories.map((c) => <option key={c.id} style={{ color: "#2C3E50" }}>{c.name}</option>)}
             </select>
-            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
+            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
               <option value="">— Type —</option>
               {(() => { const ORD = ["task","quick","report","meeting","analyse"]; return [...settings.types].sort((a,b) => { const ia=ORD.indexOf(a.id); const ib=ORD.indexOf(b.id); return (ia<0?99:ia)-(ib<0?99:ib); }); })().map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
-            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }}>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }}>
               <option value="haute">Priorité haute</option>
               <option value="normale">Priorité normale</option>
               <option value="basse">Priorité basse</option>
             </select>
             {/* 3) Status in modal */}
-            <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, fontSize: 12, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
+            <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, fontSize: 10, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
               {settings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
@@ -824,15 +824,15 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE DE CRÉATION</div>
-              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
+              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE D'ÉCHÉANCE</div>
-              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
+              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
             </div>
           </div>
 
-          <select value={d.reminder} onChange={(e) => setD({ ...d, reminder: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", marginBottom: 10 }}>
+          <select value={d.reminder} onChange={(e) => setD({ ...d, reminder: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer", marginBottom: 10 }}>
             <option value="none">Pas de rappel</option>
             <option value="same">Le jour même</option>
             <option value="30min">30 minutes avant</option>
