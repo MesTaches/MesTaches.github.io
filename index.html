@@ -1445,25 +1445,27 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
   const isMobile = useIsMobile();
   const [filterStatus, setFilterStatus] = useState("Actives");
   const [search, setSearch] = useState("");
-  const [selectedCats, setSelectedCats] = useState([]); // empty = all
+  const [selectedTypes, setSelectedTypes] = useState([]); // empty = all
   const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
 
-  // Drag-to-reorder category blocks
-  const [catOrder, setCatOrder] = useState(() => {
-    try { const s = localStorage.getItem(CAT_ORDER_KEY); return s ? JSON.parse(s) : settings.categories.map(c => c.id); } catch { return settings.categories.map(c => c.id); }
+  // Drag-to-reorder type blocks
+  const TYPE_ORDER_KEY = "taskmanager-typeorder-v1";
+  const ORDERED_TYPES = ["task", "quick", "report", "meeting", "analyse"];
+  const [typeOrder, setTypeOrder] = useState(() => {
+    try { const s = localStorage.getItem(TYPE_ORDER_KEY); return s ? JSON.parse(s) : ORDERED_TYPES; } catch { return ORDERED_TYPES; }
   });
   const dragSrc = useRef(null);
 
-  // Keep catOrder in sync if settings.categories changes (new cat added)
-  const orderedCats = [
-    ...catOrder.map(id => settings.categories.find(c => c.id === id)).filter(Boolean),
-    ...settings.categories.filter(c => !catOrder.includes(c.id)),
+  // Keep typeOrder in sync if settings.types changes
+  const orderedTypes = [
+    ...typeOrder.map(id => settings.types.find(t => t.id === id)).filter(Boolean),
+    ...settings.types.filter(t => !typeOrder.includes(t.id)),
   ];
 
-  const saveCatOrder = (order) => { setCatOrder(order); try { localStorage.setItem(CAT_ORDER_KEY, JSON.stringify(order)); } catch {} };
+  const saveTypeOrder = (order) => { setTypeOrder(order); try { localStorage.setItem(TYPE_ORDER_KEY, JSON.stringify(order)); } catch {} };
 
-  const toggleCat = id => setSelectedCats(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
-  const showCats = selectedCats.length === 0 ? orderedCats : orderedCats.filter(c => selectedCats.includes(c.id));
+  const toggleType = id => setSelectedTypes(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const showTypes = selectedTypes.length === 0 ? orderedTypes : orderedTypes.filter(t => selectedTypes.includes(t.id));
 
   const baseFilter = t => {
     if (t.status === "blocked" && filterStatus !== "Toutes") return false;
@@ -1486,51 +1488,53 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
         {["Actives", "Complétées", "Toutes"].map(o => <FBtn key={o} label={o} active={filterStatus === o} onClick={() => setFilterStatus(o)} />)}
         <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
         <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FILTRER :</span>
-        {settings.categories.map(c => (
-          <button key={c.id} onClick={() => toggleCat(c.id)}
-            style={{ border: `1px solid ${selectedCats.includes(c.id) ? c.accent : "#E0E0E0"}`, background: selectedCats.includes(c.id) ? c.bg : "white", color: selectedCats.includes(c.id) ? c.accent : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: selectedCats.includes(c.id) ? 700 : 400 }}>{c.name}</button>
+        {orderedTypes.map(tp => (
+          <button key={tp.id} onClick={() => toggleType(tp.id)}
+            style={{ border: `1px solid ${selectedTypes.includes(tp.id) ? "#102A63" : "#E0E0E0"}`, background: selectedTypes.includes(tp.id) ? "#102A63" : "white", color: selectedTypes.includes(tp.id) ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: selectedTypes.includes(tp.id) ? 700 : 400 }}>{tp.icon} {tp.name}</button>
         ))}
-        {selectedCats.length > 0 && <button onClick={() => setSelectedCats([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
+        {selectedTypes.length > 0 && <button onClick={() => setSelectedTypes([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>⠿ Glissez les blocs pour réordonner</span>
         <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: "4px 12px", fontSize: 11 }}>+ Nouvelle</button>
       </div>
 
-      {/* Category blocks */}
+      {/* Type blocks */}
       <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
-        {showCats.map(cat => {
-          const catTasks = tasks.filter(t => t.category === cat.name && baseFilter(t));
+        {showTypes.map(tp => {
+          const TYPE_COLORS = { task: { bg: "#EEF2FF", accent: "#4F46E5" }, quick: { bg: "#FEF9C3", accent: "#A16207" }, report: { bg: "#E8F8F5", accent: "#27AE60" }, meeting: { bg: "#FDEDEC", accent: "#C0392B" }, analyse: { bg: "#F4ECF7", accent: "#8E44AD" } };
+          const tc = TYPE_COLORS[tp.id] || { bg: "#F5F5F5", accent: "#888" };
+          const typeTasks = tasks.filter(t => t.type === tp.name && baseFilter(t));
           return (
-            <div key={cat.id}
+            <div key={tp.id}
               draggable
-              onDragStart={() => { dragSrc.current = cat.id; }}
+              onDragStart={() => { dragSrc.current = tp.id; }}
               onDragOver={e => e.preventDefault()}
               onDrop={() => {
-                if (!dragSrc.current || dragSrc.current === cat.id) return;
-                const order = orderedCats.map(c => c.id);
+                if (!dragSrc.current || dragSrc.current === tp.id) return;
+                const order = orderedTypes.map(t => t.id);
                 const from = order.indexOf(dragSrc.current);
-                const to   = order.indexOf(cat.id);
+                const to   = order.indexOf(tp.id);
                 const next = [...order];
                 next.splice(from, 1);
                 next.splice(to, 0, dragSrc.current);
-                saveCatOrder(next);
+                saveTypeOrder(next);
                 dragSrc.current = null;
               }}
-              style={{ background: "white", borderRadius: 12, border: `1px solid ${cat.bg}`, borderLeft: `4px solid ${cat.accent}`, overflow: "hidden", cursor: "grab" }}>
+              style={{ background: "white", borderRadius: 12, border: `1px solid ${tc.bg}`, borderLeft: `4px solid ${tc.accent}`, overflow: "hidden", cursor: "grab" }}>
               {/* Block header */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: cat.bg, borderBottom: `1px solid ${cat.accent}20` }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: cat.accent, fontFamily: "'DM Mono',monospace" }}>⠿</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: cat.accent, fontFamily: "'Lora',serif", flex: 1 }}>{cat.name}</span>
-                <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: cat.accent, opacity: 0.7 }}>{catTasks.length} tâche{catTasks.length !== 1 ? "s" : ""}</span>
-                <button onClick={() => onAdd()} title={`Nouvelle tâche dans ${cat.name}`}
-                  style={{ border: `1px solid ${cat.accent}`, background: "white", borderRadius: 6, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: cat.accent, fontFamily: "'DM Mono',monospace" }}>+</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: tc.bg, borderBottom: `1px solid ${tc.accent}30` }}>
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{tp.icon}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: tc.accent, fontFamily: "'Lora',serif", flex: 1 }}>{tp.name}</span>
+                <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: tc.accent, opacity: 0.7 }}>{typeTasks.length} tâche{typeTasks.length !== 1 ? "s" : ""}</span>
+                <button onClick={() => onAdd()} title={`Nouvelle tâche de type ${tp.name}`}
+                  style={{ border: `1px solid ${tc.accent}`, background: "white", borderRadius: 6, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: tc.accent, fontFamily: "'DM Mono',monospace" }}>+</button>
               </div>
               {/* Tasks list */}
-              {catTasks.length === 0 ? (
-                <div style={{ padding: "12px 16px", fontSize: 11, color: "#CCC", fontFamily: "'Lora',serif", fontStyle: "italic" }}>Aucune tâche dans cette catégorie</div>
+              {typeTasks.length === 0 ? (
+                <div style={{ padding: "12px 16px", fontSize: 11, color: "#CCC", fontFamily: "'Lora',serif", fontStyle: "italic" }}>Aucune tâche de ce type</div>
               ) : isMobile ? (
                 <div style={{ padding: "8px" }}>
-                  {catTasks.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)}
+                  {typeTasks.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)}
                 </div>
               ) : (
                 <div>
@@ -1542,7 +1546,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.title || 220, flexShrink: 0 }}>TÂCHE</span>
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 28 }}>ST</span>
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.status || 72, flexShrink: 0 }}>STATUT</span>
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.type || 72, flexShrink: 0 }}>TYPE</span>
+                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.category || 90, flexShrink: 0 }}>CATÉGORIE</span>
                     <div style={{ flex: 1 }} />
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.created || 82, textAlign: "right" }}>CRÉATION</span>
                     <span style={{ width: 16, flexShrink: 0 }} />
@@ -1550,7 +1554,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <span style={{ width: 36, flexShrink: 0 }} />
                   </div>
                   <div style={{ padding: "3px 0 4px" }}>
-                    {catTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                    {typeTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
                   </div>
                 </div>
               )}
@@ -1567,7 +1571,7 @@ const ALL_TABS = [
   { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
   { id: "myday",         label: "Ma journée",       icon: "☀" },
   { id: "tasks",         label: "Tâches",           icon: "☰" },
-  { id: "categorytasks", label: "Catégories",       icon: "◫" },
+  { id: "categorytasks", label: "Type de tâches",   icon: "◫" },
   { id: "meetings",      label: "Réunions",         icon: "◷" },
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "🔔" },
@@ -1967,7 +1971,7 @@ function App() {
     { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
     { id: "myday",         label: "Ma journée",       icon: "☀",  badge: myDayCount },
     { id: "tasks",         label: "Tâches",           icon: "☰",  badge: activeCount },
-    { id: "categorytasks", label: "Catégories",       icon: "◫" },
+    { id: "categorytasks", label: "Type de tâches",   icon: "◫" },
     { id: "meetings",      label: "Réunions",         icon: "◷" },
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
     { id: "notifications", label: "Rappels",          icon: "🔔", badge: remCount },
