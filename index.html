@@ -313,7 +313,7 @@ function saveSettings(s) {
 }
 
 /* ─── PRIORITY ─── */
-const PRIORITY_ICONS  = { haute: "▲", normale: "▬", basse: "▼" };
+const PRIORITY_ICONS  = { haute: "🔴", normale: "🟡", basse: "🟢" };
 const PRIORITY_COLORS = { haute: "#C0392B", normale: "#95A5A6", basse: "#27AE60" };
 
 const uid = () => Math.random().toString(36).substr(2, 9);
@@ -419,7 +419,7 @@ function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
   const exec = (cmd, val = null) => { ref.current.focus(); document.execCommand(cmd, false, val); onChange(ref.current.innerHTML); };
   const insertChecklist = () => {
     ref.current.focus();
-    document.execCommand("insertHTML", false, '<ul style="list-style:none;padding-left:0"><li><input type="checkbox"> </li></ul>');
+    document.execCommand("insertHTML", false, '<ul style="list-style:none;padding-left:0"><li><input type="checkbox">&nbsp; </li></ul>');
     onChange(ref.current.innerHTML);
   };
   const ToolBtn = ({ cmd, label, title, val }) => (
@@ -448,6 +448,20 @@ function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
           style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 5px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555" }}>A</button>
       </div>
       <div ref={ref} contentEditable suppressContentEditableWarning
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const sel = window.getSelection();
+            if (sel && sel.anchorNode) {
+              const li = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+              const parentLi = li.closest ? li.closest("li") : null;
+              if (parentLi && parentLi.querySelector('input[type="checkbox"]')) {
+                e.preventDefault();
+                document.execCommand("insertHTML", false, "</li><li><input type=\"checkbox\">&nbsp; </li>");
+                onChange(ref.current.innerHTML);
+              }
+            }
+          }
+        }}
         onInput={(e) => onChange(e.currentTarget.innerHTML)}
         data-placeholder={placeholder}
         style={{ minHeight: rows * 22, padding: "8px 12px", fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", outline: "none", lineHeight: 1.7 }} />
@@ -482,7 +496,7 @@ function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
               <option value="normale">Priorité normale</option>
               <option value="basse">Priorité basse</option>
             </select>
-            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
+            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} onClick={(e) => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
           </div>
           <textarea value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder="Notes…" rows={3} style={{ ...S.input, resize: "none", marginBottom: 10 }} />
         </div>
@@ -746,7 +760,9 @@ function RecurrenceModule({ value, dueDate, onChange }) {
 /* ─── TASK MODAL ─── */
 function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
   const isNew = !task.title;
-  const [d, setD] = useState({ ...task, category: task.category || "", type: task.type || "", status: task.status || "todo", recurrence: task.recurrence || "none", totalTime: task.totalTime || 0, inMyDay: task.inMyDay || false });
+  const [d, setD] = useState({ ...task, category: task.category || "", type: task.type || "", status: task.status || "todo", recurrence: task.recurrence || "none", totalTime: task.totalTime || 0, inMyDay: task.inMyDay || false, labels: task.labels || [] });
+  const [newLabel, setNewLabel] = useState("");
+  const [showLabelInput, setShowLabelInput] = useState(false);
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const [stopwatch, setStopwatch] = useState(false); // 7)
@@ -820,17 +836,43 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </select>
           </div>
 
+          {/* Étiquettes */}
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>ÉTIQUETTES</span>
+              {d.labels.map((lbl, i) => (
+                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "#EEF2FF", color: "#4F46E5", borderRadius: 20, padding: "2px 8px", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>
+                  🏷 {lbl}
+                  <button type="button" onClick={() => setD({ ...d, labels: d.labels.filter((_, j) => j !== i) })}
+                    style={{ border: "none", background: "none", cursor: "pointer", color: "#4F46E5", fontSize: 11, padding: 0, lineHeight: 1 }}>×</button>
+                </span>
+              ))}
+              <button type="button" onClick={() => setShowLabelInput(l => !l)}
+                style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
+            </div>
+            {showLabelInput && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter" && newLabel.trim()) { setD({ ...d, labels: [...d.labels, newLabel.trim()] }); setNewLabel(""); setShowLabelInput(false); } if (e.key === "Escape") { setShowLabelInput(false); setNewLabel(""); } }}
+                  placeholder="Nom de l'étiquette… (Entrée pour valider)" autoFocus
+                  style={{ ...S.input, fontSize: 11, flex: 1, padding: "4px 8px" }} />
+                <button type="button" onClick={() => { if (newLabel.trim()) { setD({ ...d, labels: [...d.labels, newLabel.trim()] }); setNewLabel(""); setShowLabelInput(false); } }}
+                  style={{ ...S.btn("#4F46E5"), padding: "4px 10px", fontSize: 11 }}>OK</button>
+              </div>
+            )}
+          </div>
+
           {/* 3) Full recurrence module */}
           <RecurrenceModule value={d.recurrence} dueDate={d.dueDate} onChange={rec => setD({ ...d, recurrence: rec })} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE DE CRÉATION</div>
-              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
+              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} onClick={(e) => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE D'ÉCHÉANCE</div>
-              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
+              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} onClick={(e) => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
             </div>
           </div>
 
@@ -932,6 +974,13 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
         <span style={{ fontSize: 8, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.status || 72, overflow: "hidden", textOverflow: "ellipsis" }}>{statusObj.name}</span>
         <span style={{ fontSize: 9, fontWeight: 700, background: catBg, color: catAccent, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.category, overflow: "hidden", textOverflow: "ellipsis" }}>{task.category}</span>
         <span style={{ fontSize: 9, color: "#555", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.type, overflow: "hidden", textOverflow: "ellipsis" }}>{typeObj?.icon || ""} {task.type}</span>
+        {task.labels && task.labels.length > 0 && (
+          <div style={{ display: "flex", gap: 3, flexShrink: 0, flexWrap: "nowrap", overflow: "hidden", maxWidth: 160 }}>
+            {task.labels.map((lbl, i) => (
+              <span key={i} style={{ fontSize: 8, background: "#EEF2FF", color: "#4F46E5", borderRadius: 20, padding: "1px 6px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>🏷 {lbl}</span>
+            ))}
+          </div>
+        )}
         <div style={{ flex: 1 }} />
         {task.inMyDay && <span title="Ma journée" style={{ fontSize: 10, flexShrink: 0, opacity: 0.7 }}>☀</span>}
         {parseRec(task.recurrence).type !== "none" && <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 9, flexShrink: 0, opacity: 0.5 }}>🔄</span>}
@@ -1826,6 +1875,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
           <ColHeader label="STATUT" col="status" />
           <ColHeader label="CATÉGORIE" col="category" />
           <ColHeader label="TYPE" col="type" />
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", minWidth: 60 }}>ÉTIQUETTES</span>
           <div style={{ flex: 1 }} />
           <ColHeader label="CRÉATION" col="created" extra={{ textAlign: "right" }} />
           <span style={{ width: 16, flexShrink: 0 }} />
