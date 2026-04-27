@@ -24,6 +24,7 @@
     [contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     input,select,textarea{font-size:16px !important}
+    .search-input-small{font-size:11px !important}
   </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 </head>
@@ -1749,7 +1750,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
     <div style={{ display: "flex", flexDirection: "column", height: fullscreen ? "calc(100vh - 56px)" : "auto" }}>
       {/* Toolbar */}
       <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: isMobile ? "8px 10px" : "7px 12px", display: "flex", gap: isMobile ? 6 : 8, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input, width: isMobile ? 110 : 140, padding: "4px 8px", fontSize: 10 }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" className="search-input-small" style={{ ...S.input, width: isMobile ? 110 : 140, padding: "4px 8px", fontSize: 10 }} />
         <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
         {["Actives", "Complétées", "Toutes"].map(o => <FBtn key={o} label={isMobile ? o.slice(0, 4) : o} active={filterStatus === o} onClick={() => setFilterStatus(o)} />)}
         {!isMobile && <>
