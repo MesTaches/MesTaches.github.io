@@ -313,8 +313,8 @@ function saveSettings(s) {
 }
 
 /* ─── PRIORITY ─── */
-const PRIORITY_ICONS  = { haute: "🔴", normale: "🟡", basse: "🟢" };
-const PRIORITY_COLORS = { haute: "#C0392B", normale: "#95A5A6", basse: "#27AE60" };
+const PRIORITY_ICONS  = { urgente: "●", haute: "●", normale: "●", basse: "●" };
+const PRIORITY_COLORS = { urgente: "#E74C3C", haute: "#E67E22", normale: "#3498DB", basse: "#BDC3C7" };
 
 const uid = () => Math.random().toString(36).substr(2, 9);
 const today = () => new Date().toISOString().split("T")[0];
@@ -492,9 +492,10 @@ function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
               {types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
             <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }}>
-              <option value="haute">Priorité haute</option>
-              <option value="normale">Priorité normale</option>
-              <option value="basse">Priorité basse</option>
+              <option value="urgente">● Urgente</option>
+              <option value="haute">● Haute</option>
+              <option value="normale">● Normale</option>
+              <option value="basse">● Basse</option>
             </select>
             <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} onClick={(e) => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 10, cursor: "pointer" }} />
           </div>
@@ -826,9 +827,10 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
               {(() => { const ORD = ["task","quick","report","meeting","analyse"]; return [...settings.types].sort((a,b) => { const ia=ORD.indexOf(a.id); const ib=ORD.indexOf(b.id); return (ia<0?99:ia)-(ib<0?99:ib); }); })().map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
             <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer" }}>
-              <option value="haute">Priorité haute</option>
-              <option value="normale">Priorité normale</option>
-              <option value="basse">Priorité basse</option>
+              <option value="urgente">● Urgente</option>
+              <option value="haute">● Haute</option>
+              <option value="normale">● Normale</option>
+              <option value="basse">● Basse</option>
             </select>
             {/* 3) Status in modal */}
             <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, fontSize: 10, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
@@ -1651,7 +1653,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <span style={{ width: 36, flexShrink: 0 }} />
                   </div>
                   <div style={{ padding: "3px 0 4px" }}>
-                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : [...typeTasks].sort((a,b) => { if(a.completed!==b.completed)return a.completed?1:-1; const da=a.dueDate||"9999-99-99",db=b.dueDate||"9999-99-99"; if(da!==db)return da<db?-1:1; return ({haute:0,normale:1,basse:2}[a.priority]??1)-({haute:0,normale:1,basse:2}[b.priority]??1); })).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : [...typeTasks].sort((a,b) => { if(a.completed!==b.completed)return a.completed?1:-1; const da=a.dueDate||"9999-99-99",db=b.dueDate||"9999-99-99"; if(da!==db)return da<db?-1:1; return ({urgente:0,haute:1,normale:2,basse:3}[a.priority]??2)-({urgente:0,haute:1,normale:2,basse:3}[b.priority]??2); })).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
                   </div>
                 </div>
               )}
@@ -1824,7 +1826,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
     else { setSortCol(col); setSortDir("asc"); }
   };
 
-  const PRIO_RANK = { haute: 0, normale: 1, basse: 2 };
+  const PRIO_RANK = { urgente: 0, haute: 1, normale: 2, basse: 3 };
   const defaultSort = (a, b) => {
     // 1) Complétées en bas
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
