@@ -1921,7 +1921,23 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
         ) : isMobile ? (
           displayList.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)
         ) : !grouped || filterCat !== "Toutes" ? (
-          sortedList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)
+          (() => {
+            if (sortCol) return sortedList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />);
+            const todayStr = today();
+            const in7 = new Date(); in7.setDate(in7.getDate() + 7);
+            const in7Str = in7.toISOString().split("T")[0];
+            const grpToday = sortedList.filter(t => !t.completed && t.dueDate && t.dueDate <= todayStr);
+            const grp7     = sortedList.filter(t => !t.completed && t.dueDate && t.dueDate > todayStr && t.dueDate <= in7Str);
+            const grpRest  = sortedList.filter(t => t.completed || !t.dueDate || t.dueDate > in7Str);
+            const Spacer   = () => <div style={{ height: 14 }} />;
+            const result   = [];
+            grpToday.forEach((t, i) => result.push(<TaskCard key={t.id} task={t} num={i+1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />));
+            if (grpToday.length > 0 && (grp7.length > 0 || grpRest.length > 0)) result.push(<Spacer key="s1" />);
+            grp7.forEach((t, i) => result.push(<TaskCard key={t.id} task={t} num={grpToday.length+i+1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />));
+            if (grp7.length > 0 && grpRest.length > 0) result.push(<Spacer key="s2" />);
+            grpRest.forEach((t, i) => result.push(<TaskCard key={t.id} task={t} num={grpToday.length+grp7.length+i+1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />));
+            return result;
+          })()
         ) : (
           Object.entries(groups).map(([cat, catTasks]) => {
             const co = settings.categories.find(c => c.name === cat);
