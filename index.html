@@ -877,7 +877,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
 
 /* ─── COMMENT POPOVER ─── */
 function CommentPopover({ task, catBg, catAccent, onSave, onClose }) {
-  const [text, setText] = useState(task.comment || "");
+  const [text, setText] = useState(task.notes || "");
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)", background: "rgba(0,0,0,0.25)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ background: "white", borderRadius: 12, width: 420, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", overflow: "hidden", borderTop: `3px solid ${catAccent}` }}>
@@ -912,7 +912,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
   const dc  = { overdue: "#C0392B", today: "#E67E22", soon: "#F39C12", ok: "#95A5A6" };
   const prioColor = PRIORITY_COLORS[task.priority] || "#DDD";
   const prioIcon  = PRIORITY_ICONS[task.priority]  || "▬";
-  const hasComment = task.comment && task.comment.trim().length > 0;
+  const hasComment = task.notes && task.notes.replace(/<[^>]*>/g, "").trim().length > 0;
   // 3) Blocked tasks are dimmed
   const isBlocked = task.status === "blocked";
 
@@ -938,7 +938,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
         {task.createdAt && <span style={{ fontSize: 9, color: "#BDC3C7", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.created, textAlign: "right" }}>+ {fmtDate(task.createdAt.split("T")[0])}</span>}
         <span style={{ width: 16, flexShrink: 0 }} />
         {task.dueDate ? <span style={{ fontSize: 9, color: dc[ds], fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
-        <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? task.comment : "Ajouter un commentaire"}
+        <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? "Voir / modifier la note" : "Ajouter une note"}
           style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
@@ -959,7 +959,7 @@ function MobileTaskCard({ task, onToggle, onEdit, onDelete, onSaveComment, setti
   const doneSubs  = task.subtasks?.filter(s => s.completed).length || 0;
   const ds  = isOverdue(task.dueDate) && !task.completed ? "overdue" : isToday(task.dueDate) ? "today" : daysBefore(task.dueDate, 2) ? "soon" : "ok";
   const dc  = { overdue: "#C0392B", today: "#E67E22", soon: "#F39C12", ok: "#95A5A6" };
-  const hasComment = task.comment && task.comment.trim().length > 0;
+  const hasComment = task.notes && task.notes.replace(/<[^>]*>/g, "").trim().length > 0;
   return (
     <>
       <div onClick={() => onEdit(task)} style={{ background: "white", borderRadius: 12, marginBottom: 8, borderLeft: `4px solid ${catAccent}`, boxShadow: "0 1px 4px rgba(0,0,0,0.06)", overflow: "hidden", opacity: task.completed ? 0.55 : 1 }}>
@@ -983,7 +983,7 @@ function MobileTaskCard({ task, onToggle, onEdit, onDelete, onSaveComment, setti
               {task.dueDate && <span style={{ fontSize: 10, color: dc[ds], fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span>}
             </div>
           )}
-          {hasComment && <div style={{ marginTop: 6, fontSize: 11, color: "#888", fontFamily: "'Lora',serif", fontStyle: "italic", borderTop: "1px solid #F5F5F5", paddingTop: 6 }}>💬 {task.comment}</div>}
+          {hasComment && <div style={{ marginTop: 6, fontSize: 11, color: "#888", fontFamily: "'Lora',serif", fontStyle: "italic", borderTop: "1px solid #F5F5F5", paddingTop: 6 }} dangerouslySetInnerHTML={{ __html: "💬 " + task.notes }} />}
         </div>
         <div style={{ borderTop: "1px solid #F5F5F5", display: "flex" }}>
           <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} style={{ flex: 1, border: "none", background: "none", padding: "8px 0", fontSize: 11, color: hasComment ? "#102A63" : "#AAA", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>💬 Commenter</button>
@@ -1513,7 +1513,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
       </div>
 
       {/* Type blocks */}
-      <div style={{ padding: "12px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ padding: "12px 100px", display: "flex", flexDirection: "column", gap: 12 }}>
         {showTypes.map(tp => {
           const TYPE_COLORS = { task: { bg: "#EEF2FF", accent: "#4F46E5" }, quick: { bg: "#FEF9C3", accent: "#A16207" }, report: { bg: "#E8F8F5", accent: "#27AE60" }, meeting: { bg: "#FDEDEC", accent: "#C0392B" }, analyse: { bg: "#F4ECF7", accent: "#8E44AD" } };
           const tc = TYPE_COLORS[tp.id] || { bg: "#F5F5F5", accent: "#888888" };
@@ -1800,7 +1800,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
       )}
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 32px 8px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 100px 8px" }}>
         {displayList.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
             <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
@@ -1922,7 +1922,7 @@ function App() {
     const nowDone = !x.completed;
     return { ...x, completed: nowDone, status: nowDone ? "done" : "inprogress" };
   }));
-  const saveComment = (id, comment) => setTasks(p => p.map(x => x.id === id ? { ...x, comment } : x));
+  const saveComment = (id, comment) => setTasks(p => p.map(x => x.id === id ? { ...x, notes: comment } : x));
 
   // Compute next due date from recurrence object
   const nextOccurrence = (rec, fromDate) => {
