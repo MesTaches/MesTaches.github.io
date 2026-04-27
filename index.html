@@ -1475,6 +1475,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
   const toggleType = id => setSelectedTypes(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const showTypes = selectedTypes.length === 0 ? orderedTypes : orderedTypes.filter(t => selectedTypes.includes(t.id));
   const toggleCat = id => setSelectedCats(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+  const [typeSort, setTypeSort] = useState({ col: null, dir: "asc" });
 
   const baseFilter = t => {
     if (t.status === "blocked" && filterStatus !== "Toutes") return false;
@@ -1559,18 +1560,24 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
                     <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.title || 220, flexShrink: 0 }}>TÂCHE</span>
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 28 }}>ST</span>
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.status || 72, flexShrink: 0 }}>STATUT</span>
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.category || 90, flexShrink: 0 }}>CATÉGORIE</span>
+                    {[["TÂCHE","title",colWidths.title||220],["STATUT","status",colWidths.status||72],["CATÉGORIE","category",colWidths.category||90]].map(([lbl,col,w]) => (
+                      <span key={col} onClick={() => { if(typeSort.col===col){setTypeSort(s=>({...s,dir:s.dir==="asc"?"desc":"asc"}))} else {setTypeSort({col,dir:"asc"})} }}
+                        style={{ fontSize: 8, fontWeight: 700, color: typeSort.col===col ? "#102A63" : "#AAA", fontFamily: "'DM Mono',monospace", width: w, flexShrink: 0, cursor: "pointer", display: "flex", alignItems: "center", gap: 2 }}>
+                        {lbl}{typeSort.col===col && <span>{typeSort.dir==="asc"?"▲":"▼"}</span>}
+                      </span>
+                    ))}
                     <div style={{ flex: 1 }} />
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.created || 82, textAlign: "right" }}>CRÉATION</span>
+                    {[["CRÉATION","createdAt",colWidths.created||82],["ÉCHÉANCE","dueDate",colWidths.due||82]].map(([lbl,col,w]) => (
+                      <span key={col} onClick={() => { if(typeSort.col===col){setTypeSort(s=>({...s,dir:s.dir==="asc"?"desc":"asc"}))} else {setTypeSort({col,dir:"asc"})} }}
+                        style={{ fontSize: 8, fontWeight: 700, color: typeSort.col===col ? "#102A63" : "#AAA", fontFamily: "'DM Mono',monospace", width: w, flexShrink: 0, cursor: "pointer", textAlign: "right", display: "inline-flex", alignItems: "center", justifyContent: "flex-end", gap: 2 }}>
+                        {lbl}{typeSort.col===col && <span>{typeSort.dir==="asc"?"▲":"▼"}</span>}
+                      </span>
+                    ))}
                     <span style={{ width: 16, flexShrink: 0 }} />
-                    <span style={{ fontSize: 8, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: colWidths.due || 82, textAlign: "right" }}>ÉCHÉANCE</span>
                     <span style={{ width: 36, flexShrink: 0 }} />
                   </div>
                   <div style={{ padding: "3px 0 4px" }}>
-                    {typeTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : typeTasks).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
                   </div>
                 </div>
               )}
@@ -1713,6 +1720,8 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   const [filterStatus, setFilterStatus] = useState("Actives");
   const [search,       setSearch]       = useState("");
   const [grouped,      setGrouped]      = useState(false);
+  const [sortCol,      setSortCol]      = useState(null);
+  const [sortDir,      setSortDir]      = useState("asc");
   const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
 
   const startResize = (col, e) => {
@@ -1736,8 +1745,20 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   });
   const blockedCount = tasks.filter(t => t.status === "blocked" && !t.completed).length;
 
+  const handleSort = col => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("asc"); }
+  };
+
+  const sortedList = sortCol ? [...displayList].sort((a, b) => {
+    let va = a[sortCol] || ""; let vb = b[sortCol] || "";
+    if (sortCol === "dueDate" || sortCol === "createdAt") { va = va || "9999"; vb = vb || "9999"; }
+    const cmp = va.toString().localeCompare(vb.toString(), "fr", { sensitivity: "base" });
+    return sortDir === "asc" ? cmp : -cmp;
+  }) : displayList;
+
   const groups = {};
-  settings.categories.forEach(c => { const r = displayList.filter(t => t.category === c.name); if (r.length) groups[c.name] = r; });
+  settings.categories.forEach(c => { const r = sortedList.filter(t => t.category === c.name); if (r.length) groups[c.name] = r; });
 
   const FBtn = ({ label, active, onClick, color }) => (
     <button onClick={onClick} style={{ border: `1px solid ${active ? color || "#102A63" : "#E0E0E0"}`, background: active ? color || "#102A63" : "white", color: active ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", transition: "all 0.15s", whiteSpace: "nowrap" }}>{label}</button>
@@ -1747,8 +1768,10 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
       onMouseEnter={e => e.currentTarget.style.borderColor = "#BDC3C7"} onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"} />
   );
   const ColHeader = ({ label, col, extra }) => (
-    <div style={{ display: "flex", alignItems: "center", flexShrink: 0, width: col ? colWidths[col] : undefined, ...extra }}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+    <div style={{ display: "flex", alignItems: "center", flexShrink: 0, width: col ? colWidths[col] : undefined, cursor: col ? "pointer" : "default", userSelect: "none", ...extra }}
+      onClick={() => col && handleSort(col)}>
+      <span style={{ fontSize: 9, fontWeight: 700, color: sortCol === col ? "#102A63" : "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {col && sortCol === col && <span style={{ fontSize: 8, color: "#102A63", marginLeft: 2 }}>{sortDir === "asc" ? "▲" : "▼"}</span>}
       {col && <ResizeHandle col={col} />}
     </div>
   );
@@ -1811,7 +1834,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
         ) : isMobile ? (
           displayList.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)
         ) : !grouped || filterCat !== "Toutes" ? (
-          displayList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)
+          sortedList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)
         ) : (
           Object.entries(groups).map(([cat, catTasks]) => {
             const co = settings.categories.find(c => c.name === cat);
