@@ -941,6 +941,37 @@ function CommentPopover({ task, catBg, catAccent, onSave, onClose }) {
   );
 }
 
+
+/* ─── LABEL CELL ─── */
+function LabelCell({ task, onSaveComment, settings }) {
+  const [showInput, setShowInput] = useState(false);
+  const [val, setVal] = useState("");
+  const addLabel = () => {
+    if (!val.trim()) return;
+    const updated = [...(task.labels || []), val.trim()];
+    // Réutilise onSaveComment pour déclencher un update via App
+    // On passe par onEdit simulé → on utilise un event custom
+    window.dispatchEvent(new CustomEvent("addLabel", { detail: { id: task.id, labels: updated } }));
+    setVal(""); setShowInput(false);
+  };
+  return (
+    <div style={{ display: "flex", gap: 3, alignItems: "center", flexShrink: 0, flexWrap: "nowrap", overflow: "hidden", maxWidth: 180 }} onClick={e => e.stopPropagation()}>
+      {(task.labels || []).map((lbl, i) => (
+        <span key={i} style={{ fontSize: 8, background: "#EEF2FF", color: "#4F46E5", borderRadius: 20, padding: "1px 6px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>🏷 {lbl}</span>
+      ))}
+      {showInput ? (
+        <input autoFocus value={val} onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter") addLabel(); if (e.key === "Escape") { setShowInput(false); setVal(""); } }}
+          onBlur={() => { if (val.trim()) addLabel(); else setShowInput(false); }}
+          style={{ fontSize: 9, border: "1px solid #C7D2FE", borderRadius: 10, padding: "1px 6px", width: 80, outline: "none", fontFamily: "'DM Mono',monospace", color: "#4F46E5" }} />
+      ) : (
+        <button onClick={() => setShowInput(true)}
+          style={{ fontSize: 9, border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "1px 5px", cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>+</button>
+      )}
+    </div>
+  );
+}
+
 /* ─── TASK CARD ─── */
 function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWidths, settings }) {
   const [hovered, setHovered] = useState(false);
@@ -968,19 +999,13 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
           style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
         <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace", flexShrink: 0, minWidth: 16, textAlign: "right" }}>{num}</span>
         <span title={`Priorité ${task.priority}`} style={{ fontSize: 10, color: prioColor, flexShrink: 0, fontWeight: 700, lineHeight: 1, minWidth: 12, textAlign: "center" }}>{prioIcon}</span>
-        <span style={{ fontSize: 13, fontWeight: 500, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: colWidths.title, flexShrink: 0 }}>{task.title}</span>
+        <span style={{ fontSize: 10, fontWeight: 500, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: colWidths.title, flexShrink: 0 }}>{task.title}</span>
         {totalSubs > 0 ? <span style={{ fontSize: 9, color: "#BBB", fontFamily: "'DM Mono',monospace", flexShrink: 0, minWidth: 28 }}>{doneSubs}/{totalSubs}✓</span> : <span style={{ minWidth: 28, flexShrink: 0 }} />}
         {/* 3) Status badge */}
         <span style={{ fontSize: 8, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.status || 72, overflow: "hidden", textOverflow: "ellipsis" }}>{statusObj.name}</span>
         <span style={{ fontSize: 9, fontWeight: 700, background: catBg, color: catAccent, borderRadius: 3, padding: "1px 5px", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.category, overflow: "hidden", textOverflow: "ellipsis" }}>{task.category}</span>
         <span style={{ fontSize: 9, color: "#555", fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.type, overflow: "hidden", textOverflow: "ellipsis" }}>{typeObj?.icon || ""} {task.type}</span>
-        {task.labels && task.labels.length > 0 && (
-          <div style={{ display: "flex", gap: 3, flexShrink: 0, flexWrap: "nowrap", overflow: "hidden", maxWidth: 160 }}>
-            {task.labels.map((lbl, i) => (
-              <span key={i} style={{ fontSize: 8, background: "#EEF2FF", color: "#4F46E5", borderRadius: 20, padding: "1px 6px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>🏷 {lbl}</span>
-            ))}
-          </div>
-        )}
+        <LabelCell task={task} onSaveComment={onSaveComment} settings={settings} />
         <div style={{ flex: 1 }} />
         {task.inMyDay && <span title="Ma journée" style={{ fontSize: 10, flexShrink: 0, opacity: 0.7 }}>☀</span>}
         {parseRec(task.recurrence).type !== "none" && <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 9, flexShrink: 0, opacity: 0.5 }}>🔄</span>}
@@ -1956,6 +1981,16 @@ function App() {
   const isMobile = useIsMobile();
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  // Label update from inline LabelCell
+  useEffect(() => {
+    const handleAddLabel = (e) => {
+      const { id, labels } = e.detail;
+      setTasks(p => p.map(t => t.id === id ? { ...t, labels } : t));
+    };
+    window.addEventListener("addLabel", handleAddLabel);
+    return () => window.removeEventListener("addLabel", handleAddLabel);
+  }, []);
 
   // Silent sync: listen for remote data updates without page reload
   useEffect(() => {
