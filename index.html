@@ -799,7 +799,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </select>
             <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
               <option value="">— Type —</option>
-              {settings.types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
+              {(() => { const ORD = ["task","quick","report","meeting","analyse"]; return [...settings.types].sort((a,b) => { const ia=ORD.indexOf(a.id); const ib=ORD.indexOf(b.id); return (ia<0?99:ia)-(ib<0?99:ib); }); })().map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
             <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, cursor: "pointer" }}>
               <option value="haute">Priorité haute</option>
@@ -1450,13 +1450,13 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
 
   // Drag-to-reorder type blocks
   const TYPE_ORDER_KEY = "taskmanager-typeorder-v1";
-  const ORDERED_TYPES = ["task", "quick", "report", "meeting", "analyse"];
+  const DEFAULT_TYPE_ORDER = ["task", "quick", "report", "meeting", "analyse"];
   const [typeOrder, setTypeOrder] = useState(() => {
-    try { const s = localStorage.getItem(TYPE_ORDER_KEY); return s ? JSON.parse(s) : ORDERED_TYPES; } catch { return ORDERED_TYPES; }
+    try { const s = localStorage.getItem(TYPE_ORDER_KEY); return s ? JSON.parse(s) : DEFAULT_TYPE_ORDER; } catch { return DEFAULT_TYPE_ORDER; }
   });
   const dragSrc = useRef(null);
 
-  // Keep typeOrder in sync if settings.types changes
+  // Ordered types (respects user drag order + adds new types)
   const orderedTypes = [
     ...typeOrder.map(id => settings.types.find(t => t.id === id)).filter(Boolean),
     ...settings.types.filter(t => !typeOrder.includes(t.id)),
@@ -1502,7 +1502,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
       <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
         {showTypes.map(tp => {
           const TYPE_COLORS = { task: { bg: "#EEF2FF", accent: "#4F46E5" }, quick: { bg: "#FEF9C3", accent: "#A16207" }, report: { bg: "#E8F8F5", accent: "#27AE60" }, meeting: { bg: "#FDEDEC", accent: "#C0392B" }, analyse: { bg: "#F4ECF7", accent: "#8E44AD" } };
-          const tc = TYPE_COLORS[tp.id] || { bg: "#F5F5F5", accent: "#888" };
+          const tc = TYPE_COLORS[tp.id] || { bg: "#F5F5F5", accent: "#888888" };
           const typeTasks = tasks.filter(t => t.type === tp.name && baseFilter(t));
           return (
             <div key={tp.id}
@@ -1523,7 +1523,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
               style={{ background: "white", borderRadius: 12, border: `1px solid ${tc.bg}`, borderLeft: `4px solid ${tc.accent}`, overflow: "hidden", cursor: "grab" }}>
               {/* Block header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: tc.bg, borderBottom: `1px solid ${tc.accent}30` }}>
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{tp.icon}</span>
+                <span style={{ fontSize: 16 }}>{tp.icon}</span>
                 <span style={{ fontSize: 13, fontWeight: 700, color: tc.accent, fontFamily: "'Lora',serif", flex: 1 }}>{tp.name}</span>
                 <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: tc.accent, opacity: 0.7 }}>{typeTasks.length} tâche{typeTasks.length !== 1 ? "s" : ""}</span>
                 <button onClick={() => onAdd()} title={`Nouvelle tâche de type ${tp.name}`}
