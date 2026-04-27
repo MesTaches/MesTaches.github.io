@@ -25,6 +25,7 @@
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     input,select,textarea{font-size:16px !important}
     .search-input-small{font-size:11px !important}
+    .modal-input-small{font-size:12px !important}
   </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 </head>
@@ -86,7 +87,7 @@ function mountReact() {
 }
 
 // Check for remote changes every 10s
-// Only reload if the remote timestamp is significantly newer than our last write
+// Silently update localStorage and notify React instead of reloading the page
 function startRemoteCheck(uid) {
   if (_remoteCheckInterval) clearInterval(_remoteCheckInterval);
   _remoteCheckInterval = setInterval(async () => {
@@ -98,15 +99,19 @@ function startRemoteCheck(uid) {
       if (snap.exists && snap.data() && snap.data().ts) {
         const remoteTs = snap.data().ts;
         const now = Date.now();
-        // Only reload if:
+        // Only sync if:
         // - remote is newer than our last write by more than 15 seconds
         // - remote is not from the future (sanity check)
         if (remoteTs > _myLastWriteTs + 15000 && remoteTs <= now + 5000) {
           const localVal = _origGetItem.call(localStorage, key);
           const remoteVal = snap.data().value;
           if (localVal !== remoteVal) {
-            console.log('Remote change from another device - reloading');
-            window.location.reload();
+            console.log('Remote change from another device - silent sync');
+            // Update localStorage silently without page reload
+            _origSetItem.call(localStorage, key, remoteVal);
+            _myLastWriteTs = remoteTs; // prevent re-trigger
+            // Notify React app to re-read from localStorage
+            window.dispatchEvent(new CustomEvent('remoteDataUpdated', { detail: { key } }));
           }
         }
       }
@@ -470,12 +475,12 @@ function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
               <option value="">— Type —</option>
               {types.map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
-            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, cursor: "pointer" }}>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }}>
               <option value="haute">Priorité haute</option>
               <option value="normale">Priorité normale</option>
               <option value="basse">Priorité basse</option>
             </select>
-            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+            <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
           </div>
           <textarea value={d.notes} onChange={(e) => setD({ ...d, notes: e.target.value })} placeholder="Notes…" rows={3} style={{ ...S.input, resize: "none", marginBottom: 10 }} />
         </div>
@@ -791,24 +796,24 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </div>
           )}
 
-          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 15, marginBottom: 12 }} />
+          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 12, marginBottom: 12 }} />
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
+            <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
               <option value="">— Catégorie —</option>
               {settings.categories.map((c) => <option key={c.id} style={{ color: "#2C3E50" }}>{c.name}</option>)}
             </select>
-            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
+            <select value={d.type} onChange={(e) => setD({ ...d, type: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", color: d.type ? "#2C3E50" : "#999" }}>
               <option value="">— Type —</option>
               {(() => { const ORD = ["task","quick","report","meeting","analyse"]; return [...settings.types].sort((a,b) => { const ia=ORD.indexOf(a.id); const ib=ORD.indexOf(b.id); return (ia<0?99:ia)-(ib<0?99:ib); }); })().map((t) => <option key={t.id} style={{ color: "#2C3E50" }}>{t.name}</option>)}
             </select>
-            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, cursor: "pointer" }}>
+            <select value={d.priority} onChange={(e) => setD({ ...d, priority: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }}>
               <option value="haute">Priorité haute</option>
               <option value="normale">Priorité normale</option>
               <option value="basse">Priorité basse</option>
             </select>
             {/* 3) Status in modal */}
-            <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
+            <select value={d.status} onChange={(e) => { const s = e.target.value; setD({ ...d, status: s, completed: s === "done" }); }} style={{ ...S.input, fontSize: 12, cursor: "pointer", background: statusObj.bg, color: statusObj.color, fontWeight: 600 }}>
               {settings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
@@ -819,15 +824,15 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE DE CRÉATION</div>
-              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, cursor: "pointer" }} />
+              <input type="date" value={d.createdAt ? d.createdAt.split("T")[0] : today()} onChange={(e) => setD({ ...d, createdAt: e.target.value + "T00:00:00.000Z" })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
             </div>
             <div>
               <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4, letterSpacing: "0.06em" }}>DATE D'ÉCHÉANCE</div>
-              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, cursor: "pointer" }} />
+              <input type="date" value={d.dueDate} onChange={(e) => setD({ ...d, dueDate: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer" }} />
             </div>
           </div>
 
-          <select value={d.reminder} onChange={(e) => setD({ ...d, reminder: e.target.value })} style={{ ...S.input, cursor: "pointer", marginBottom: 10 }}>
+          <select value={d.reminder} onChange={(e) => setD({ ...d, reminder: e.target.value })} style={{ ...S.input, fontSize: 12, cursor: "pointer", marginBottom: 10 }}>
             <option value="none">Pas de rappel</option>
             <option value="same">Le jour même</option>
             <option value="30min">30 minutes avant</option>
@@ -875,14 +880,13 @@ function CommentPopover({ task, catBg, catAccent, onSave, onClose }) {
   const [text, setText] = useState(task.comment || "");
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)", background: "rgba(0,0,0,0.25)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: "white", borderRadius: 12, width: 320, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", overflow: "hidden", borderTop: `3px solid ${catAccent}` }}>
+      <div style={{ background: "white", borderRadius: 12, width: 420, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", overflow: "hidden", borderTop: `3px solid ${catAccent}` }}>
         <div style={{ padding: "14px 16px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 240 }}>💬 {task.title}</div>
+            <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 340 }}>💬 {task.title}</div>
             <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "#BDC3C7" }}>×</button>
           </div>
-          <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} placeholder="Ajouter un commentaire…" rows={4}
-            style={{ border: "1px solid #E8E8E8", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50", background: "#FAFAFA", resize: "vertical" }} />
+          <RichTextArea value={text} onChange={setText} placeholder="Ajouter un commentaire…" rows={5} />
         </div>
         <div style={{ padding: "10px 16px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "6px 12px", fontSize: 11 }}>Annuler</button>
@@ -935,7 +939,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
         <span style={{ width: 16, flexShrink: 0 }} />
         {task.dueDate ? <span style={{ fontSize: 9, color: dc[ds], fontFamily: "'DM Mono',monospace", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
         <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? task.comment : "Ajouter un commentaire"}
-          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, padding: "0 3px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : hovered ? "#BDC3C7" : "transparent", transition: "color 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
+          style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
       </div>
@@ -1509,7 +1513,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
       </div>
 
       {/* Type blocks */}
-      <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ padding: "12px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
         {showTypes.map(tp => {
           const TYPE_COLORS = { task: { bg: "#EEF2FF", accent: "#4F46E5" }, quick: { bg: "#FEF9C3", accent: "#A16207" }, report: { bg: "#E8F8F5", accent: "#27AE60" }, meeting: { bg: "#FDEDEC", accent: "#C0392B" }, analyse: { bg: "#F4ECF7", accent: "#8E44AD" } };
           const tc = TYPE_COLORS[tp.id] || { bg: "#F5F5F5", accent: "#888888" };
@@ -1796,7 +1800,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
       )}
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 12px 8px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 32px 8px" }}>
         {displayList.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
             <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
@@ -1867,6 +1871,20 @@ function App() {
   const isMobile = useIsMobile();
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  // Silent sync: listen for remote data updates without page reload
+  useEffect(() => {
+    const handleRemoteUpdate = () => {
+      try {
+        const s = localStorage.getItem(STORAGE_KEY);
+        if (s) setTasks(JSON.parse(s));
+        const newSettings = loadSettings();
+        setSettings(newSettings);
+      } catch(e) {}
+    };
+    window.addEventListener('remoteDataUpdated', handleRemoteUpdate);
+    return () => window.removeEventListener('remoteDataUpdated', handleRemoteUpdate);
+  }, []);
 
   useEffect(() => {
     const check = () => {
