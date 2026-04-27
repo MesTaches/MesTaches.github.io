@@ -1487,7 +1487,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
     <div style={{ display: "flex", flexDirection: "column" }}>
       {/* Toolbar */}
       <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: "7px 12px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", flexShrink: 0 }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input, width: 140, padding: "4px 8px", fontSize: 11 }} />
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Rechercher…" className="search-input-small" style={{ ...S.input, width: 140, padding: "4px 8px", fontSize: 10 }} />
         <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
         {["Actives", "Complétées", "Toutes"].map(o => <FBtn key={o} label={o} active={filterStatus === o} onClick={() => setFilterStatus(o)} />)}
         <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
