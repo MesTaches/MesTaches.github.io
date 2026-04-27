@@ -1505,7 +1505,6 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
         ))}
         {selectedCats.length > 0 && <button onClick={() => setSelectedCats([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
         <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>⠿ Glissez les blocs pour réordonner</span>
         <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: "4px 12px", fontSize: 11 }}>+ Nouvelle</button>
       </div>
 
@@ -1573,6 +1572,8 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
           );
         })}
       </div>
+      {/* Hint bas de page */}
+      <div style={{ textAlign: "center", padding: "8px 0 12px", fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>⠿ Glissez les blocs pour réordonner</div>
     </div>
   );
 }
