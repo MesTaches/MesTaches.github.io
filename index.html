@@ -1446,6 +1446,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
   const [filterStatus, setFilterStatus] = useState("Actives");
   const [search, setSearch] = useState("");
   const [selectedTypes, setSelectedTypes] = useState([]); // empty = all
+  const [selectedCats, setSelectedCats] = useState([]);  // filter by category
   const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
 
   // Drag-to-reorder type blocks
@@ -1466,12 +1467,14 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
 
   const toggleType = id => setSelectedTypes(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const showTypes = selectedTypes.length === 0 ? orderedTypes : orderedTypes.filter(t => selectedTypes.includes(t.id));
+  const toggleCat = id => setSelectedCats(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
 
   const baseFilter = t => {
     if (t.status === "blocked" && filterStatus !== "Toutes") return false;
     if (filterStatus === "Actives" && t.completed) return false;
     if (filterStatus === "Complétées" && !t.completed) return false;
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (selectedCats.length > 0 && !selectedCats.includes(t.category)) return false;
     return true;
   };
 
@@ -1493,6 +1496,13 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
             style={{ border: `1px solid ${selectedTypes.includes(tp.id) ? "#102A63" : "#E0E0E0"}`, background: selectedTypes.includes(tp.id) ? "#102A63" : "white", color: selectedTypes.includes(tp.id) ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: selectedTypes.includes(tp.id) ? 700 : 400 }}>{tp.icon} {tp.name}</button>
         ))}
         {selectedTypes.length > 0 && <button onClick={() => setSelectedTypes([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
+        <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
+        <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>CATÉGORIE :</span>
+        {settings.categories.map(c => (
+          <button key={c.id} onClick={() => toggleCat(c.id)}
+            style={{ border: `1px solid ${selectedCats.includes(c.id) ? c.accent : "#E0E0E0"}`, background: selectedCats.includes(c.id) ? c.bg : "white", color: selectedCats.includes(c.id) ? c.accent : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", fontWeight: selectedCats.includes(c.id) ? 700 : 400 }}>{c.name}</button>
+        ))}
+        {selectedCats.length > 0 && <button onClick={() => setSelectedCats([])} style={{ ...S.ghost, padding: "2px 7px", fontSize: 9 }}>× Tout</button>}
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>⠿ Glissez les blocs pour réordonner</span>
         <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: "4px 12px", fontSize: 11 }}>+ Nouvelle</button>
