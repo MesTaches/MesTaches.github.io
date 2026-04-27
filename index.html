@@ -1782,7 +1782,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
 
       {/* Column headers */}
       {!isMobile && (
-        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 12px 3px", borderBottom: "1px solid #ECEAE5", background: "#F8F8F6", flexShrink: 0, userSelect: "none" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 100px 3px", borderBottom: "1px solid #ECEAE5", background: "#F8F8F6", flexShrink: 0, userSelect: "none" }}>
           <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
@@ -1827,7 +1827,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
         )}
       </div>
       {/* Stats footer */}
-      <div style={{ padding: "5px 12px", borderTop: "1px solid #F0F0F0", background: "white", flexShrink: 0, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ padding: "5px 100px", borderTop: "1px solid #F0F0F0", background: "white", flexShrink: 0, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
         {(() => {
           const total    = tasks.length;
           const pct      = n => total > 0 ? Math.round((n / total) * 100) : 0;
