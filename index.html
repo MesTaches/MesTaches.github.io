@@ -1001,6 +1001,9 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
           style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
         <span style={{ fontSize: 10, color: "#CCC", fontFamily: "'Lora',serif", flexShrink: 0, minWidth: 16, textAlign: "right" }}>{num}</span>
         <span title={`Priorité ${task.priority}`} style={{ fontSize: 10, color: prioColor, flexShrink: 0, fontWeight: 700, lineHeight: 1, minWidth: 12, textAlign: "center" }}>{prioIcon}</span>
+        <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("toggleMyDay", { detail: { id: task.id } })); }}
+          title={task.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
+          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11, padding: "0 1px", flexShrink: 0, lineHeight: 1, color: task.inMyDay ? "#E67E22" : "#D0D0D0", transition: "color 0.15s" }}>☀</button>
         <span style={{ fontSize: 10, fontWeight: 500, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: colWidths.title, flexShrink: 0 }}>{task.title}</span>
         {totalSubs > 0 ? <span style={{ fontSize: 10, color: "#BBB", fontFamily: "'Lora',serif", flexShrink: 0, minWidth: 28 }}>{doneSubs}/{totalSubs}✓</span> : <span style={{ minWidth: 28, flexShrink: 0 }} />}
         {/* 3) Status badge */}
@@ -1009,7 +1012,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
         <span style={{ fontSize: 10, color: "#555", fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.type, overflow: "hidden", textOverflow: "ellipsis" }}>{typeObj?.icon || ""} {task.type}</span>
         <LabelCell task={task} onSaveComment={onSaveComment} settings={settings} />
         <div style={{ flex: 1 }} />
-        {task.inMyDay && <span title="Ma journée" style={{ fontSize: 10, flexShrink: 0, opacity: 0.7 }}>☀</span>}
+
         {parseRec(task.recurrence).type !== "none" && <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 10, flexShrink: 0, opacity: 0.5 }}>🔄</span>}
         {task.totalTime > 0 && <span title={`Temps : ${fmtTime(task.totalTime)}`} style={{ fontSize: 10, color: "#102A63", fontFamily: "'Lora',serif", flexShrink: 0, opacity: 0.6 }}>⏱{fmtTime(task.totalTime)}</span>}
         {task.reminder && task.reminder !== "none" && <span style={{ fontSize: 10, flexShrink: 0, opacity: 0.4 }}>🔔</span>}
@@ -1897,6 +1900,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
           <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 14 }}>☀</span>
           <ColHeader label="TÂCHE" col="title" />
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 28 }}>ST</span>
           <ColHeader label="STATUT" col="status" />
@@ -1999,6 +2003,26 @@ function App() {
   const isMobile = useIsMobile();
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  // Auto Ma journée : tâches échues ou aujourd'hui
+  useEffect(() => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    setTasks(p => p.map(t => {
+      if (!t.completed && t.dueDate && t.dueDate <= todayStr && !t.inMyDay)
+        return { ...t, inMyDay: true };
+      return t;
+    }));
+  }, []);
+
+  // Ma journée toggle from TaskCard
+  useEffect(() => {
+    const handleToggleMyDay = (e) => {
+      const { id } = e.detail;
+      setTasks(p => p.map(t => t.id === id ? { ...t, inMyDay: !t.inMyDay } : t));
+    };
+    window.addEventListener("toggleMyDay", handleToggleMyDay);
+    return () => window.removeEventListener("toggleMyDay", handleToggleMyDay);
+  }, []);
 
   // Label update from inline LabelCell
   useEffect(() => {
