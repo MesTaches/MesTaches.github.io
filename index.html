@@ -1577,7 +1577,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <span style={{ width: 36, flexShrink: 0 }} />
                   </div>
                   <div style={{ padding: "3px 0 4px" }}>
-                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : typeTasks).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : [...typeTasks].sort((a,b) => { if(a.completed!==b.completed)return a.completed?1:-1; const da=a.dueDate||"9999-99-99",db=b.dueDate||"9999-99-99"; if(da!==db)return da<db?-1:1; return ({haute:0,normale:1,basse:2}[a.priority]??1)-({haute:0,normale:1,basse:2}[b.priority]??1); })).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
                   </div>
                 </div>
               )}
@@ -1750,12 +1750,22 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
     else { setSortCol(col); setSortDir("asc"); }
   };
 
+  const PRIO_RANK = { haute: 0, normale: 1, basse: 2 };
+  const defaultSort = (a, b) => {
+    // 1) Complétées en bas
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    // 2) Par échéance croissante (sans date à la fin)
+    const da = a.dueDate || "9999-99-99", db = b.dueDate || "9999-99-99";
+    if (da !== db) return da < db ? -1 : 1;
+    // 3) Par priorité haute → normale → basse
+    return (PRIO_RANK[a.priority] ?? 1) - (PRIO_RANK[b.priority] ?? 1);
+  };
   const sortedList = sortCol ? [...displayList].sort((a, b) => {
     let va = a[sortCol] || ""; let vb = b[sortCol] || "";
     if (sortCol === "dueDate" || sortCol === "createdAt") { va = va || "9999"; vb = vb || "9999"; }
     const cmp = va.toString().localeCompare(vb.toString(), "fr", { sensitivity: "base" });
     return sortDir === "asc" ? cmp : -cmp;
-  }) : displayList;
+  }) : [...displayList].sort(defaultSort);
 
   const groups = {};
   settings.categories.forEach(c => { const r = sortedList.filter(t => t.category === c.name); if (r.length) groups[c.name] = r; });
