@@ -25,6 +25,7 @@
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     input,select,textarea{font-size:16px !important}
     .payment-field{font-size:11px !important;font-family:'Lora',serif !important}
+    .report-field{font-size:10px !important;font-family:'Lora',serif !important}
     .search-input-small{font-size:11px !important}
     .modal-input-small{font-size:10px !important}
     .task-modal-form input,.task-modal-form select{font-size:10px !important}
@@ -1960,6 +1961,28 @@ function SettingsView({ settings, onSave }) {
             <button onClick={() => { onSave(s); }} style={{ ...S.btn("#102A63") }}>✓ Enregistrer</button>
           </div>
         </div>
+
+        {/* ── Maintenance ── */}
+        <div style={{ marginTop: 20, padding: "16px 20px", background: "#FFF8F8", borderRadius: 12, border: "1px solid #FEE2E2" }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: "#B91C1C", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 10 }}>🛠️ MAINTENANCE</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button onClick={() => {
+              if (window.confirm("Vider le cache de l'application et recharger ?")) {
+                if ('caches' in window) {
+                  caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).then(() => window.location.reload(true));
+                } else {
+                  window.location.reload(true);
+                }
+              }
+            }} style={{ ...S.btn("#B91C1C"), padding: "7px 16px", fontSize: 11 }}>
+              🔄 Vider le cache et recharger
+            </button>
+            <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>
+              Utile si l'application ne se met pas à jour après une modification du code
+            </span>
+          </div>
+        </div>
+
       </div>
     </div>
   );
@@ -2056,7 +2079,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
 
         {/* Statut */}
         <div>
-          <select value={task.status || "todo"} onChange={e => onUpdate({ ...task, status: e.target.value })}
+          <select className="report-field" value={task.status || "todo"} onChange={e => onUpdate({ ...task, status: e.target.value })}
             style={{ fontSize: 10, border: "none", background: st.bg, color: st.color, borderRadius: 20,
               padding: "2px 6px", fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer", outline: "none", maxWidth: 84 }}>
             {TASK_STATUSES_R.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -2065,7 +2088,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
 
         {/* Date de fin */}
         <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#555", textAlign: "center" }}>
-          <input type="date" value={task.endDate || ""}
+          <input className="report-field" type="date" value={task.endDate || ""}
             onChange={e => onUpdate({ ...task, endDate: e.target.value })}
             onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
             style={{ fontSize: 10, border: "none", background: "transparent", color: task.endDate ? "#27AE60" : "#AAA",
