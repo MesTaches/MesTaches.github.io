@@ -2481,6 +2481,16 @@ function ReportCard({ report, onClick }) {
 function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
   const [reports, setReports]       = React.useState(() => loadReports());
   const [reportModal, setReportModal] = React.useState(null);
+  const [rtColW, setRtColW] = React.useState({ num: 28, prio: 20, title: 220, sub: 28, status: 80, category: 100, type: 80, created: 82, due: 82 });
+
+  const startResizeRt = (col, e) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = rtColW[col];
+    const onMove = (ev) => setRtColW(w => ({ ...w, [col]: Math.max(30, startW + ev.clientX - startX) }));
+    const onUp = () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
 
   const saveReport = (r) => {
     setReports(p => {
@@ -2503,10 +2513,32 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
           <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>☰ Tâches Reporting <span style={{ fontSize: 11, color: "#AAA", fontWeight: 400 }}>({reportingTasks.length})</span></div>
         </div>
         {reportingTasks.length === 0 ? (
-          <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucune tâche dans la catégorie Reporting</div>
+          <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucune tâche de type Reporting</div>
         ) : (
-          <div style={{ maxHeight: 320, overflowY: "auto" }}>
-            {reportingTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i+1} onDelete={() => {}} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={{ title: 220, status: 72, category: 90, type: 72, created: 82, due: 82 }} settings={settings} />)}
+          <div style={{ overflowX: "auto" }}>
+            {/* En-têtes */}
+            <div style={{ display: "flex", alignItems: "center", background: "#102A63", padding: "6px 10px", minWidth: "fit-content" }}>
+              <div style={{ width: rtColW.num+20+12+16, flexShrink: 0 }} />
+              {[
+                { key: "title",    label: "TITRE",      w: rtColW.title },
+                { key: "sub",      label: "",           w: rtColW.sub },
+                { key: "status",   label: "STATUT",     w: rtColW.status },
+                { key: "category", label: "CATÉGORIE",  w: rtColW.category },
+                { key: "type",     label: "TYPE",       w: rtColW.type },
+                { key: "created",  label: "CRÉÉE",      w: rtColW.created },
+                { key: "due",      label: "ÉCHÉANCE",   w: rtColW.due },
+              ].map(col => (
+                <div key={col.key} style={{ width: col.w, flexShrink: 0, position: "relative", display: "flex", alignItems: "center" }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{col.label}</span>
+                  {col.label && <div onMouseDown={e => startResizeRt(col.key, e)}
+                    style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />}
+                </div>
+              ))}
+            </div>
+            {/* Lignes */}
+            <div style={{ maxHeight: 360, overflowY: "auto" }}>
+              {reportingTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i+1} onDelete={() => {}} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={{ title: rtColW.title, status: rtColW.status, category: rtColW.category, type: rtColW.type, created: rtColW.created, due: rtColW.due }} settings={settings} />)}
+            </div>
           </div>
         )}
       </div>
@@ -3358,7 +3390,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.062<br />28/04/26 à 22h55
+          v.0.063<br />28/04/26 à 23h00
         </div>
       </div>
 
