@@ -2109,7 +2109,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
               style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC",
                 fontSize: 30, padding: 0, lineHeight: 1, fontWeight: 300 }}
               onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
-              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>+</button>
+              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>+<sup style={{fontSize:10,fontWeight:700}}>st</sup></button>
           )}
         </div>
 
@@ -2385,17 +2385,17 @@ function ReportModal({ report, onSave, onClose }) {
               <div style={{ border: "1px solid #ECEAE5", borderRadius: 10, overflow: "hidden" }}>
                 {/* En-têtes */}
                 <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 28px 3fr 72px 160px 88px 88px 32px 32px",
-                  padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
+                  padding: "5px 8px", background: "#102A63", borderBottom: "1px solid #102A63" }}>
                   <div />
                   <div />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>PRIO.</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>LIBELLÉ</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>PRIO.</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>LIBELLÉ</div>
                   <div />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>DESCRIPTION</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>TYPE</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE CRÉATION</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>STATUT</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE FIN</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>DESCRIPTION</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE CRÉATION</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>STATUT</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE FIN</div>
                   <div /><div />
                 </div>
 
