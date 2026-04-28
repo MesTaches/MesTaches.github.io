@@ -24,6 +24,7 @@
     [contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
     input,select,textarea{font-size:16px !important}
+    .payment-field{font-size:11px !important;font-family:'Lora',serif !important}
     .search-input-small{font-size:11px !important}
     .modal-input-small{font-size:10px !important}
     .task-modal-form input,.task-modal-form select{font-size:10px !important}
@@ -2229,28 +2230,28 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
 
           {/* Ligne 1 : Fournisseur + Demandeur */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div><label style={labelStyle}>FOURNISSEUR</label><input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" style={inputStyle} /></div>
-            <div><label style={labelStyle}>DEMANDEUR</label><input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" style={inputStyle} /></div>
+            <div><label style={labelStyle}>FOURNISSEUR</label><input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" className="payment-field" style={inputStyle} /></div>
+            <div><label style={labelStyle}>DEMANDEUR</label><input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" className="payment-field" style={inputStyle} /></div>
           </div>
 
           {/* Ligne 2 : Dates */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div><label style={labelStyle}>DATE DEMANDE</label>
-              <input type="date" value={d.requestDate} onChange={e => setD({...d, requestDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={inputStyle} /></div>
+              <input type="date" value={d.requestDate} onChange={e => setD({...d, requestDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} className="payment-field" style={inputStyle} /></div>
             <div><label style={labelStyle}>DATE PAIEMENT ESTIMÉE</label>
-              <input type="date" value={d.estimatedDate} onChange={e => setD({...d, estimatedDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={inputStyle} /></div>
+              <input type="date" value={d.estimatedDate} onChange={e => setD({...d, estimatedDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} className="payment-field" style={inputStyle} /></div>
           </div>
 
           {/* Ligne 3 : Montant + Statut + Priorité */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
             <div><label style={labelStyle}>MONTANT (€)</label>
-              <input value={amountDisplay} onChange={handleAmountChange} onBlur={handleAmountBlur} placeholder="0,00" style={{ ...inputStyle, fontFamily: "'DM Mono',monospace" }} /></div>
+              <input value={amountDisplay} onChange={handleAmountChange} onBlur={handleAmountBlur} placeholder="0,00" className="payment-field" style={{ ...inputStyle, fontFamily: "'DM Mono',monospace" }} /></div>
             <div><label style={labelStyle}>STATUT</label>
-              <select value={d.status} onChange={e => setD({...d, status: e.target.value})} style={inputStyle}>
+              <select value={d.status} onChange={e => setD({...d, status: e.target.value})} className="payment-field" style={inputStyle}>
                 {PAYMENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
               </select></div>
             <div><label style={labelStyle}>PRIORITÉ</label>
-              <select value={d.priority || "normal"} onChange={e => setD({...d, priority: e.target.value})} style={inputStyle}>
+              <select value={d.priority || "normal"} onChange={e => setD({...d, priority: e.target.value})} className="payment-field" style={inputStyle}>
                 {PAYMENT_PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.icon} {p.label}</option>)}
               </select></div>
           </div>
