@@ -2031,18 +2031,7 @@ function saveReports(r) { try { localStorage.setItem(REPORTS_KEY, JSON.stringify
 function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
   const [expanded, setExpanded]         = React.useState(false);
   const [showCommentModal, setShowCommentModal] = React.useState(false);
-  const [pendingDelete, setPendingDelete] = React.useState(false);
-  const timerRef = React.useRef(null);
 
-  const handleDelete = () => {
-    setPendingDelete(true);
-    timerRef.current = setTimeout(() => { onDelete(task.id); }, 10000);
-  };
-  const cancelDelete = () => {
-    setPendingDelete(false);
-    if (timerRef.current) clearTimeout(timerRef.current);
-  };
-  React.useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
   const prio = TASK_PRIORITIES_R.find(p => p.id === (task.priority || "normale")) || TASK_PRIORITIES_R[2];
   const st   = TASK_STATUSES_R.find(s => s.id === (task.status || "todo")) || TASK_STATUSES_R[0];
   const isIndented = depth > 0;
@@ -2179,19 +2168,11 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           💬
         </button>
 
-        {/* Supprimer avec annulation 10s */}
-        {pendingDelete ? (
-          <button onClick={cancelDelete}
-            style={{ border: "none", background: "#FEE2E2", borderRadius: 4, cursor: "pointer",
-              color: "#B91C1C", fontSize: 9, padding: "2px 4px", fontFamily: "'Lora',serif",
-              fontWeight: 700, lineHeight: 1.2, whiteSpace: "nowrap" }}
-            title="Cliquer pour annuler">↩ 10s</button>
-        ) : (
-          <button onClick={handleDelete}
-            style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 15, padding: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
-            onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
-        )}
+        {/* Supprimer */}
+        <button onClick={() => onDelete(task.id)}
+          style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 15, padding: 0 }}
+          onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
+          onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
       </div>
 
       
@@ -2254,6 +2235,23 @@ function ReportModal({ report, onSave, onClose }) {
     tasks: [], notes: ""
   };
   const [d, setD] = React.useState(report ? { ...empty, ...report } : empty);
+
+  const [undoTask, setUndoTask] = React.useState(null);
+
+  const handleDeleteTask = (id) => {
+    const task = (d.tasks || []).find(t => t.id === id);
+    setD(prev => ({ ...prev, tasks: (prev.tasks||[]).filter(t => t.id !== id) }));
+    if (task) {
+      setUndoTask(task);
+      setTimeout(() => setUndoTask(null), 10000);
+    }
+  };
+  const undoDelete = () => {
+    if (undoTask) {
+      setD(prev => ({ ...prev, tasks: [...(prev.tasks||[]), undoTask] }));
+      setUndoTask(null);
+    }
+  };
 
   const addTask = () => setD(prev => ({
     ...prev, tasks: [...(prev.tasks || []), {
@@ -2403,7 +2401,7 @@ function ReportModal({ report, onSave, onClose }) {
                 {/* Tâches */}
                 {(d.tasks || []).map(task => (
                   <React.Fragment key={task.id}>
-                    <ReportTaskRow task={task} depth={0} onUpdate={updateTask} onDelete={deleteTask} onAddSubtask={addSubtask} />
+                    <ReportTaskRow task={task} depth={0} onUpdate={updateTask} onDelete={handleDeleteTask} onAddSubtask={addSubtask} />
 
                   </React.Fragment>
                 ))}
@@ -2413,7 +2411,23 @@ function ReportModal({ report, onSave, onClose }) {
         </div>
 
         <div style={{ padding: "14px 22px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
+          {undoTask && (
+          <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
+            zIndex: 9999, background: "#2C3E50", color: "white", borderRadius: 12,
+            padding: "12px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+            display: "flex", alignItems: "center", gap: 16,
+            fontFamily: "'Lora',serif", fontSize: 12, animation: "slideUp 0.3s ease" }}>
+            <span>🗑 <strong>"{(undoTask.label||"Tâche").slice(0,30)}"</strong> supprimée</span>
+            <button onClick={undoDelete}
+              style={{ background: "#27AE60", border: "none", borderRadius: 6, color: "white",
+                padding: "5px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "'Lora',serif" }}>
+              ↩ Annuler
+            </button>
+            <button onClick={() => setUndoTask(null)}
+              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
+          </div>
+        )}
+        <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
           <button onClick={() => { onSave(d); onClose(); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
         </div>
       </div>
