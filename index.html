@@ -2611,6 +2611,7 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
           {/* Ligne 1 : Fournisseur + Demandeur */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div><label style={labelStyle}>FOURNISSEUR</label><input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" className="payment-field" style={inputStyle} /></div>
+            <div><label style={labelStyle}>COMPTE</label><input value={d.account||""} onChange={e => setD({...d, account: e.target.value})} placeholder="Ex: Compte courant" className="payment-field" style={inputStyle} /></div>
             <div><label style={labelStyle}>DEMANDEUR</label><input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" className="payment-field" style={inputStyle} /></div>
           </div>
 
@@ -2665,7 +2666,7 @@ function PaymentsView({ settings }) {
   const [filterStatus, setFilterStatus] = React.useState("all");
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
-  const [colWidths, setColWidths] = React.useState({ priority: 56, supplier: 140, requestDate: 82, requester: 100, estimatedDate: 100, amount: 100, status: 90 });
+  const [colWidths, setColWidths] = React.useState({ priority: 56, supplier: 140, account: 110, requestDate: 82, requester: 100, estimatedDate: 100, amount: 100, status: 90 });
 
   const startResize = (col, e) => {
     e.preventDefault();
@@ -2729,10 +2730,11 @@ function PaymentsView({ settings }) {
   const colDef = [
     { id: "priority",      label: "PRIO." },
     { id: "supplier",      label: "FOURNISSEUR" },
+    { id: "account",       label: "COMPTE" },
     { id: "requestDate",   label: "DATE DEM." },
     { id: "requester",     label: "DEMANDEUR" },
     { id: "estimatedDate", label: "PAIEMENT EST." },
-    { id: "amount",        label: "MONTANT", alignRight: true },
+    { id: "amount",        label: "MONTANT" },
     { id: "status",        label: "STATUT" },
   ];
 
@@ -2740,7 +2742,7 @@ function PaymentsView({ settings }) {
 
   const HeaderCell = ({ col }) => (
     <div style={{ display: "flex", alignItems: "center", gap: 2, position: "relative", userSelect: "none", justifyContent: col.alignRight ? "flex-end" : "flex-start" }}>
-      <span onClick={() => handleSort(col.id)} style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+      <span onClick={() => handleSort(col.id)} style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", cursor: "pointer", whiteSpace: "nowrap" }}>
         {col.label}{sortField === col.id ? (sortAsc ? " ▲" : " ▼") : ""}
       </span>
       <div onMouseDown={(e) => startResize(col.id, e)}
@@ -2754,7 +2756,7 @@ function PaymentsView({ settings }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
           <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Paiements fournisseurs</div>
-          <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 2 }}>{pending.length} en attente · Total : {fmtEuro(totalPending)}</div>
+          <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif", marginTop: 2 }}>{pending.length} en attente · Total : {fmtEuro(totalPending)}</div>
         </div>
         <button onClick={() => setModal({})} style={{ ...S.btn("#102A63"), padding: "8px 18px", fontSize: 12 }}>+ Nouveau paiement</button>
       </div>
@@ -2764,10 +2766,10 @@ function PaymentsView({ settings }) {
         <div style={{ background: "white", borderRadius: 16, border: "1px solid #ECEAE5", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
           {/* Filtres */}
           <div style={{ padding: "8px 12px", borderBottom: "1px solid #F0F0F0", display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginRight: 3 }}>FILTRER :</span>
+            <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif", marginRight: 3 }}>FILTRER :</span>
             {[{ id: "all", label: "Tous" }, ...PAYMENT_STATUSES].map(s => (
               <button key={s.id} onClick={() => setFilterStatus(s.id)}
-                style={{ border: `1px solid ${filterStatus === s.id ? "#102A63" : "#E0E0E0"}`, background: filterStatus === s.id ? "#102A63" : "white", color: filterStatus === s.id ? "white" : "#888", borderRadius: 5, padding: "2px 7px", fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>
+                style={{ border: `1px solid ${filterStatus === s.id ? "#102A63" : "#E0E0E0"}`, background: filterStatus === s.id ? "#102A63" : "white", color: filterStatus === s.id ? "white" : "#888", borderRadius: 5, padding: "2px 7px", fontSize: 9, cursor: "pointer", fontFamily: "'Lora',serif" }}>
                 {s.icon ? `${s.icon} ` : ""}{s.label}
               </button>
             ))}
@@ -2775,14 +2777,14 @@ function PaymentsView({ settings }) {
 
           <div style={{ overflowX: "auto" }}>
             {/* En-têtes */}
-            <div style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "7px 10px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0", minWidth: "fit-content" }}>
+            <div style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "7px 10px", background: "#102A63", borderBottom: "1px solid #102A63", minWidth: "fit-content" }}>
               {colDef.map(col => <HeaderCell key={col.id} col={col} />)}
               <div />
             </div>
 
             {/* Lignes */}
             {filtered.length === 0 ? (
-              <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Aucun paiement</div>
+              <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 11, fontFamily: "'Lora',serif" }}>Aucun paiement</div>
             ) : filtered.map((p, i) => {
               const st   = PAYMENT_STATUSES.find(s => s.id === p.status) || PAYMENT_STATUSES[0];
               const prio = PAYMENT_PRIORITIES.find(pr => pr.id === (p.priority || "normal")) || PAYMENT_PRIORITIES[2];
@@ -2793,7 +2795,7 @@ function PaymentsView({ settings }) {
                     background: i % 2 === 0 ? "white" : "#FAFAFA", minWidth: "fit-content", alignItems: "center", cursor: "pointer" }}
                   onClick={() => setModal(p)}>
                   {/* Priorité */}
-                  <div style={{ fontSize: 10, fontWeight: 700, color: prio.color, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{prio.icon}</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: prio.color, fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{prio.icon}</div>
                   {/* Fournisseur */}
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, display: "flex", alignItems: "center", gap: 4, overflow: "hidden" }}>
                     {urg === "overdue" && <span style={{ flexShrink: 0 }}>🚨</span>}
@@ -2801,13 +2803,15 @@ function PaymentsView({ settings }) {
                     {p.isClientSupplier && <span title="Client/Fournisseur" style={{ fontSize: 9, background: "#EEF2FF", color: "#4F46E5", borderRadius: 3, padding: "0 4px", flexShrink: 0 }}>C/F</span>}
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.supplier}</span>
                   </div>
+                  {/* Compte */}
+                  <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#555" }}>{p.account || "—"}</div>
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#888" }}>{p.requestDate ? p.requestDate.split("-").reverse().join("/") : "—"}</div>
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#555" }}>{p.requester || "—"}</div>
-                  <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>
+                  <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>
                     {p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}
                   </div>
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, textAlign: "right", paddingRight: 8 }}>{fmtEuro(p.amount)}</div>
-                  <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
+                  <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <button onClick={(e) => { e.stopPropagation(); setNoteModal(p); }}
                       title={p.notes ? "Voir/modifier la note" : "Ajouter une note"}
@@ -2828,7 +2832,7 @@ function PaymentsView({ settings }) {
             <div style={{ padding: "6px 10px", background: "#F8F9FB", borderTop: "2px solid #ECEAE5", overflowX: "auto" }}>
               <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
                 <div /><div /><div /><div />
-                <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", textAlign: "right", paddingRight: 8 }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
@@ -2841,14 +2845,14 @@ function PaymentsView({ settings }) {
         {/* ── Synthèse latérale ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ background: "linear-gradient(135deg, #102A63 0%, #1a3d8f 100%)", borderRadius: 16, padding: "16px", color: "white", boxShadow: "0 4px 16px rgba(16,42,99,0.3)" }}>
-            <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", opacity: 0.7, marginBottom: 4 }}>TOTAL EN ATTENTE</div>
+            <div style={{ fontSize: 10, fontFamily: "'Lora',serif", opacity: 0.7, marginBottom: 4 }}>TOTAL EN ATTENTE</div>
             <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Lora',serif" }}>{fmtEuro(totalPending)}</div>
-            <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", opacity: 0.6, marginTop: 4 }}>{pending.length} paiement{pending.length > 1 ? "s" : ""} · {payments.filter(p => p.status === "paid").length} payé{payments.filter(p => p.status === "paid").length > 1 ? "s" : ""}</div>
+            <div style={{ fontSize: 9, fontFamily: "'Lora',serif", opacity: 0.6, marginTop: 4 }}>{pending.length} paiement{pending.length > 1 ? "s" : ""} · {payments.filter(p => p.status === "paid").length} payé{payments.filter(p => p.status === "paid").length > 1 ? "s" : ""}</div>
           </div>
           <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#AAA", marginBottom: 10, letterSpacing: "0.06em" }}>PAR DATE ESTIMÉE</div>
+            <div style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Lora',serif", color: "#AAA", marginBottom: 10, letterSpacing: "0.06em" }}>PAR DATE ESTIMÉE</div>
             {sortedDates.length === 0 ? (
-              <div style={{ fontSize: 10, color: "#CCC", fontFamily: "'DM Mono',monospace", textAlign: "center", padding: "10px 0" }}>Aucun paiement en attente</div>
+              <div style={{ fontSize: 10, color: "#CCC", fontFamily: "'Lora',serif", textAlign: "center", padding: "10px 0" }}>Aucun paiement en attente</div>
             ) : sortedDates.map(date => {
               const grp = byDate[date];
               const isPast = date !== "Sans date" && date < today_str;
@@ -2856,12 +2860,12 @@ function PaymentsView({ settings }) {
               return (
                 <div key={date} style={{ marginBottom: 8, padding: "8px 10px", background: "#F8F9FB", borderRadius: 8, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'DM Mono',monospace" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'Lora',serif" }}>
                       {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}{date === "Sans date" ? "Sans date" : date.split("-").reverse().join("/")}
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(grp.total)}</div>
                   </div>
-                  <div style={{ fontSize: 9, color: "#888", fontFamily: "'DM Mono',monospace", marginTop: 2 }}>{grp.count} paiement{grp.count > 1 ? "s" : ""} · {grp.items.slice(0,2).join(", ")}{grp.items.length > 2 ? "…" : ""}</div>
+                  <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif", marginTop: 2 }}>{grp.count} paiement{grp.count > 1 ? "s" : ""} · {grp.items.slice(0,2).join(", ")}{grp.items.length > 2 ? "…" : ""}</div>
                 </div>
               );
             })}
