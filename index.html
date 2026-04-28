@@ -2106,9 +2106,11 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           {depth === 0 && onAddSubtask && (
             <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
               title="Ajouter une sous-tâche"
-              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 10, padding: 0, fontFamily: "'Lora',serif", lineHeight: 1 }}
-              onMouseEnter={e => e.currentTarget.style.color = "#27AE60"}
-              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>+st</button>
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#666", fontSize: 11, padding: "3px 10px",
+                fontFamily: "'Lora',serif", fontWeight: 700, lineHeight: 1,
+                border: "1px solid #CCC", borderRadius: 6, background: "white" }}
+              onMouseEnter={e => { e.currentTarget.style.background="#27AE60"; e.currentTarget.style.color="white"; e.currentTarget.style.borderColor="#27AE60"; }}
+              onMouseLeave={e => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#666"; e.currentTarget.style.borderColor="#CCC"; }}>+st</button>
           )}
         </div>
 
