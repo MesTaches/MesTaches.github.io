@@ -2194,12 +2194,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
         )}
       </div>
 
-      {/* Zone commentaire inline */}
-      {showComment && (
-        <div style={{ padding: "6px 8px 6px 48px", background: "#FAFBFF", borderBottom: "1px solid #F0F0F0", display: "flex", flexDirection: "column", gap: 6 }}>
-          <RichTextArea value={task.comment || ""} onChange={v => onUpdate({ ...task, comment: v })} placeholder="Commentaire…" rows={2} />
-        </div>
-      )}
+      
 
       {/* Sous-tâches */}
       {expanded && (task.subtasks || []).map(sub => (
@@ -2207,32 +2202,45 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           onUpdate={updSub => onUpdate({ ...task, subtasks: task.subtasks.map(s => s.id === updSub.id ? updSub : s) })}
           onDelete={subId => onUpdate({ ...task, subtasks: task.subtasks.filter(s => s.id !== subId) })} />
       ))}
-      {showCommentModal && (
-        <div style={{ position: "fixed", inset: "0", background: "rgba(0,0,0,0.45)", zIndex: 4000,
-          display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
-          backdropFilter: "blur(3px)" }}
-          onMouseDown={function(e){ if(e.target===e.currentTarget) setShowCommentModal(false); }}>
-          <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 520,
-            boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
-            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F0F0F0",
-              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>
-                💬 Commentaire {task.label ? "— " + task.label : ""}
-              </div>
-              <button onClick={function(){ setShowCommentModal(false); }}
-                style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#BDC3C7" }}>×</button>
-            </div>
-            <div style={{ padding: "16px 18px" }}>
-              <RichTextArea value={task.comment || ""} onChange={function(v){ onUpdate(Object.assign({}, task, {comment: v})); }}
-                placeholder="Saisissez votre commentaire…" rows={5} />
-            </div>
-            <div style={{ padding: "10px 18px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end" }}>
-              <button onClick={function(){ setShowCommentModal(false); }}
-                style={{ background: "#102A63", color: "white", border: "none", borderRadius: 8,
-                  padding: "7px 18px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif" }}>✓ Fermer</button>
-            </div>
-          </div>
-        </div>
+      {showCommentModal && React.createElement("div", {
+          style: {position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.45)",
+            zIndex:4000,display:"flex",alignItems:"center",justifyContent:"center",padding:16},
+          onMouseDown: function(e){ if(e.target===e.currentTarget) setShowCommentModal(false); }
+        },
+        React.createElement("div", {
+          style:{background:"white",borderRadius:14,width:"100%",maxWidth:520,
+            boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:"4px solid #102A63"}
+        },
+          React.createElement("div", {
+            style:{padding:"14px 18px",borderBottom:"1px solid #F0F0F0",
+              display:"flex",justifyContent:"space-between",alignItems:"center"}
+          },
+            React.createElement("div", {
+              style:{fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50"}
+            }, "💬 " + (task.label || "Commentaire")),
+            React.createElement("button", {
+              onClick: function(){ setShowCommentModal(false); },
+              style:{border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7"}
+            }, "×")
+          ),
+          React.createElement("div", {style:{padding:"16px 18px"}},
+            React.createElement(RichTextArea, {
+              value: task.comment || "",
+              onChange: function(v){ onUpdate(Object.assign({}, task, {comment:v})); },
+              placeholder: "Commentaire…",
+              rows: 5
+            })
+          ),
+          React.createElement("div", {
+            style:{padding:"10px 18px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end"}
+          },
+            React.createElement("button", {
+              onClick: function(){ setShowCommentModal(false); },
+              style:{background:"#102A63",color:"white",border:"none",borderRadius:8,
+                padding:"7px 18px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif"}
+            }, "✓ Fermer")
+          )
+        )
       )}
     </React.Fragment>
   );
