@@ -239,7 +239,11 @@ async function fbLogout() {
 </div>
 <div id="fb-app" class="fb-screen" style="display:none;height:100vh;width:100%;flex-direction:column;">
   <div id="root" style="flex:1;overflow:auto;height:100%;"></div>
-  <button id="fb-logout-btn" onclick="fbLogout()"
+  <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
+    style="position:fixed;bottom:16px;right:152px;z-index:9999;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:7px 12px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);letter-spacing:0.04em;display:none">
+    🗑️ Corbeille
+  </button>
+<button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation">
     ⏻ Déconnexion
   </button>
@@ -3210,6 +3214,14 @@ function App() {
   const [view, setView] = useState("dashboard");
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [trashSelected, setTrashSelected] = useState([]);
+  const getDeletedTasks = () => {
+    try {
+      const deleted = JSON.parse(localStorage.getItem("deletedTasks") || "[]");
+      return deleted.filter(t => Date.now() - t._deletedAt < 30 * 86400000);
+    } catch(e) { return []; }
+  };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
   const [undoTask, setUndoTask] = useState(null); // 2) undo
@@ -3264,6 +3276,25 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Afficher bouton corbeille + écouter event
+    const trashBtn = document.getElementById("fb-trash-btn");
+    if (trashBtn) trashBtn.style.display = "block";
+    const handleOpenTrash = () => setShowTrash(true);
+    window.addEventListener("openTrash", handleOpenTrash);
+    return () => window.removeEventListener("openTrash", handleOpenTrash);
+  }, []);
+
+  useEffect(() => {
+    // Mettre à jour badge corbeille
+    const trashBtn = document.getElementById("fb-trash-btn");
+    if (trashBtn) {
+      const count = getDeletedTasks().length;
+      trashBtn.textContent = count > 0 ? `🗑️ Corbeille (\${count})` : "🗑️ Corbeille";
+      trashBtn.style.background = count > 0 ? "rgba(192,57,43,0.7)" : "rgba(255,255,255,0.12)";
+    }
+  });
+
+  useEffect(() => {
     const check = () => {
       const now = new Date();
       const active = tasks.filter(t => !t.completed && t.reminder && t.reminder !== "none" && t.dueDate);
@@ -3288,6 +3319,14 @@ function App() {
   // 2) soft delete with undo
   const delTask = id => {
     const task = tasks.find(x => x.id === id);
+    if (task) {
+      try {
+        const deleted = JSON.parse(localStorage.getItem("deletedTasks") || "[]");
+        const purged = deleted.filter(t => Date.now() - t._deletedAt < 30 * 86400000);
+        purged.push({ ...task, _deletedAt: Date.now() });
+        localStorage.setItem("deletedTasks", JSON.stringify(purged));
+      } catch(e) {}
+    }
     setTasks(p => p.filter(x => x.id !== id));
     setUndoTask(task);
   };
@@ -3450,7 +3489,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.068<br />28/04/26 à 23h25
+          v.0.069<br />28/04/26 à 23h35
         </div>
       </div>
 
@@ -3498,6 +3537,65 @@ function App() {
       )}
 
       </div>{/* fin main */}
+
+      {/* ── MODALE CORBEILLE ── */}
+      {showTrash && (() => {
+        const deleted = getDeletedTasks();
+        const fmtD = ts => new Date(ts).toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+        return (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+            onClick={() => { setShowTrash(false); setTrashSelected([]); }}>
+            <div style={{ background: "white", borderRadius: 14, width: 560, maxHeight: "75vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 40px rgba(0,0,0,0.18)" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ padding: "18px 24px 14px", borderBottom: "1px solid #F0F0F0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#102A63" }}>🗑️ Tâches supprimées <span style={{ fontSize: 12, color: "#AAA", fontWeight: 400 }}>({deleted.length})</span></div>
+                <button onClick={() => { setShowTrash(false); setTrashSelected([]); }} style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "#AAA" }}>×</button>
+              </div>
+              {deleted.length === 0 ? (
+                <div style={{ padding: 40, textAlign: "center", color: "#CCC", fontFamily: "'Lora',serif", fontSize: 13 }}>Aucune tâche supprimée dans les 30 derniers jours</div>
+              ) : (
+                <>
+                  <div style={{ padding: "8px 24px 6px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid #F5F5F5" }}>
+                    <input type="checkbox" checked={trashSelected.length === deleted.length}
+                      onChange={e => setTrashSelected(e.target.checked ? deleted.map(t => t.id) : [])}
+                      style={{ cursor: "pointer", accentColor: "#102A63" }} />
+                    <span style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#888" }}>Tout sélectionner</span>
+                  </div>
+                  <div style={{ overflowY: "auto", flex: 1 }}>
+                    {deleted.map(t => (
+                      <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 24px", borderBottom: "1px solid #F8F8F8", background: trashSelected.includes(t.id) ? "#EEF2FF" : "white" }}>
+                        <input type="checkbox" checked={trashSelected.includes(t.id)}
+                          onChange={e => setTrashSelected(s => e.target.checked ? [...s, t.id] : s.filter(x => x !== t.id))}
+                          style={{ cursor: "pointer", accentColor: "#102A63", flexShrink: 0 }} />
+                        <div style={{ flex: 1, overflow: "hidden" }}>
+                          <div style={{ fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>{t.title}</div>
+                          <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#AAA", marginTop: 2 }}>{t.category} · supprimée le {fmtD(t._deletedAt)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {trashSelected.length > 0 && (
+                    <div style={{ padding: "12px 24px", borderTop: "1px solid #F0F0F0", display: "flex", alignItems: "center", gap: 10 }}>
+                      <button onClick={() => {
+                        const deleted = getDeletedTasks();
+                        const toRestore = deleted.filter(t => trashSelected.includes(t.id));
+                        toRestore.forEach(t => { const { _deletedAt, ...task } = t; addTask(task); });
+                        const remaining = deleted.filter(t => !trashSelected.includes(t.id));
+                        localStorage.setItem("deletedTasks", JSON.stringify(remaining));
+                        setTrashSelected([]);
+                        setShowTrash(false);
+                      }} style={{ background: "#102A63", color: "white", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer" }}>
+                        ↩ Restaurer {trashSelected.length} tâche{trashSelected.length > 1 ? "s" : ""}
+                      </button>
+                      <span style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#AAA" }}>Les tâches seront restaurées dans leur état d'origine</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {modal && <TaskModal task={modal} onSave={handleSave} onClose={() => setModal(null)} onAddTask={addTask} settings={settings} />}
       <Toast notifs={toasts} onDismiss={id => setToasts(p => p.filter(x => x.id !== id))} />
