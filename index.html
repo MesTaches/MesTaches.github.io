@@ -295,7 +295,7 @@ const DEFAULT_SETTINGS = {
   ],
   // 8) tab visibility
   hiddenTabs: [],
-  // 10) IA api key (Groq)
+  // 10) IA api key
   groqKey: "",
   // 9) labels
   labels: [
@@ -645,7 +645,9 @@ function AIAssistant({ text, onApply, onClose, settings }) {
       bullets:   `Transforme le texte suivant en une liste à puces concise. Renvoie uniquement la liste, sans commentaire ni explication :\n\n${stripped}`,
     };
     if (!settings ) {
-      /* no key check needed for Groq — handled via hardcoded key */
+      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
+      setLoading(false);
+      return;
     }
     try {
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -1549,10 +1551,12 @@ function MeetingsView({ onAddTask }) {
   const generateRecap = async m => {
     setLoadingRecap(true); setRecap(null);
     if (!settings ) {
-      /* no key check needed for Groq — handled via hardcoded key */
+      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
+      setLoading(false);
+      return;
     }
     try {
-      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: ``}]}));
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) }` }] }) });
       const data = await resp.json();
       setRecap(data.choices?.[0]?.message?.content || "Erreur de génération.");
     } catch { setRecap("Erreur de connexion."); }
