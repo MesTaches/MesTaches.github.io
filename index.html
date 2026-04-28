@@ -2010,6 +2010,11 @@ const TASK_PRIORITIES_R = [
   { id: "normale", label: "Normal",      icon: "▬ P3", color: "#7F8C8D" },
   { id: "basse",   label: "Faible",      icon: "▼ P4", color: "#27AE60" },
 ];
+const TASK_TYPES_R = [
+  { id: "bug",  label: "Bug",         bg: "#FEE2E2", color: "#B91C1C" },
+  { id: "ano",  label: "Anomalie",    bg: "#FEF9C3", color: "#A16207" },
+  { id: "dev",  label: "Dev", bg: "#DBEAFE", color: "#1D4ED8" },
+];
 const TASK_STATUSES_R = [
   { id: "todo",       name: "À faire",    bg: "#F0F0F0", color: "#888888" },
   { id: "inprogress", name: "En cours",   bg: "#DBEAFE", color: "#1D4ED8" },
@@ -2037,19 +2042,26 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
 
   return (
     <React.Fragment>
-      <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 160px 88px 88px 28px 28px", gap: 0,
+      <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 72px 160px 88px 88px 28px 28px", gap: 0,
         padding: isIndented ? "5px 8px 5px 32px" : "5px 8px",
         borderBottom: "1px solid #F5F5F5", alignItems: "center",
         background: isIndented ? "#FAFBFF" : "white" }}>
 
-        {/* ⊕ Ajouter sous-tâche */}
+        {/* ⊕/⊖ Toggle sous-tâches */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {depth === 0 && onAddSubtask && (
-            <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
-              title="Ajouter une sous-tâche"
-              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 14, padding: 0, lineHeight: 1 }}
+          {depth === 0 && (task.subtasks||[]).length > 0 && (
+            <button onClick={() => setExpanded(e => !e)}
+              title={expanded ? "Masquer les sous-tâches" : "Afficher les sous-tâches"}
+              style={{ border: "none", background: "none", cursor: "pointer",
+                color: expanded ? "#102A63" : "#AAA", fontSize: 14, padding: 0, lineHeight: 1,
+                fontWeight: 700 }}
               onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
-              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>⊕</button>
+              onMouseLeave={e => e.currentTarget.style.color = expanded ? "#102A63" : "#AAA"}>
+              {expanded ? "⊖" : "⊕"}
+            </button>
+          )}
+          {depth === 0 && (task.subtasks||[]).length === 0 && (
+            <span style={{ width: 14 }} />
           )}
         </div>
 
@@ -2079,15 +2091,28 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           <div style={{ flex: 1, overflow: "hidden" }}>
             <div contentEditable suppressContentEditableWarning
               onBlur={e => onUpdate({ ...task, label: e.currentTarget.textContent })}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
               style={{ fontSize: 10, fontFamily: "'Lora',serif", color: task.done ? "#AAA" : "#2C3E50",
                 textDecoration: task.done ? "line-through" : "none",
                 fontStyle: isIndented ? "italic" : "normal",
                 outline: "none", minWidth: 60, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {task.label || ""}
             </div>
-            {task.description && <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>}
           </div>
         </div>
+        {/* Type */}
+        <div>
+          <select className="report-field" value={task.taskType || ""}
+            onChange={e => onUpdate({ ...task, taskType: e.target.value })}
+            style={{ fontSize: 10, border: "none", borderRadius: 20, padding: "2px 5px",
+              fontFamily: "'Lora',serif", cursor: "pointer", outline: "none", maxWidth: 68,
+              background: TASK_TYPES_R.find(t => t.id === (task.taskType||""))?.bg || "#F5F5F5",
+              color: TASK_TYPES_R.find(t => t.id === (task.taskType||""))?.color || "#AAA" }}>
+            <option value="">—</option>
+            {TASK_TYPES_R.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+          </select>
+        </div>
+
         {/* Date création */}
         <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>
           {task.createdAt ? task.createdAt.split("-").reverse().join("/") : "—"}
@@ -2120,17 +2145,37 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           💬
         </button>
 
-        {/* Supprimer */}
-        <button onClick={() => onDelete(task.id)}
-          style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 10, padding: 0 }}
-          onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
-          onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
+        {/* Actions : ajouter sous-tâche + supprimer */}
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+          {depth === 0 && onAddSubtask && (
+            <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
+              title="Ajouter une sous-tâche"
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 9, padding: 0, lineHeight: 1, fontFamily: "'Lora',serif" }}
+              onMouseEnter={e => e.currentTarget.style.color = "#27AE60"}
+              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>+st</button>
+          )}
+          <button onClick={() => onDelete(task.id)}
+            style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 10, padding: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
+            onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
+        </div>
       </div>
 
       {/* Zone commentaire inline */}
       {showComment && (
-        <div style={{ padding: "6px 8px 6px 48px", background: "#FAFBFF", borderBottom: "1px solid #F0F0F0" }}>
-          <RichTextArea value={task.comment || ""} onChange={v => onUpdate({ ...task, comment: v })} placeholder="Commentaire…" rows={2} />
+        <div style={{ padding: "6px 8px 6px 48px", background: "#FAFBFF", borderBottom: "1px solid #F0F0F0", display: "flex", flexDirection: "column", gap: 6 }}>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", marginBottom: 3 }}>DESCRIPTION</div>
+            <input value={task.description || ""} onChange={e => onUpdate({ ...task, description: e.target.value })}
+              placeholder="Description de la tâche…"
+              className="report-field"
+              style={{ width: "100%", border: "1px solid #EEE", borderRadius: 6, padding: "4px 8px",
+                fontSize: 10, fontFamily: "'Lora',serif", outline: "none", background: "white" }} />
+          </div>
+          <div>
+            <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", marginBottom: 3 }}>COMMENTAIRE</div>
+            <RichTextArea value={task.comment || ""} onChange={v => onUpdate({ ...task, comment: v })} placeholder="Commentaire…" rows={2} />
+          </div>
         </div>
       )}
 
@@ -2155,7 +2200,7 @@ function ReportModal({ report, onSave, onClose }) {
 
   const addTask = () => setD(prev => ({
     ...prev, tasks: [...(prev.tasks || []), {
-      id: uid(), label: "", description: "", priority: "normale",
+      id: uid(), label: "", description: "", taskType: "", priority: "normale",
       status: "todo", done: false, createdAt: today(), endDate: "", comment: "", subtasks: []
     }]
   }));
@@ -2163,7 +2208,7 @@ function ReportModal({ report, onSave, onClose }) {
   const addSubtask = (taskId) => setD(prev => ({
     ...prev, tasks: (prev.tasks || []).map(t => t.id === taskId ? {
       ...t, subtasks: [...(t.subtasks || []), {
-        id: uid(), label: "", description: "", priority: "normale",
+        id: uid(), label: "", description: "", taskType: "", priority: "normale",
         status: "todo", done: false, createdAt: today(), endDate: "", comment: "", subtasks: []
       }]
     } : t)
@@ -2283,12 +2328,13 @@ function ReportModal({ report, onSave, onClose }) {
             ) : (
               <div style={{ border: "1px solid #ECEAE5", borderRadius: 10, overflow: "hidden" }}>
                 {/* En-têtes */}
-                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 160px 88px 88px 28px 28px",
+                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 72px 160px 88px 88px 28px 28px",
                   padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
                   <div />
                   <div />
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>PRIO.</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>LIBELLÉ / DESCRIPTION</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>LIBELLÉ</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>TYPE</div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE CRÉATION</div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>STATUT</div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE FIN</div>
