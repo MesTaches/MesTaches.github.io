@@ -293,6 +293,8 @@ const DEFAULT_SETTINGS = {
   ],
   // 8) tab visibility
   hiddenTabs: [],
+  // 10) IA api key
+  anthropicKey: "",
   // 9) labels
   labels: [
     { id: "lbl1", name: "Contentieux", color: "#C0392B", bg: "#FDEDEC" },
@@ -313,6 +315,7 @@ function loadSettings() {
       statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
       hiddenTabs: parsed.hiddenTabs || [],
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
+      anthropicKey: parsed.anthropicKey || "",
     };
   } catch { return DEFAULT_SETTINGS; }
 }
@@ -420,6 +423,47 @@ function StopwatchWidget({ task, onStop, onClose }) {
   );
 }
 
+
+/* ─── BULLET MENU ─── */
+function BulletMenu({ onInsert }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+  const types = [
+    { label: "● Rond",    html: '<ul style="list-style-type:disc;padding-left:18px"><li>&nbsp;</li></ul>' },
+    { label: "– Tiret",   html: '<ul style="list-style-type:none;padding-left:4px"><li>– &nbsp;</li></ul>' },
+    { label: "→ Flèche",  html: '<ul style="list-style-type:none;padding-left:4px"><li>→ &nbsp;</li></ul>' },
+    { label: "★ Étoile",  html: '<ul style="list-style-type:none;padding-left:4px"><li>★ &nbsp;</li></ul>' },
+    { label: "1. Numéro", html: '<ol style="padding-left:18px"><li>&nbsp;</li></ol>' },
+  ];
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); setOpen(o => !o); }}
+        style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>
+        • Liste ▾
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, background: "white", border: "1px solid #E8E8E8", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", padding: "4px", minWidth: 130, marginTop: 2 }}>
+          {types.map(t => (
+            <button key={t.label} type="button"
+              onMouseDown={(e) => { e.preventDefault(); onInsert(t.html); setOpen(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none", padding: "5px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#333", borderRadius: 4 }}
+              onMouseEnter={e => e.currentTarget.style.background = "#F5F7FB"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── RICH TEXT AREA (4: checklist + text color) ─── */
 function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
   const ref = useRef(null);
@@ -441,10 +485,9 @@ function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
         <ToolBtn cmd="underline" label={<u>S</u>} title="Souligner" />
         <ToolBtn cmd="italic" label={<em>I</em>} title="Italique" />
         <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
-        <ToolBtn cmd="insertUnorderedList" label="• Liste" title="Liste à puces" />
+        <BulletMenu onInsert={(html) => { ref.current.focus(); document.execCommand("insertHTML", false, html); onChange(ref.current.innerHTML); }} />
         <button type="button" onMouseDown={(e) => { e.preventDefault(); insertChecklist(); }} title="Check-list"
-          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>☑ Check</button>
-        <ToolBtn cmd="indent"  label="→" title="Retrait" />
+          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>☑ Check</button>abel="→" title="Retrait" />
         <ToolBtn cmd="outdent" label="←" title="Ôter retrait" />
         <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
         {/* 4) text color */}
@@ -482,7 +525,8 @@ function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
 function SubtaskDetailModal({ sub, cats, types, onSave, onPromote, onClose }) {
   const [d, setD] = useState({ title: sub.title || "", category: sub.category || "", type: sub.type || "", priority: sub.priority || "normale", dueDate: sub.dueDate || "", notes: sub.notes || "", id: sub.id, completed: sub.completed });
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
       <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 460, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", borderTop: "4px solid #102A63" }}>
         <div className="subtask-modal-form" style={{ padding: "16px 20px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -534,7 +578,7 @@ function SubtaskRow({ sub, onChange, onDelete, onOpenDetail }) {
 }
 
 /* ─── 10) AI ASSISTANT POPOVER ─── */
-function AIAssistant({ text, onApply, onClose }) {
+function AIAssistant({ text, onApply, onClose, settings }) {
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("correct");
@@ -547,11 +591,18 @@ function AIAssistant({ text, onApply, onClose }) {
       summarize: `Résume le texte suivant en 2-3 phrases. Renvoie uniquement le résumé, sans commentaire ni explication :\n\n${stripped}`,
       bullets:   `Transforme le texte suivant en une liste à puces concise. Renvoie uniquement la liste, sans commentaire ni explication :\n\n${stripped}`,
     };
+    if (!settings || !settings.anthropicKey) {
+      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
+      setLoading(false);
+      return;
+    }
     try {
       const resp = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "x-api-key": (settings && settings.anthropicKey) || "",
+          "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
@@ -567,7 +618,8 @@ function AIAssistant({ text, onApply, onClose }) {
     setLoading(false);
   };
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 4000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(3px)", background: "rgba(0,0,0,0.3)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 4000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(3px)", background: "rgba(0,0,0,0.3)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
       <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 520, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden", borderTop: "4px solid #102A63" }}>
         <div style={{ padding: "16px 20px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -796,7 +848,8 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
   const statusObj = settings.statuses.find(s => s.id === d.status) || settings.statuses[0];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
       <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", borderTop: `4px solid ${catAccent}`, transition: "border-color 0.2s" }}>
         <div className="task-modal-form" style={{ padding: "20px 24px 0" }}>
           {/* Header */}
@@ -929,7 +982,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
       </div>
 
       {subDetail && <SubtaskDetailModal sub={subDetail} cats={settings.categories} types={settings.types} onSave={updSub} onPromote={promoteSub} onClose={() => setSubDetail(null)} />}
-      {showAI && <AIAssistant text={d.notes} onApply={(v) => setD({ ...d, notes: v })} onClose={() => setShowAI(false)} />}
+      {showAI && <AIAssistant text={d.notes} onApply={(v) => setD({ ...d, notes: v })} onClose={() => setShowAI(false)} settings={settings} />}
       {stopwatch && <StopwatchWidget task={d} onStop={(secs) => { setD(prev => ({ ...prev, totalTime: (prev.totalTime || 0) + secs })); setStopwatch(false); }} onClose={() => setStopwatch(false)} />}
     </div>
   );
@@ -939,7 +992,8 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
 function CommentPopover({ task, catBg, catAccent, onSave, onClose }) {
   const [text, setText] = useState(task.notes || "");
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)", background: "rgba(0,0,0,0.25)" }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(2px)", background: "rgba(0,0,0,0.25)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
       <div style={{ background: "white", borderRadius: 12, width: 420, boxShadow: "0 12px 40px rgba(0,0,0,0.18)", overflow: "hidden", borderTop: `3px solid ${catAccent}` }}>
         <div style={{ padding: "14px 16px 0" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -1445,6 +1499,11 @@ function MeetingsView({ onAddTask }) {
   const delMeeting = id => { setMeetings(p => p.filter(x => x.id !== id)); if (selected?.id === id) setSelected(null); };
   const generateRecap = async m => {
     setLoadingRecap(true); setRecap(null);
+    if (!settings || !settings.anthropicKey) {
+      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
+      setLoading(false);
+      return;
+    }
     try {
       const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
       const data = await resp.json();
@@ -1713,7 +1772,7 @@ const ALL_TABS = [
 ];
 
 function SettingsView({ settings, onSave }) {
-  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels })));
+  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, anthropicKey: settings.anthropicKey || "" })));
   const [tab, setTab] = useState("categories");
   const Tab = ({ id, label }) => (
     <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
@@ -1834,9 +1893,18 @@ function SettingsView({ settings, onSave }) {
             <button onClick={addLabel} style={{ ...S.btn("#102A63"), marginTop: 12, fontSize: 11, padding: "6px 14px" }}>+ Nouvelle étiquette</button>
           </>}
         </div>
-        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
-          <button onClick={() => { onSave(s); }} style={{ ...S.btn("#102A63") }}>✓ Enregistrer</button>
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0" }}>
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API ANTHROPIC (ASSISTANT IA)</div>
+            <input type="password" value={s.anthropicKey || ""} onChange={e => setS({ ...s, anthropicKey: e.target.value })}
+              placeholder="sk-ant-…"
+              style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
+            <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé disponible sur console.anthropic.com — stockée uniquement dans votre navigateur</div>
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
+            <button onClick={() => { onSave(s); }} style={{ ...S.btn("#102A63") }}>✓ Enregistrer</button>
+          </div>
         </div>
       </div>
     </div>
