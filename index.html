@@ -2034,47 +2034,47 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
         </button>
 
         {/* Priorité */}
-        <div style={{ fontSize: 9, fontWeight: 700, color: prio.color, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{prio.icon}</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: prio.color, fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{prio.icon}</div>
 
         {/* Libellé + description */}
         <div style={{ overflow: "hidden" }}>
           <div contentEditable suppressContentEditableWarning
             onBlur={e => onUpdate({ ...task, label: e.currentTarget.textContent })}
-            style={{ fontSize: 11, fontFamily: "'Lora',serif", color: task.done ? "#AAA" : "#2C3E50",
+            style={{ fontSize: 10, fontFamily: "'Lora',serif", color: task.done ? "#AAA" : "#2C3E50",
               textDecoration: task.done ? "line-through" : "none",
               fontStyle: isIndented ? "italic" : "normal",
               outline: "none", minWidth: 60, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {task.label || ""}
           </div>
-          {task.description && <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>}
+          {task.description && <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{task.description}</div>}
         </div>
 
         {/* Date création */}
-        <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>
+        <div style={{ fontSize: 10, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>
           {task.createdAt ? task.createdAt.split("-").reverse().join("/") : "—"}
         </div>
 
         {/* Statut */}
         <div>
           <select value={task.status || "todo"} onChange={e => onUpdate({ ...task, status: e.target.value })}
-            style={{ fontSize: 9, border: "none", background: st.bg, color: st.color, borderRadius: 20,
-              padding: "2px 6px", fontFamily: "'DM Mono',monospace", fontWeight: 700, cursor: "pointer", outline: "none", maxWidth: 84 }}>
+            style={{ fontSize: 10, border: "none", background: st.bg, color: st.color, borderRadius: 20,
+              padding: "2px 6px", fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer", outline: "none", maxWidth: 84 }}>
             {TASK_STATUSES_R.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
           </select>
         </div>
 
         {/* Date de fin */}
-        <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "#555", textAlign: "center" }}>
+        <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#555", textAlign: "center" }}>
           <input type="date" value={task.endDate || ""}
             onChange={e => onUpdate({ ...task, endDate: e.target.value })}
             onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
-            style={{ fontSize: 9, border: "none", background: "transparent", color: task.endDate ? "#27AE60" : "#AAA",
-              fontFamily: "'DM Mono',monospace", cursor: "pointer", outline: "none", width: 80 }} />
+            style={{ fontSize: 10, border: "none", background: "transparent", color: task.endDate ? "#27AE60" : "#AAA",
+              fontFamily: "'Lora',serif", cursor: "pointer", outline: "none", width: 80 }} />
         </div>
 
         {/* Commentaire toggle */}
         <button onClick={() => setShowComment(c => !c)} title="Commentaire"
-          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 11,
+          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 10,
             opacity: task.comment ? 1 : 0.3, padding: 0 }}
           onMouseEnter={e => e.currentTarget.style.opacity = "1"}
           onMouseLeave={e => e.currentTarget.style.opacity = task.comment ? "1" : "0.3"}>
@@ -2083,7 +2083,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
 
         {/* Supprimer */}
         <button onClick={() => onDelete(task.id)}
-          style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 12, padding: 0 }}
+          style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 10, padding: 0 }}
           onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
           onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
       </div>
@@ -2108,7 +2108,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
 /* ── ReportModal ── */
 function ReportModal({ report, onSave, onClose }) {
   const empty = {
-    id: uid(), name: "", type: "excel", status: "project",
+    id: uid(), name: "", type: "", status: "project",
     description: "", createdAt: today(), publishedAt: "",
     tasks: [], notes: ""
   };
@@ -2247,11 +2247,11 @@ function ReportModal({ report, onSave, onClose }) {
                 <div style={{ display: "grid", gridTemplateColumns: "18px 16px 56px 1fr 160px 88px 88px 28px 28px",
                   padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
                   <div /><div />
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>PRIO.</div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>LIBELLÉ / DESCRIPTION</div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>DATE CRÉATION</div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", textAlign: "center" }}>DATE FIN</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>PRIO.</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>LIBELLÉ / DESCRIPTION</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE CRÉATION</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>STATUT</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE FIN</div>
                   <div /><div />
                 </div>
 
