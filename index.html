@@ -240,7 +240,9 @@ async function fbLogout() {
 <div id="fb-app" class="fb-screen" style="display:none;height:100vh;width:100%;flex-direction:column;">
   <div id="root" style="flex:1;overflow:auto;height:100%;"></div>
   <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
-    style="position:fixed;bottom:16px;right:152px;z-index:9999;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:7px 12px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);letter-spacing:0.04em;display:none">
+    style="position:fixed;bottom:16px;right:152px;z-index:9999;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
+    onmouseover="this.style.background='#E74C3C';this.style.borderColor='#E74C3C'"
+    onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     🗑️ Corbeille
   </button>
 <button id="fb-logout-btn" onclick="fbLogout()"
@@ -3290,7 +3292,9 @@ function App() {
     if (trashBtn) {
       const count = getDeletedTasks().length;
       trashBtn.textContent = count > 0 ? `🗑️ Corbeille (\${count})` : "🗑️ Corbeille";
-      trashBtn.style.background = count > 0 ? "rgba(192,57,43,0.7)" : "rgba(255,255,255,0.12)";
+      const bg = count > 0 ? "rgba(192,57,43,0.7)" : "rgba(255,255,255,0.12)";
+      trashBtn.style.background = bg;
+      trashBtn._baseBg = bg;
     }
   });
 
@@ -3489,7 +3493,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.069<br />28/04/26 à 23h35
+          v.0.070<br />28/04/26 à 23h40
         </div>
       </div>
 
