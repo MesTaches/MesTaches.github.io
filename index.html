@@ -2314,7 +2314,7 @@ function ReportModal({ report, onSave, onClose }) {
                     style={{ border: `2px solid ${d.type === t.id ? t.color : "#E0E0E0"}`,
                       background: d.type === t.id ? t.bg : "white", color: d.type === t.id ? t.color : "#888",
                       borderRadius: 8, padding: "5px 14px", fontSize: 11, cursor: "pointer",
-                      fontFamily: "'DM Mono',monospace", fontWeight: d.type === t.id ? 700 : 400 }}>
+                      fontFamily: "'Lora',serif", fontWeight: d.type === t.id ? 700 : 400 }}>
                     {t.label}
                   </button>
                 ))}
@@ -2328,7 +2328,7 @@ function ReportModal({ report, onSave, onClose }) {
                     style={{ border: `2px solid ${d.status === s.id ? s.color : "#E0E0E0"}`,
                       background: d.status === s.id ? s.bg : "white", color: d.status === s.id ? s.color : "#888",
                       borderRadius: 8, padding: "5px 12px", fontSize: 10, cursor: "pointer",
-                      fontFamily: "'DM Mono',monospace", fontWeight: d.status === s.id ? 700 : 400 }}>
+                      fontFamily: "'Lora',serif", fontWeight: d.status === s.id ? 700 : 400 }}>
                     {s.label}
                   </button>
                 ))}
@@ -2368,7 +2368,7 @@ function ReportModal({ report, onSave, onClose }) {
               <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.06em" }}>SUIVI DES TÂCHES</label>
               <div style={{ display: "flex", gap: 6 }}>
                 {(d.tasks || []).length > 0 && (
-                  <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>
+                  <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif" }}>
                     {(d.tasks || []).filter(t => t.done).length}/{(d.tasks || []).length} terminées
                   </span>
                 )}
@@ -2378,7 +2378,7 @@ function ReportModal({ report, onSave, onClose }) {
             </div>
 
             {(d.tasks || []).length === 0 ? (
-              <div style={{ border: "1px dashed #E0E0E0", borderRadius: 8, padding: "16px", textAlign: "center", color: "#CCC", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>
+              <div style={{ border: "1px dashed #E0E0E0", borderRadius: 8, padding: "16px", textAlign: "center", color: "#CCC", fontSize: 11, fontFamily: "'Lora',serif" }}>
                 Aucune tâche — cliquez sur "+ Tâche" pour commencer
               </div>
             ) : (
