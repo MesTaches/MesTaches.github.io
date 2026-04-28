@@ -2042,18 +2042,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
         borderBottom: "1px solid #F5F5F5", alignItems: "center",
         background: isIndented ? "#FAFBFF" : "white" }}>
 
-        {/* Ajouter sous-tâche */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {depth === 0 && onAddSubtask && (
-            <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
-              title="Ajouter une sous-tâche"
-              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 14, padding: 0, lineHeight: 1 }}
-              onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
-              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>⊕</button>
-          )}
-        </div>
-
-        {/* Ajouter sous-tâche */}
+        {/* ⊕ Ajouter sous-tâche */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           {depth === 0 && onAddSubtask && (
             <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
@@ -2156,7 +2145,6 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
 }
 
 /* ── ReportModal ── */
-─ */
 function ReportModal({ report, onSave, onClose }) {
   const empty = {
     id: uid(), name: "", type: "", status: "project",
@@ -2297,6 +2285,7 @@ function ReportModal({ report, onSave, onClose }) {
                 {/* En-têtes */}
                 <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 160px 88px 88px 28px 28px",
                   padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
+                  <div />
                   <div />
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>PRIO.</div>
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>LIBELLÉ / DESCRIPTION</div>
