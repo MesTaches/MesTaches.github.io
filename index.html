@@ -2023,7 +2023,7 @@ function loadReports() { try { const s = localStorage.getItem(REPORTS_KEY); retu
 function saveReports(r) { try { localStorage.setItem(REPORTS_KEY, JSON.stringify(r)); } catch {} }
 
 /* ── ReportTaskRow ── */
-function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
+function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
   const [expanded, setExpanded] = React.useState(false);
   const [showComment, setShowComment] = React.useState(false);
   const prio = TASK_PRIORITIES_R.find(p => p.id === (task.priority || "normale")) || TASK_PRIORITIES_R[2];
@@ -2129,6 +2129,18 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth }) {
           onUpdate={updSub => onUpdate({ ...task, subtasks: task.subtasks.map(s => s.id === updSub.id ? updSub : s) })}
           onDelete={subId => onUpdate({ ...task, subtasks: task.subtasks.filter(s => s.id !== subId) })} />
       ))}
+      {/* Bouton + sous-tâche visible seulement si expanded ou pas encore de sous-tâches et depth===0 */}
+      {depth === 0 && (expanded || (task.subtasks||[]).length === 0) && onAddSubtask && (
+        <div style={{ padding: "2px 8px 3px 34px", background: "white", borderBottom: "1px solid #F8F8F8" }}>
+          <button type="button" onClick={() => onAddSubtask(task.id)}
+            style={{ border: "none", background: "none", color: "#BBB", fontSize: 9, cursor: "pointer",
+              fontFamily: "'Lora',serif", padding: 0 }}
+            onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
+            onMouseLeave={e => e.currentTarget.style.color = "#BBB"}>
+            + sous-tâche
+          </button>
+        </div>
+      )}
     </React.Fragment>
   );
 }
@@ -2286,17 +2298,8 @@ function ReportModal({ report, onSave, onClose }) {
                 {/* Tâches */}
                 {(d.tasks || []).map(task => (
                   <React.Fragment key={task.id}>
-                    <ReportTaskRow task={task} depth={0} onUpdate={updateTask} onDelete={deleteTask} />
-                    {/* Bouton ajouter sous-tâche */}
-                    <div style={{ padding: "2px 8px 4px 42px", background: "white", borderBottom: "1px solid #F8F8F8" }}>
-                      <button type="button" onClick={() => addSubtask(task.id)}
-                        style={{ border: "none", background: "none", color: "#AAA", fontSize: 9, cursor: "pointer",
-                          fontFamily: "'DM Mono',monospace", padding: 0 }}
-                        onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
-                        onMouseLeave={e => e.currentTarget.style.color = "#AAA"}>
-                        + sous-tâche
-                      </button>
-                    </div>
+                    <ReportTaskRow task={task} depth={0} onUpdate={updateTask} onDelete={deleteTask} onAddSubtask={addSubtask} />
+
                   </React.Fragment>
                 ))}
               </div>
