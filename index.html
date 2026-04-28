@@ -2043,7 +2043,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
 
   return (
     <React.Fragment>
-      <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 20px 3fr 72px 160px 88px 88px 32px 32px", gap: 0,
+      <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 44px 3fr 72px 160px 88px 88px 32px 32px", gap: 0,
         padding: isIndented ? "5px 8px 5px 32px" : "5px 8px",
         borderBottom: "1px solid #F5F5F5", alignItems: "center",
         background: isIndented ? "#FAFBFF" : "white" }}>
@@ -2106,9 +2106,9 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           {depth === 0 && onAddSubtask && (
             <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
               title="Ajouter une sous-tâche"
-              style={{ border: "none", background: "none", cursor: "pointer", color: "#666", fontSize: 11, padding: "3px 10px",
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#666", fontSize: 12, padding: "4px 10px",
                 fontFamily: "'Lora',serif", fontWeight: 700, lineHeight: 1,
-                border: "1px solid #CCC", borderRadius: 6, background: "white" }}
+                border: "1.5px solid #BBB", borderRadius: 6, background: "white" }}
               onMouseEnter={e => { e.currentTarget.style.background="#27AE60"; e.currentTarget.style.color="white"; e.currentTarget.style.borderColor="#27AE60"; }}
               onMouseLeave={e => { e.currentTarget.style.background="white"; e.currentTarget.style.color="#666"; e.currentTarget.style.borderColor="#CCC"; }}>+st</button>
           )}
@@ -2385,7 +2385,7 @@ function ReportModal({ report, onSave, onClose }) {
             ) : (
               <div style={{ border: "1px solid #ECEAE5", borderRadius: 10, overflow: "hidden" }}>
                 {/* En-têtes */}
-                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 20px 3fr 72px 160px 88px 88px 32px 32px",
+                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 44px 3fr 72px 160px 88px 88px 32px 32px",
                   padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
                   <div />
                   <div />
