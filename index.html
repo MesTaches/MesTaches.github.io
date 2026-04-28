@@ -2140,8 +2140,8 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
             onChange={e => onUpdate({ ...task, taskType: e.target.value })}
             style={{ fontSize: 10, border: "none", borderRadius: 20, padding: "2px 5px",
               fontFamily: "'Lora',serif", cursor: "pointer", outline: "none", maxWidth: 68,
-              background: TASK_TYPES_R.find(t => t.id === (task.taskType||""))?.bg || "#F5F5F5",
-              color: TASK_TYPES_R.find(t => t.id === (task.taskType||""))?.color || "#AAA" }}>
+              background: (TASK_TYPES_R.find(t => t.id === (task.taskType||"")) || {bg:"#F5F5F5"}).bg,
+              color: (TASK_TYPES_R.find(t => t.id === (task.taskType||"")) || {color:"#AAA"}).color }}>
             <option value="">—</option>
             {TASK_TYPES_R.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
