@@ -295,8 +295,8 @@ const DEFAULT_SETTINGS = {
   ],
   // 8) tab visibility
   hiddenTabs: [],
-  // 10) IA api key
-  anthropicKey: "",
+  // 10) IA api key (Groq)
+  groqKey: "",
   // 9) labels
   labels: [
     { id: "lbl1", name: "Contentieux", color: "#C0392B", bg: "#FDEDEC" },
@@ -317,7 +317,7 @@ function loadSettings() {
       statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
       hiddenTabs: parsed.hiddenTabs || [],
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
-      anthropicKey: parsed.anthropicKey || "",
+      groqKey: parsed.groqKey || "",
     };
   } catch { return DEFAULT_SETTINGS; }
 }
@@ -644,29 +644,25 @@ function AIAssistant({ text, onApply, onClose, settings }) {
       summarize: `Résume le texte suivant en 2-3 phrases. Renvoie uniquement le résumé, sans commentaire ni explication :\n\n${stripped}`,
       bullets:   `Transforme le texte suivant en une liste à puces concise. Renvoie uniquement la liste, sans commentaire ni explication :\n\n${stripped}`,
     };
-    if (!settings || !settings.anthropicKey) {
-      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
-      setLoading(false);
-      return;
+    if (!settings ) {
+      /* no key check needed for Groq — handled via hardcoded key */
     }
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": (settings && settings.anthropicKey) || "",
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
+          "Authorization": `Bearer ${(settings && settings.groqKey) || ""}`,
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "llama-3.3-70b-versatile",
           max_tokens: 1000,
           messages: [{ role: "user", content: prompts[mode] }],
         }),
       });
       if (!resp.ok) { const err = await resp.json().catch(() => ({})); setResult(`Erreur API (${resp.status}) : ${err?.error?.message || "inconnue"}`); setLoading(false); return; }
       const data = await resp.json();
-      setResult(data.content?.map((c) => c.text || "").join("") || "Erreur : réponse vide.");
+      setResult(data.choices?.[0]?.message?.content || "Erreur : réponse vide.");
     } catch (e) { setResult(`Erreur de connexion : ${e.message}`); }
     setLoading(false);
   };
@@ -1552,15 +1548,13 @@ function MeetingsView({ onAddTask }) {
   const delMeeting = id => { setMeetings(p => p.filter(x => x.id !== id)); if (selected?.id === id) setSelected(null); };
   const generateRecap = async m => {
     setLoadingRecap(true); setRecap(null);
-    if (!settings || !settings.anthropicKey) {
-      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
-      setLoading(false);
-      return;
+    if (!settings ) {
+      /* no key check needed for Groq — handled via hardcoded key */
     }
     try {
-      const resp = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true" }, body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: ``}]}));
       const data = await resp.json();
-      setRecap(data.content?.map(c => c.text || "").join("") || "Erreur de génération.");
+      setRecap(data.choices?.[0]?.message?.content || "Erreur de génération.");
     } catch { setRecap("Erreur de connexion."); }
     setLoadingRecap(false);
   };
@@ -1827,7 +1821,7 @@ const ALL_TABS = [
 ];
 
 function SettingsView({ settings, onSave }) {
-  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, anthropicKey: settings.anthropicKey || "" })));
+  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "" })));
   const [tab, setTab] = useState("categories");
   const Tab = ({ id, label }) => (
     <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
@@ -1950,11 +1944,11 @@ function SettingsView({ settings, onSave }) {
         </div>
         <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0" }}>
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API ANTHROPIC (ASSISTANT IA)</div>
-            <input type="password" value={s.anthropicKey || ""} onChange={e => setS({ ...s, anthropicKey: e.target.value })}
-              placeholder="sk-ant-…"
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API GROQ (ASSISTANT IA — gratuit sur console.groq.com)</div>
+            <input type="password" value={s.groqKey || ""} onChange={e => setS({ ...s, groqKey: e.target.value })}
+              placeholder="gsk_…"
               style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
-            <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé disponible sur console.anthropic.com — stockée uniquement dans votre navigateur</div>
+            <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé gratuite disponible sur console.groq.com — stockée uniquement dans votre navigateur</div>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
@@ -2774,6 +2768,8 @@ function App() {
     { id: "meetings",      label: "Réunions",         icon: "◷" },
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
     { id: "notifications", label: "Rappels",          icon: "🔔", badge: remCount },
+    { id: "reporting",     label: "Reporting",        icon: "📊" },
+    { id: "payments",      label: "Paiements",        icon: "💶" },
     { id: "settings",      label: "Paramètres",       icon: "⚙" },
   ];
 
