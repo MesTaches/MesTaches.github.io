@@ -263,6 +263,8 @@ function useIsMobile() {
 /* ─── STORAGE KEYS ─── */
 const STORAGE_KEY = "taskmanager_v4";
 const COL_WIDTHS_KEY = "taskmanager_colwidths";
+const PAYMENTS_KEY = "taskmanager_payments";
+const REPORTS_KEY  = "taskmanager_reports";
 const MEETING_STORAGE = "taskmanager_meetings_v1";
 const SETTINGS_KEY = "taskmanager_settings_v1";
 
@@ -1820,6 +1822,8 @@ const ALL_TABS = [
   { id: "meetings",      label: "Réunions",         icon: "◷" },
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "🔔" },
+  { id: "reporting",     label: "Reporting",        icon: "📊" },
+  { id: "payments",      label: "Paiements",        icon: "💶" },
 ];
 
 function SettingsView({ settings, onSave }) {
@@ -1958,6 +1962,424 @@ function SettingsView({ settings, onSave }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   REPORTING VIEW
+═══════════════════════════════════════════════ */
+const REPORT_STATUSES = [
+  { id: "draft",      label: "Brouillon",    bg: "#F0F0F0", color: "#888"    },
+  { id: "inprogress", label: "En cours",     bg: "#DBEAFE", color: "#1D4ED8" },
+  { id: "review",     label: "En révision",  bg: "#FEF9C3", color: "#A16207" },
+  { id: "published",  label: "Publié",       bg: "#D1FAE5", color: "#065F46" },
+  { id: "paused",     label: "En pause",     bg: "#FEE2E2", color: "#B91C1C" },
+];
+const REPORT_TOOLS = ["Excel","Power BI","Tableau","Python","SQL","Google Sheets","SAP","Autres"];
+
+function loadReports() { try { const s = localStorage.getItem(REPORTS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
+function saveReports(r) { try { localStorage.setItem(REPORTS_KEY, JSON.stringify(r)); } catch {} }
+
+function ReportCard({ report, onClick }) {
+  const st = REPORT_STATUSES.find(s => s.id === report.status) || REPORT_STATUSES[0];
+  const pct = Math.max(0, Math.min(100, report.progress || 0));
+  return (
+    <div onClick={() => onClick(report)}
+      style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "16px 18px", cursor: "pointer",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.04)", transition: "all 0.15s" }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.10)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)"; e.currentTarget.style.transform = "none"; }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", flex: 1, marginRight: 10 }}>📊 {report.name}</div>
+        <span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 8px", whiteSpace: "nowrap", fontFamily: "'DM Mono',monospace" }}>{st.label}</span>
+      </div>
+      {report.description && <div style={{ fontSize: 11, color: "#888", fontFamily: "'Lora',serif", marginBottom: 10, lineHeight: 1.5 }}>{report.description}</div>}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+        {(report.tools || []).map(t => <span key={t} style={{ fontSize: 9, background: "#EEF2FF", color: "#4F46E5", borderRadius: 20, padding: "1px 8px", fontFamily: "'DM Mono',monospace" }}>{t}</span>)}
+        {report.frequency && <span style={{ fontSize: 9, background: "#F0FDF4", color: "#16A34A", borderRadius: 20, padding: "1px 8px", fontFamily: "'DM Mono',monospace" }}>🔄 {report.frequency}</span>}
+      </div>
+      <div style={{ marginBottom: 6 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+          <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>AVANCEMENT</span>
+          <span style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>{pct}%</span>
+        </div>
+        <div style={{ height: 5, background: "#F0F0F0", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${pct}%`, background: pct === 100 ? "#27AE60" : pct > 60 ? "#2980B9" : pct > 30 ? "#E67E22" : "#C0392B", borderRadius: 10, transition: "width 0.4s" }} />
+        </div>
+      </div>
+      {(report.kpis || []).length > 0 && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+          {report.kpis.map((k, i) => (
+            <div key={i} style={{ background: "#F8F9FB", borderRadius: 8, padding: "4px 10px", textAlign: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{k.value}</div>
+              <div style={{ fontSize: 8, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>{k.label}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {report.nextDeadline && (
+        <div style={{ marginTop: 8, fontSize: 9, color: "#888", fontFamily: "'DM Mono',monospace" }}>
+          📅 Prochaine échéance : <strong>{report.nextDeadline}</strong>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportModal({ report, onSave, onClose }) {
+  const [d, setD] = useState(report ? { ...report } : {
+    id: uid(), name: "", description: "", status: "inprogress", progress: 0,
+    tools: [], frequency: "", nextDeadline: "", kpis: [], links: [], notes: ""
+  });
+  const [newKpi, setNewKpi] = useState({ label: "", value: "" });
+  const [newLink, setNewLink] = useState({ label: "", url: "" });
+  const inp = (field) => ({ value: d[field] || "", onChange: e => setD({ ...d, [field]: e.target.value }), style: { ...S.input, fontSize: 12, width: "100%" } });
+  const toggleTool = (t) => setD({ ...d, tools: (d.tools||[]).includes(t) ? d.tools.filter(x => x !== t) : [...(d.tools||[]), t] });
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
+        <div style={{ padding: "18px 22px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>📊 {d.id && report ? "Modifier le reporting" : "Nouveau reporting"}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+        </div>
+        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>NOM DU REPORTING</label><input {...inp("name")} placeholder="Ex: Reporting mensuel CA" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DESCRIPTION</label><textarea value={d.description||""} onChange={e => setD({...d, description: e.target.value})} rows={2} style={{ ...S.input, fontSize: 12, width: "100%", resize: "vertical", marginTop: 4 }} /></div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
+              <select value={d.status||"inprogress"} onChange={e => setD({...d, status: e.target.value})} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }}>
+                {REPORT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>AVANCEMENT %</label>
+              <input type="number" min="0" max="100" value={d.progress||0} onChange={e => setD({...d, progress: parseInt(e.target.value)||0})} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FRÉQUENCE</label>
+              <input value={d.frequency||""} onChange={e => setD({...d, frequency: e.target.value})} placeholder="Mensuel, Hebdo…" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+          </div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>PROCHAINE ÉCHÉANCE</label>
+            <input type="date" value={d.nextDeadline||""} onChange={e => setD({...d, nextDeadline: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6, display: "block" }}>OUTILS</label>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {REPORT_TOOLS.map(t => (
+                <button key={t} type="button" onClick={() => toggleTool(t)}
+                  style={{ border: `1px solid ${(d.tools||[]).includes(t) ? "#4F46E5" : "#E0E0E0"}`, background: (d.tools||[]).includes(t) ? "#EEF2FF" : "white", color: (d.tools||[]).includes(t) ? "#4F46E5" : "#888", borderRadius: 20, padding: "3px 10px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{t}</button>
+              ))}
+            </div>
+          </div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6, display: "block" }}>KPIs SUIVIS</label>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+              {(d.kpis||[]).map((k, i) => (
+                <div key={i} style={{ background: "#F0F4FF", borderRadius: 8, padding: "4px 10px", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 11, color: "#102A63", fontFamily: "'Lora',serif" }}><strong>{k.value}</strong> {k.label}</span>
+                  <button onClick={() => setD({...d, kpis: d.kpis.filter((_,j) => j!==i)})} style={{ border: "none", background: "none", cursor: "pointer", color: "#AAA", fontSize: 12 }}>×</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              <input value={newKpi.label} onChange={e => setNewKpi({...newKpi, label: e.target.value})} placeholder="Libellé (ex: CA Mensuel)" style={{ ...S.input, fontSize: 11, flex: 2 }} />
+              <input value={newKpi.value} onChange={e => setNewKpi({...newKpi, value: e.target.value})} placeholder="Valeur (ex: 1.2M€)" style={{ ...S.input, fontSize: 11, flex: 1 }} />
+              <button type="button" onClick={() => { if (newKpi.label && newKpi.value) { setD({...d, kpis: [...(d.kpis||[]), newKpi]}); setNewKpi({label:"", value:""}); } }} style={{ ...S.btn("#102A63"), padding: "4px 10px", fontSize: 11 }}>+</button>
+            </div>
+          </div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6, display: "block" }}>LIENS</label>
+            {(d.links||[]).map((l, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                <a href={l.url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "#2980B9", flex: 1 }}>🔗 {l.label || l.url}</a>
+                <button onClick={() => setD({...d, links: d.links.filter((_,j) => j!==i)})} style={{ border: "none", background: "none", cursor: "pointer", color: "#AAA", fontSize: 12 }}>×</button>
+              </div>
+            ))}
+            <div style={{ display: "flex", gap: 6 }}>
+              <input value={newLink.label} onChange={e => setNewLink({...newLink, label: e.target.value})} placeholder="Libellé" style={{ ...S.input, fontSize: 11, flex: 1 }} />
+              <input value={newLink.url} onChange={e => setNewLink({...newLink, url: e.target.value})} placeholder="https://…" style={{ ...S.input, fontSize: 11, flex: 2 }} />
+              <button type="button" onClick={() => { if (newLink.url) { setD({...d, links: [...(d.links||[]), newLink]}); setNewLink({label:"", url:""}); } }} style={{ ...S.btn("#102A63"), padding: "4px 10px", fontSize: 11 }}>+</button>
+            </div>
+          </div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>NOTES</label>
+            <textarea value={d.notes||""} onChange={e => setD({...d, notes: e.target.value})} rows={3} style={{ ...S.input, fontSize: 12, width: "100%", resize: "vertical", marginTop: 4 }} /></div>
+        </div>
+        <div style={{ padding: "14px 22px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
+          <button onClick={() => { onSave(d); onClose(); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
+  const [reports, setReports] = useState(() => loadReports());
+  const [reportModal, setReportModal] = useState(null);
+  const saveReport = (r) => {
+    setReports(p => {
+      const exists = p.find(x => x.id === r.id);
+      const next = exists ? p.map(x => x.id === r.id ? r : x) : [...p, r];
+      saveReports(next); return next;
+    });
+  };
+  const delReport = (id) => { setReports(p => { const n = p.filter(r => r.id !== id); saveReports(n); return n; }); };
+
+  const reportingTasks = tasks.filter(t => t.category === "Reporting" || (settings.categories||[]).find(c => c.name === t.category && c.name.toLowerCase().includes("report")));
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {/* ── Bloc 1 : Tâches Reporting ── */}
+      <div style={{ background: "white", borderRadius: 16, border: "1px solid #ECEAE5", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ padding: "14px 20px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>☰ Tâches Reporting <span style={{ fontSize: 11, color: "#AAA", fontWeight: 400 }}>({reportingTasks.length})</span></div>
+        </div>
+        {reportingTasks.length === 0 ? (
+          <div style={{ padding: "30px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucune tâche dans la catégorie Reporting</div>
+        ) : (
+          <div style={{ maxHeight: 340, overflowY: "auto" }}>
+            {reportingTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i+1} onDelete={() => {}} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={{ title: 220, status: 72, category: 90, type: 72, created: 82, due: 82 }} settings={settings} />)}
+          </div>
+        )}
+      </div>
+
+      {/* ── Bloc 2 : Reportings ── */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>📊 Mes Reportings</div>
+          <button onClick={() => setReportModal({})} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>+ Nouveau reporting</button>
+        </div>
+        {reports.length === 0 ? (
+          <div style={{ background: "white", borderRadius: 14, border: "1px dashed #E0E0E0", padding: "40px", textAlign: "center", color: "#CCC" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
+            <div style={{ fontSize: 13, fontFamily: "'Lora',serif" }}>Aucun reporting — cliquez sur "+ Nouveau reporting" pour commencer</div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+            {reports.map(r => (
+              <div key={r.id} style={{ position: "relative" }}>
+                <ReportCard report={r} onClick={() => setReportModal(r)} />
+                <button onClick={(e) => { e.stopPropagation(); delReport(r.id); }}
+                  style={{ position: "absolute", top: 10, right: 10, border: "none", background: "rgba(255,255,255,0.8)", borderRadius: "50%", width: 22, height: 22, cursor: "pointer", fontSize: 12, color: "#E74C3C", display: "flex", alignItems: "center", justifyContent: "center" }}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {reportModal !== null && <ReportModal report={Object.keys(reportModal).length > 0 ? reportModal : null} onSave={saveReport} onClose={() => setReportModal(null)} />}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   PAYMENTS VIEW
+═══════════════════════════════════════════════ */
+const PAYMENT_STATUSES = [
+  { id: "pending",   label: "En attente",  bg: "#FEF9C3", color: "#A16207", icon: "⏳" },
+  { id: "approved",  label: "Validé",      bg: "#DBEAFE", color: "#1D4ED8", icon: "✓"  },
+  { id: "paid",      label: "Payé",        bg: "#D1FAE5", color: "#065F46", icon: "✅" },
+  { id: "rejected",  label: "Refusé",      bg: "#FEE2E2", color: "#B91C1C", icon: "✗"  },
+  { id: "urgent",    label: "Urgent",      bg: "#FDEDEC", color: "#C0392B", icon: "🚨" },
+];
+
+function fmtEuro(n) { return n ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n) : "—"; }
+function loadPayments() { try { const s = localStorage.getItem(PAYMENTS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
+function savePayments(p) { try { localStorage.setItem(PAYMENTS_KEY, JSON.stringify(p)); } catch {} }
+
+function PaymentModal({ payment, onSave, onClose }) {
+  const [d, setD] = useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", notes: "" });
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>💶 {payment ? "Modifier le paiement" : "Nouveau paiement"}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+        </div>
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FOURNISSEUR</label>
+              <input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DEMANDEUR</label>
+              <input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE DEMANDE</label>
+              <input type="date" value={d.requestDate} onChange={e => setD({...d, requestDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE PAIEMENT ESTIMÉE</label>
+              <input type="date" value={d.estimatedDate} onChange={e => setD({...d, estimatedDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>MONTANT (€)</label>
+              <input type="number" value={d.amount} onChange={e => setD({...d, amount: e.target.value})} placeholder="0" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
+              <select value={d.status} onChange={e => setD({...d, status: e.target.value})} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }}>
+                {PAYMENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
+              </select></div>
+          </div>
+          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>NOTES</label>
+            <textarea value={d.notes||""} onChange={e => setD({...d, notes: e.target.value})} rows={2} style={{ ...S.input, fontSize: 12, width: "100%", resize: "vertical", marginTop: 4 }} /></div>
+        </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
+          <button onClick={() => { if (d.supplier) { onSave(d); onClose(); } }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsView() {
+  const [payments, setPayments] = useState(() => loadPayments());
+  const [modal, setModal] = useState(null);
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [sortField, setSortField] = useState("estimatedDate");
+
+  const savePayment = (p) => {
+    setPayments(prev => {
+      const exists = prev.find(x => x.id === p.id);
+      const next = exists ? prev.map(x => x.id === p.id ? p : x) : [...prev, p];
+      savePayments(next); return next;
+    });
+  };
+  const delPayment = (id) => { setPayments(p => { const n = p.filter(x => x.id !== id); savePayments(n); return n; }); };
+
+  const filtered = payments
+    .filter(p => filterStatus === "all" || p.status === filterStatus)
+    .sort((a, b) => {
+      if (sortField === "amount") return (parseFloat(b.amount)||0) - (parseFloat(a.amount)||0);
+      const da = a[sortField] || "9999"; const db = b[sortField] || "9999";
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
+
+  const pending = payments.filter(p => p.status !== "paid" && p.status !== "rejected");
+  const totalPending = pending.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+
+  // Synthèse par date estimée (paiements non soldés)
+  const byDate = {};
+  pending.forEach(p => {
+    const k = p.estimatedDate || "Sans date";
+    if (!byDate[k]) byDate[k] = { total: 0, count: 0, items: [] };
+    byDate[k].total += parseFloat(p.amount) || 0;
+    byDate[k].count++;
+    byDate[k].items.push(p.supplier);
+  });
+  const sortedDates = Object.keys(byDate).sort((a, b) => a === "Sans date" ? 1 : b === "Sans date" ? -1 : a < b ? -1 : 1);
+
+  const today_str = today();
+  const getUrgency = (p) => {
+    if (!p.estimatedDate || p.status === "paid") return null;
+    if (p.estimatedDate < today_str) return "overdue";
+    const diff = (new Date(p.estimatedDate) - new Date()) / 86400000;
+    if (diff <= 3) return "urgent";
+    if (diff <= 7) return "soon";
+    return null;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* ── Header ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>💶 Paiements fournisseurs</div>
+          <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 2 }}>{pending.length} en attente · Total : {fmtEuro(totalPending)}</div>
+        </div>
+        <button onClick={() => setModal({})} style={{ ...S.btn("#102A63"), padding: "8px 18px", fontSize: 12 }}>+ Nouveau paiement</button>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 20, alignItems: "start" }}>
+        {/* ── Tableau principal ── */}
+        <div style={{ background: "white", borderRadius: 16, border: "1px solid #ECEAE5", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+          {/* Filtres */}
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #F0F0F0", display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginRight: 4 }}>FILTRER :</span>
+            {[{ id: "all", label: "Tous" }, ...PAYMENT_STATUSES].map(s => (
+              <button key={s.id} onClick={() => setFilterStatus(s.id)}
+                style={{ border: `1px solid ${filterStatus === s.id ? "#102A63" : "#E0E0E0"}`, background: filterStatus === s.id ? "#102A63" : "white", color: filterStatus === s.id ? "white" : "#888", borderRadius: 5, padding: "2px 8px", fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>
+                {s.icon ? `${s.icon} ` : ""}{s.label}
+              </button>
+            ))}
+          </div>
+          {/* En-têtes */}
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 90px 1fr 100px 100px 90px 32px", gap: 0, padding: "8px 16px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
+            {[["FOURNISSEUR","supplier"],["DATE DEM.","requestDate"],["DEMANDEUR","requester"],["PAIEMENT EST.","estimatedDate"],["MONTANT","amount"],["STATUT",null]].map(([label, field]) => (
+              <div key={label} onClick={() => field && setSortField(field)}
+                style={{ fontSize: 9, fontWeight: 700, color: sortField === field ? "#102A63" : "#AAA", fontFamily: "'DM Mono',monospace", cursor: field ? "pointer" : "default", userSelect: "none" }}>
+                {label}{sortField === field ? " ▲" : ""}
+              </div>
+            ))}
+            <div />
+          </div>
+          {/* Lignes */}
+          {filtered.length === 0 ? (
+            <div style={{ padding: "30px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucun paiement</div>
+          ) : (
+            filtered.map((p, i) => {
+              const st = PAYMENT_STATUSES.find(s => s.id === p.status) || PAYMENT_STATUSES[0];
+              const urg = getUrgency(p);
+              return (
+                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "2fr 90px 1fr 100px 100px 90px 32px", gap: 0, padding: "10px 16px", borderBottom: "1px solid #F8F8F8",
+                  background: urg === "overdue" ? "#FFF5F5" : urg === "urgent" ? "#FFFBEB" : i % 2 === 0 ? "white" : "#FAFAFA",
+                  cursor: "pointer" }}
+                  onClick={() => setModal(p)}>
+                  <div style={{ fontSize: 12, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                    {urg === "overdue" && <span title="En retard">🚨</span>}
+                    {urg === "urgent" && <span title="Urgent">⚠️</span>}
+                    {p.supplier}
+                  </div>
+                  <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#888" }}>{p.requestDate ? p.requestDate.split("-").reverse().join("/") : "—"}</div>
+                  <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#555" }}>{p.requester || "—"}</div>
+                  <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>{p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}</div>
+                  <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 700 }}>{fmtEuro(p.amount)}</div>
+                  <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 7px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
+                  <button onClick={(e) => { e.stopPropagation(); delPayment(p.id); }} style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 14, padding: 0 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"} onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
+                </div>
+              );
+            })
+          )}
+          {filtered.length > 0 && (
+            <div style={{ padding: "10px 16px", background: "#F8F9FB", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 16 }}>
+              <span style={{ fontSize: 10, color: "#888", fontFamily: "'DM Mono',monospace" }}>TOTAL AFFICHÉ</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(filtered.reduce((s, p) => s + (parseFloat(p.amount)||0), 0))}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Synthèse latérale ── */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ background: "linear-gradient(135deg, #102A63 0%, #1a3d8f 100%)", borderRadius: 16, padding: "18px", color: "white", boxShadow: "0 4px 16px rgba(16,42,99,0.3)" }}>
+            <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", opacity: 0.7, marginBottom: 4 }}>TOTAL EN ATTENTE</div>
+            <div style={{ fontSize: 26, fontWeight: 700, fontFamily: "'Lora',serif" }}>{fmtEuro(totalPending)}</div>
+            <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", opacity: 0.6, marginTop: 4 }}>{pending.length} paiement{pending.length > 1 ? "s" : ""} · {payments.filter(p => p.status === "paid").length} payé{payments.filter(p => p.status === "paid").length > 1 ? "s" : ""}</div>
+          </div>
+
+          <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "14px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#AAA", marginBottom: 12, letterSpacing: "0.06em" }}>PAR DATE ESTIMÉE</div>
+            {sortedDates.length === 0 ? (
+              <div style={{ fontSize: 10, color: "#CCC", fontFamily: "'DM Mono',monospace", textAlign: "center", padding: "12px 0" }}>Aucun paiement en attente</div>
+            ) : sortedDates.map(date => {
+              const grp = byDate[date];
+              const isPast = date !== "Sans date" && date < today_str;
+              const isSoon = date !== "Sans date" && !isPast && (new Date(date) - new Date()) / 86400000 <= 7;
+              return (
+                <div key={date} style={{ marginBottom: 10, padding: "10px", background: isPast ? "#FFF5F5" : isSoon ? "#FFFBEB" : "#F8F9FB", borderRadius: 10, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'DM Mono',monospace" }}>
+                      {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}
+                      {date === "Sans date" ? "Sans date" : date.split("-").reverse().join("/")}
+                    </div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(grp.total)}</div>
+                  </div>
+                  <div style={{ fontSize: 9, color: "#888", fontFamily: "'DM Mono',monospace", marginTop: 3 }}>{grp.count} paiement{grp.count > 1 ? "s" : ""} · {grp.items.slice(0,2).join(", ")}{grp.items.length > 2 ? "…" : ""}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {modal !== null && <PaymentModal payment={Object.keys(modal).length > 0 ? modal : null} onSave={savePayment} onClose={() => setModal(null)} />}
     </div>
   );
 }
@@ -2419,6 +2841,8 @@ function App() {
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
+          {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
+          {view === "payments"      && <PaymentsView />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
       )}
