@@ -2037,10 +2037,32 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
 
   return (
     <React.Fragment>
-      <div style={{ display: "grid", gridTemplateColumns: "16px 56px 1fr 160px 88px 88px 28px 28px", gap: 0,
+      <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 160px 88px 88px 28px 28px", gap: 0,
         padding: isIndented ? "5px 8px 5px 32px" : "5px 8px",
         borderBottom: "1px solid #F5F5F5", alignItems: "center",
         background: isIndented ? "#FAFBFF" : "white" }}>
+
+        {/* Ajouter sous-tâche */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {depth === 0 && onAddSubtask && (
+            <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
+              title="Ajouter une sous-tâche"
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 14, padding: 0, lineHeight: 1 }}
+              onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
+              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>⊕</button>
+          )}
+        </div>
+
+        {/* Ajouter sous-tâche */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {depth === 0 && onAddSubtask && (
+            <button onClick={() => { onAddSubtask(task.id); setExpanded(true); }}
+              title="Ajouter une sous-tâche"
+              style={{ border: "none", background: "none", cursor: "pointer", color: "#CCC", fontSize: 14, padding: 0, lineHeight: 1 }}
+              onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
+              onMouseLeave={e => e.currentTarget.style.color = "#CCC"}>⊕</button>
+          )}
+        </div>
 
         {/* Checkbox */}
         <button onClick={toggle}
@@ -2129,23 +2151,12 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
           onUpdate={updSub => onUpdate({ ...task, subtasks: task.subtasks.map(s => s.id === updSub.id ? updSub : s) })}
           onDelete={subId => onUpdate({ ...task, subtasks: task.subtasks.filter(s => s.id !== subId) })} />
       ))}
-      {/* Bouton + sous-tâche visible seulement si expanded ou pas encore de sous-tâches et depth===0 */}
-      {depth === 0 && (expanded || (task.subtasks||[]).length === 0) && onAddSubtask && (
-        <div style={{ padding: "2px 8px 3px 34px", background: "white", borderBottom: "1px solid #F8F8F8" }}>
-          <button type="button" onClick={() => onAddSubtask(task.id)}
-            style={{ border: "none", background: "none", color: "#BBB", fontSize: 9, cursor: "pointer",
-              fontFamily: "'Lora',serif", padding: 0 }}
-            onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
-            onMouseLeave={e => e.currentTarget.style.color = "#BBB"}>
-            + sous-tâche
-          </button>
-        </div>
-      )}
     </React.Fragment>
   );
 }
 
 /* ── ReportModal ── */
+─ */
 function ReportModal({ report, onSave, onClose }) {
   const empty = {
     id: uid(), name: "", type: "", status: "project",
@@ -2284,7 +2295,7 @@ function ReportModal({ report, onSave, onClose }) {
             ) : (
               <div style={{ border: "1px solid #ECEAE5", borderRadius: 10, overflow: "hidden" }}>
                 {/* En-têtes */}
-                <div style={{ display: "grid", gridTemplateColumns: "16px 56px 1fr 160px 88px 88px 28px 28px",
+                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 160px 88px 88px 28px 28px",
                   padding: "5px 8px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
                   <div />
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif" }}>PRIO.</div>
