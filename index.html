@@ -2179,59 +2179,105 @@ const PAYMENT_STATUSES = [
   { id: "urgent",    label: "Urgent",      bg: "#FDEDEC", color: "#C0392B", icon: "🚨" },
 ];
 
-function fmtEuro(n) { return n ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n) : "—"; }
+function fmtEuro(n) {
+  if (n === "" || n === null || n === undefined) return "—";
+  const num = typeof n === "string" ? parseFloat(n.replace(",", ".")) : n;
+  if (isNaN(num)) return "—";
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
+}
+function parseAmount(v) {
+  if (!v && v !== 0) return "";
+  return String(v).replace(".", ",");
+}
 function loadPayments() { try { const s = localStorage.getItem(PAYMENTS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
 function savePayments(p) { try { localStorage.setItem(PAYMENTS_KEY, JSON.stringify(p)); } catch {} }
 
-function PaymentModal({ payment, onSave, onClose }) {
-  const [d, setD] = useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", notes: "" });
+function PaymentModal({ payment, onSave, onClose, settings }) {
+  const [d, setD] = React.useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", notes: "" });
+  const [amountDisplay, setAmountDisplay] = React.useState(parseAmount(payment ? payment.amount : ""));
+
+  const handleAmountChange = (e) => {
+    const raw = e.target.value;
+    setAmountDisplay(raw);
+    const numeric = raw.replace(/\s/g, "").replace(",", ".");
+    setD({ ...d, amount: numeric });
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}
       onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
       onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
-      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 500, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
+      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 540, maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
         <div style={{ padding: "16px 20px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>💶 {payment ? "Modifier le paiement" : "Nouveau paiement"}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{payment ? "Modifier le paiement" : "Nouveau paiement"}</div>
           <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
         </div>
         <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FOURNISSEUR</label>
-              <input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DEMANDEUR</label>
-              <input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>FOURNISSEUR</label>
+              <input value={d.supplier} onChange={e => setD({...d, supplier: e.target.value})} placeholder="Nom du fournisseur" style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DEMANDEUR</label>
+              <input value={d.requester} onChange={e => setD({...d, requester: e.target.value})} placeholder="Nom du demandeur" style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
+            </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE DEMANDE</label>
-              <input type="date" value={d.requestDate} onChange={e => setD({...d, requestDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE PAIEMENT ESTIMÉE</label>
-              <input type="date" value={d.estimatedDate} onChange={e => setD({...d, estimatedDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE DEMANDE</label>
+              <input type="date" value={d.requestDate} onChange={e => setD({...d, requestDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE PAIEMENT ESTIMÉE</label>
+              <input type="date" value={d.estimatedDate} onChange={e => setD({...d, estimatedDate: e.target.value})} onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }} style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
+            </div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>MONTANT (€)</label>
-              <input type="number" value={d.amount} onChange={e => setD({...d, amount: e.target.value})} placeholder="0" style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }} /></div>
-            <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
-              <select value={d.status} onChange={e => setD({...d, status: e.target.value})} style={{ ...S.input, fontSize: 12, width: "100%", marginTop: 4 }}>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>MONTANT (€)</label>
+              <input value={amountDisplay} onChange={handleAmountChange} placeholder="0,00" style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4, fontFamily: "'DM Mono',monospace" }} />
+            </div>
+            <div>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
+              <select value={d.status} onChange={e => setD({...d, status: e.target.value})} style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }}>
                 {PAYMENT_STATUSES.map(s => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
-              </select></div>
+              </select>
+            </div>
           </div>
-          <div><label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>NOTES</label>
-            <textarea value={d.notes||""} onChange={e => setD({...d, notes: e.target.value})} rows={2} style={{ ...S.input, fontSize: 12, width: "100%", resize: "vertical", marginTop: 4 }} /></div>
+          <div>
+            <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6, display: "block" }}>NOTES</label>
+            <RichTextArea value={d.notes || ""} onChange={v => setD({...d, notes: v})} placeholder="Notes sur ce paiement…" rows={4} />
+          </div>
         </div>
         <div style={{ padding: "12px 20px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
-          <button onClick={() => { if (d.supplier) { onSave(d); onClose(); } }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 11 }}>Annuler</button>
+          <button onClick={() => { if (d.supplier) { onSave(d); onClose(); } }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>✓ Enregistrer</button>
         </div>
       </div>
     </div>
   );
 }
 
-function PaymentsView() {
-  const [payments, setPayments] = useState(() => loadPayments());
-  const [modal, setModal] = useState(null);
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [sortField, setSortField] = useState("estimatedDate");
+function PaymentsView({ settings }) {
+  const [payments, setPayments] = React.useState(() => loadPayments());
+  const [modal, setModal] = React.useState(null);
+  const [noteModal, setNoteModal] = React.useState(null); // { payment }
+  const [filterStatus, setFilterStatus] = React.useState("all");
+  const [sortField, setSortField] = React.useState("estimatedDate");
+  const [sortAsc, setSortAsc] = React.useState(true);
+  const [colWidths, setColWidths] = React.useState({ supplier: 160, requestDate: 90, requester: 110, estimatedDate: 110, amount: 110, status: 100 });
+  const resizing = React.useRef(null);
+
+  const startResize = (col, e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = colWidths[col];
+    const onMove = (ev) => setColWidths(w => ({ ...w, [col]: Math.max(60, startW + ev.clientX - startX) }));
+    const onUp = () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
 
   const savePayment = (p) => {
     setPayments(prev => {
@@ -2241,28 +2287,17 @@ function PaymentsView() {
     });
   };
   const delPayment = (id) => { setPayments(p => { const n = p.filter(x => x.id !== id); savePayments(n); return n; }); };
-
-  const filtered = payments
-    .filter(p => filterStatus === "all" || p.status === filterStatus)
-    .sort((a, b) => {
-      if (sortField === "amount") return (parseFloat(b.amount)||0) - (parseFloat(a.amount)||0);
-      const da = a[sortField] || "9999"; const db = b[sortField] || "9999";
-      return da < db ? -1 : da > db ? 1 : 0;
+  const saveNote = (id, notes) => {
+    setPayments(prev => {
+      const next = prev.map(x => x.id === id ? { ...x, notes } : x);
+      savePayments(next); return next;
     });
+  };
 
-  const pending = payments.filter(p => p.status !== "paid" && p.status !== "rejected");
-  const totalPending = pending.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-
-  // Synthèse par date estimée (paiements non soldés)
-  const byDate = {};
-  pending.forEach(p => {
-    const k = p.estimatedDate || "Sans date";
-    if (!byDate[k]) byDate[k] = { total: 0, count: 0, items: [] };
-    byDate[k].total += parseFloat(p.amount) || 0;
-    byDate[k].count++;
-    byDate[k].items.push(p.supplier);
-  });
-  const sortedDates = Object.keys(byDate).sort((a, b) => a === "Sans date" ? 1 : b === "Sans date" ? -1 : a < b ? -1 : 1);
+  const handleSort = (field) => {
+    if (sortField === field) setSortAsc(a => !a);
+    else { setSortField(field); setSortAsc(true); }
+  };
 
   const today_str = today();
   const getUrgency = (p) => {
@@ -2274,12 +2309,55 @@ function PaymentsView() {
     return null;
   };
 
+  const filtered = payments
+    .filter(p => filterStatus === "all" || p.status === filterStatus)
+    .sort((a, b) => {
+      let va = a[sortField] || "", vb = b[sortField] || "";
+      if (sortField === "amount") { va = parseFloat(String(a.amount).replace(",","."))||0; vb = parseFloat(String(b.amount).replace(",","."))||0; }
+      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      return sortAsc ? cmp : -cmp;
+    });
+
+  const pending = payments.filter(p => p.status !== "paid" && p.status !== "rejected");
+  const totalPending = pending.reduce((s, p) => s + (parseFloat(String(p.amount).replace(",",".")) || 0), 0);
+
+  const byDate = {};
+  pending.forEach(p => {
+    const k = p.estimatedDate || "Sans date";
+    if (!byDate[k]) byDate[k] = { total: 0, count: 0, items: [] };
+    byDate[k].total += parseFloat(String(p.amount).replace(",",".")) || 0;
+    byDate[k].count++;
+    byDate[k].items.push(p.supplier);
+  });
+  const sortedDates = Object.keys(byDate).sort((a, b) => a === "Sans date" ? 1 : b === "Sans date" ? -1 : a < b ? -1 : 1);
+
+  const colDef = [
+    { id: "supplier",      label: "FOURNISSEUR" },
+    { id: "requestDate",   label: "DATE DEM." },
+    { id: "requester",     label: "DEMANDEUR" },
+    { id: "estimatedDate", label: "PAIEMENT EST." },
+    { id: "amount",        label: "MONTANT" },
+    { id: "status",        label: "STATUT" },
+  ];
+
+  const gridTemplate = colDef.map(c => colWidths[c.id] + "px").join(" ") + " 56px";
+
+  const HeaderCell = ({ col }) => (
+    <div style={{ display: "flex", alignItems: "center", gap: 2, position: "relative", userSelect: "none" }}>
+      <span onClick={() => handleSort(col.id)} style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", cursor: "pointer", whiteSpace: "nowrap" }}>
+        {col.label}{sortField === col.id ? (sortAsc ? " ▲" : " ▼") : ""}
+      </span>
+      <div onMouseDown={(e) => startResize(col.id, e)}
+        style={{ position: "absolute", right: -4, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 1 }} />
+    </div>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* ── Header ── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>💶 Paiements fournisseurs</div>
+          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Paiements fournisseurs</div>
           <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 2 }}>{pending.length} en attente · Total : {fmtEuro(totalPending)}</div>
         </div>
         <button onClick={() => setModal({})} style={{ ...S.btn("#102A63"), padding: "8px 18px", fontSize: 12 }}>+ Nouveau paiement</button>
@@ -2298,48 +2376,65 @@ function PaymentsView() {
               </button>
             ))}
           </div>
-          {/* En-têtes */}
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 90px 1fr 100px 100px 90px 32px", gap: 0, padding: "8px 16px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0" }}>
-            {[["FOURNISSEUR","supplier"],["DATE DEM.","requestDate"],["DEMANDEUR","requester"],["PAIEMENT EST.","estimatedDate"],["MONTANT","amount"],["STATUT",null]].map(([label, field]) => (
-              <div key={label} onClick={() => field && setSortField(field)}
-                style={{ fontSize: 9, fontWeight: 700, color: sortField === field ? "#102A63" : "#AAA", fontFamily: "'DM Mono',monospace", cursor: field ? "pointer" : "default", userSelect: "none" }}>
-                {label}{sortField === field ? " ▲" : ""}
-              </div>
-            ))}
-            <div />
-          </div>
-          {/* Lignes */}
-          {filtered.length === 0 ? (
-            <div style={{ padding: "30px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucun paiement</div>
-          ) : (
-            filtered.map((p, i) => {
-              const st = PAYMENT_STATUSES.find(s => s.id === p.status) || PAYMENT_STATUSES[0];
-              const urg = getUrgency(p);
-              return (
-                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "2fr 90px 1fr 100px 100px 90px 32px", gap: 0, padding: "10px 16px", borderBottom: "1px solid #F8F8F8",
-                  background: urg === "overdue" ? "#FFF5F5" : urg === "urgent" ? "#FFFBEB" : i % 2 === 0 ? "white" : "#FAFAFA",
-                  cursor: "pointer" }}
-                  onClick={() => setModal(p)}>
-                  <div style={{ fontSize: 12, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                    {urg === "overdue" && <span title="En retard">🚨</span>}
-                    {urg === "urgent" && <span title="Urgent">⚠️</span>}
-                    {p.supplier}
+
+          {/* Tableau scrollable horizontalement */}
+          <div style={{ overflowX: "auto" }}>
+            {/* En-têtes */}
+            <div style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "8px 12px", background: "#FAFAFA", borderBottom: "1px solid #F0F0F0", minWidth: "fit-content" }}>
+              {colDef.map(col => <HeaderCell key={col.id} col={col} />)}
+              <div />
+            </div>
+
+            {/* Lignes */}
+            {filtered.length === 0 ? (
+              <div style={{ padding: "30px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucun paiement</div>
+            ) : (
+              filtered.map((p, i) => {
+                const st = PAYMENT_STATUSES.find(s => s.id === p.status) || PAYMENT_STATUSES[0];
+                const urg = getUrgency(p);
+                return (
+                  <div key={p.id}
+                    style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "8px 12px", borderBottom: "1px solid #F5F5F5",
+                      background: i % 2 === 0 ? "white" : "#FAFAFA",
+                      minWidth: "fit-content", alignItems: "center", cursor: "pointer" }}
+                    onClick={() => setModal(p)}>
+                    <div style={{ fontSize: 12, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, overflow: "hidden" }}>
+                      {urg === "overdue" && <span title="En retard" style={{ flexShrink: 0 }}>🚨</span>}
+                      {urg === "urgent"  && <span title="Urgent"    style={{ flexShrink: 0 }}>⚠️</span>}
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.supplier}</span>
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#888" }}>{p.requestDate ? p.requestDate.split("-").reverse().join("/") : "—"}</div>
+                    <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#555" }}>{p.requester || "—"}</div>
+                    <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>
+                      {p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}
+                    </div>
+                    <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 600 }}>{fmtEuro(p.amount)}</div>
+                    <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 7px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <button onClick={(e) => { e.stopPropagation(); setNoteModal(p); }}
+                        title={p.notes ? "Voir/modifier la note" : "Ajouter une note"}
+                        style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, opacity: p.notes ? 1 : 0.35, padding: 0 }}
+                        onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                        onMouseLeave={e => e.currentTarget.style.opacity = p.notes ? "1" : "0.35"}>
+                        📝
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); delPayment(p.id); }}
+                        style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 14, padding: 0 }}
+                        onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"}
+                        onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
+                    </div>
                   </div>
-                  <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#888" }}>{p.requestDate ? p.requestDate.split("-").reverse().join("/") : "—"}</div>
-                  <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#555" }}>{p.requester || "—"}</div>
-                  <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>{p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}</div>
-                  <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#2C3E50", fontWeight: 700 }}>{fmtEuro(p.amount)}</div>
-                  <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 7px", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
-                  <button onClick={(e) => { e.stopPropagation(); delPayment(p.id); }} style={{ border: "none", background: "none", cursor: "pointer", color: "#DDD", fontSize: 14, padding: 0 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#E74C3C"} onMouseLeave={e => e.currentTarget.style.color = "#DDD"}>×</button>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
+
           {filtered.length > 0 && (
             <div style={{ padding: "10px 16px", background: "#F8F9FB", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 16 }}>
               <span style={{ fontSize: 10, color: "#888", fontFamily: "'DM Mono',monospace" }}>TOTAL AFFICHÉ</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(filtered.reduce((s, p) => s + (parseFloat(p.amount)||0), 0))}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>
+                {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(",",".")) || 0), 0))}
+              </span>
             </div>
           )}
         </div>
@@ -2361,7 +2456,7 @@ function PaymentsView() {
               const isPast = date !== "Sans date" && date < today_str;
               const isSoon = date !== "Sans date" && !isPast && (new Date(date) - new Date()) / 86400000 <= 7;
               return (
-                <div key={date} style={{ marginBottom: 10, padding: "10px", background: isPast ? "#FFF5F5" : isSoon ? "#FFFBEB" : "#F8F9FB", borderRadius: 10, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
+                <div key={date} style={{ marginBottom: 10, padding: "10px", background: "#F8F9FB", borderRadius: 10, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'DM Mono',monospace" }}>
                       {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}
@@ -2377,7 +2472,41 @@ function PaymentsView() {
         </div>
       </div>
 
-      {modal !== null && <PaymentModal payment={Object.keys(modal).length > 0 ? modal : null} onSave={savePayment} onClose={() => setModal(null)} />}
+      {/* ── Modals ── */}
+      {modal !== null && (
+        <PaymentModal
+          payment={Object.keys(modal).length > 0 ? modal : null}
+          onSave={savePayment}
+          onClose={() => setModal(null)}
+          settings={settings}
+        />
+      )}
+
+      {/* Note rapide modal */}
+      {noteModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 3000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, backdropFilter: "blur(4px)" }}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+          onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; setNoteModal(null); } }}>
+          <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>📝 Note — {noteModal.supplier}</div>
+              <button onClick={() => setNoteModal(null)} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+            </div>
+            <div style={{ padding: "14px 18px" }}>
+              <RichTextArea
+                value={noteModal.notes || ""}
+                onChange={v => setNoteModal({ ...noteModal, notes: v })}
+                placeholder="Saisir une note sur ce paiement…"
+                rows={5}
+              />
+            </div>
+            <div style={{ padding: "12px 18px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+              <button onClick={() => setNoteModal(null)} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 14px", fontSize: 11 }}>Annuler</button>
+              <button onClick={() => { saveNote(noteModal.id, noteModal.notes); setNoteModal(null); }} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 11 }}>✓ Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2842,7 +2971,7 @@ function App() {
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
-          {view === "payments"      && <PaymentsView />}
+          {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
       )}
