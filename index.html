@@ -2541,9 +2541,20 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</span>
                 <div onMouseDown={e => startResizeRt("type", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
-              <div style={{ maxWidth: 200, flexShrink: 0, position: "relative" }}>
+              <div style={{ width: 120, flexShrink: 0, position: "relative" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉTIQUETTE</span>
               </div>
+              <div style={{ flex: 1 }} />
+              <div style={{ width: rtColW.created, flexShrink: 0, position: "relative", textAlign: "right" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CRÉÉE</span>
+                <div onMouseDown={e => startResizeRt("created", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
+              </div>
+              <div style={{ width: 16, flexShrink: 0 }} />
+              <div style={{ width: rtColW.due, flexShrink: 0, position: "relative", textAlign: "right" }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉCHÉANCE</span>
+                <div onMouseDown={e => startResizeRt("due", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
+              </div>
+              <div style={{ width: 30, flexShrink: 0 }} />{/* actions */}
             </div>
             {/* Lignes */}
             <div style={{ maxHeight: 360, overflowY: "auto" }}>
@@ -3400,7 +3411,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.065<br />28/04/26 à 23h15
+          v.0.066<br />28/04/26 à 23h20
         </div>
       </div>
 
