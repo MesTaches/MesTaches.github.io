@@ -187,6 +187,25 @@ function toggleMode() {
   document.getElementById('fb-title').textContent = _fbIsRegister ? 'CRÉER UN COMPTE' : 'CONNEXION';
 }
 
+async function fbResetPassword() {
+  const email = document.getElementById('fb-email').value.trim();
+  if (!email) {
+    document.getElementById('fb-error').textContent = 'Entrez votre email pour réinitialiser le mot de passe.';
+    document.getElementById('fb-error').style.display = 'block';
+    return;
+  }
+  try {
+    await _auth.sendPasswordResetEmail(email);
+    document.getElementById('fb-error').style.color = '#27AE60';
+    document.getElementById('fb-error').textContent = 'Email de réinitialisation envoyé ! Vérifiez votre boite mail.';
+    document.getElementById('fb-error').style.display = 'block';
+  } catch(err) {
+    document.getElementById('fb-error').style.color = '#C0392B';
+    document.getElementById('fb-error').textContent = err.code === 'auth/user-not-found' ? 'Aucun compte avec cet email.' : err.message;
+    document.getElementById('fb-error').style.display = 'block';
+  }
+}
+
 async function fbLogout() {
   if (!window._logoutConfirm) {
     window._logoutConfirm = true;
@@ -228,6 +247,12 @@ async function fbLogout() {
         style="border:none;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer;background:#102A63;color:white;font-family:'DM Mono',monospace;letter-spacing:0.04em;width:100%;margin-bottom:12px;touch-action:manipulation">
         → Se connecter
       </button>
+      <div style="text-align:center;margin-bottom:6px">
+        <button onclick="fbResetPassword()"
+          style="border:none;background:none;font-size:11px;color:#AAA;cursor:pointer;font-family:'Lora',serif;text-decoration:underline;touch-action:manipulation">
+          Mot de passe oublié ?
+        </button>
+      </div>
       <div style="text-align:center">
         <button id="fb-toggle" onclick="toggleMode()"
           style="border:none;background:none;font-size:12px;color:#102A63;cursor:pointer;font-family:'DM Mono',monospace;text-decoration:underline;touch-action:manipulation">
@@ -3499,7 +3524,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.071<br />28/04/26 à 23h45
+          v.0.072<br />28/04/26 à 23h50
         </div>
       </div>
 
