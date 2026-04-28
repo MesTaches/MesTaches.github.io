@@ -2298,7 +2298,7 @@ function ReportModal({ report, onSave, onClose }) {
 
           {/* Ligne 1 : Nom */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>NOM DU REPORTING</label>
+            <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>NOM DU REPORTING</label>
             <input value={d.name} onChange={e => setD({...d, name: e.target.value})} placeholder="Ex: Reporting mensuel CA"
               className="payment-field"
               style={{ ...S.input, fontSize: 13, fontFamily: "'Lora',serif", width: "100%", marginTop: 4, fontWeight: 600 }} />
@@ -2307,7 +2307,7 @@ function ReportModal({ report, onSave, onClose }) {
           {/* Ligne 2 : Type + Statut */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>TYPE DE REPORTING</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>TYPE DE REPORTING</label>
               <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
                 {REPORT_TYPES.map(t => (
                   <button key={t.id} type="button" onClick={() => setD({...d, type: t.id})}
@@ -2321,7 +2321,7 @@ function ReportModal({ report, onSave, onClose }) {
               </div>
             </div>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>STATUT</label>
               <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
                 {REPORT_STATUSES.map(s => (
                   <button key={s.id} type="button" onClick={() => setD({...d, status: s.id})}
@@ -2338,7 +2338,7 @@ function ReportModal({ report, onSave, onClose }) {
 
           {/* Ligne 3 : Description */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DESCRIPTION</label>
+            <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>DESCRIPTION</label>
             <textarea value={d.description || ""} onChange={e => setD({...d, description: e.target.value})} rows={2}
               className="payment-field"
               style={{ ...S.input, fontSize: 11, width: "100%", resize: "vertical", marginTop: 4 }} />
@@ -2347,14 +2347,14 @@ function ReportModal({ report, onSave, onClose }) {
           {/* Ligne 4 : Dates */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE DE CRÉATION</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>DATE DE CRÉATION</label>
               <input type="date" value={d.createdAt || ""} onChange={e => setD({...d, createdAt: e.target.value})}
                 onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
                 className="payment-field"
                 style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
             </div>
             <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>DATE DE PUBLICATION</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace" }}>DATE DE PUBLICATION</label>
               <input type="date" value={d.publishedAt || ""} onChange={e => setD({...d, publishedAt: e.target.value})}
                 onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
                 className="payment-field"
@@ -2365,7 +2365,7 @@ function ReportModal({ report, onSave, onClose }) {
           {/* Ligne 5 : Suivi des tâches */}
           <div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>SUIVI DES TÂCHES</label>
+              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>SUIVI DES TÂCHES</label>
               <div style={{ display: "flex", gap: 6 }}>
                 {(d.tasks || []).length > 0 && (
                   <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>
