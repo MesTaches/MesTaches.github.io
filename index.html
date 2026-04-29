@@ -3762,7 +3762,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       </div>
 
       {/* ── Tableau ── */}
-      <div style={{ flex:1, overflowY:"auto", overflowX:"auto", padding:"0 16px" }}>
+      <div style={{ flex:1, overflowY:"auto", overflowX:"auto", padding:"0 48px" }}>
         <div style={{ minWidth:"max-content" }}>
 
           {/* Header colonnes */}
@@ -3778,6 +3778,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
             <ColHeader label="ENCOURS"   col="authorizedAmount" right />
             <ColHeader label="BESOIN"    col="need" right />
             <ColHeader label="OBTENU"    col="obtainedAmount" right />
+            <div style={{ width:20, flexShrink:0 }} />
             <ColHeader label="ÉTIQUETTE" col="label" />
             <ColHeader label="CLÔTURE"   col="closeDate" />
             <div style={{ width:60, flexShrink:0 }} />
@@ -3826,6 +3827,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.need)}</div>
                 {/* Obtenu */}
                 <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(c.obtainedAmount)}</div>
+                <div style={{ width:20, flexShrink:0 }} />
                 {/* Étiquette */}
                 <div style={{ width:colWidths.label, flexShrink:0, paddingRight:8 }}>
                   <span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lb.label}</span>
@@ -3856,6 +3858,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
               <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totAuth)}</div>
               <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totNeed)}</div>
               <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(totObt)}</div>
+              <div style={{ width:20, flexShrink:0 }} />
               <div style={{ width:colWidths.label, flexShrink:0 }} />
               <div style={{ width:colWidths.closeDate, flexShrink:0 }} />
               <div style={{ width:60, flexShrink:0 }} />
@@ -4169,7 +4172,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.103<br />29/04/26 à 18h25
+          v.0.104<br />29/04/26 à 18h30
         </div>
       </div>
 
