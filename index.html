@@ -2959,7 +2959,7 @@ function PaymentsView({ settings }) {
               <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
                 <div /><div /><div /><div /><div /><div />
                 <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "\'Lora\',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "\'Lora\',serif", textAlign: "right", paddingRight: 4 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "\'Lora\',serif", textAlign: "right", paddingRight: 8 }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
                 <div /><div />
@@ -3528,7 +3528,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.084<br />29/04/26 à 11h20
+          v.0.085<br />29/04/26 à 11h30
         </div>
       </div>
 
