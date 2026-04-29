@@ -30,6 +30,20 @@
     .modal-input-small{font-size:10px !important}
     .task-modal-form input,.task-modal-form select{font-size:10px !important}
     .subtask-modal-form input,.subtask-modal-form select,.subtask-modal-form textarea{font-size:10px !important}
+  
+    /* Cotation modal form fields */
+    .cotation-modal-form input,
+    .cotation-modal-form select,
+    .cotation-modal-form textarea {
+      font-size: 10px !important;
+      font-family: 'Lora', serif !important;
+      padding: 5px 10px !important;
+    }
+    .cotation-modal-form label,
+    .cotation-modal-form .field-label {
+      font-size: 10px !important;
+      font-family: 'Lora', serif !important;
+    }
   </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -344,7 +358,7 @@ function CotationModal({ cotation, onSave, onClose }) {
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id ? "MODIFIER LA DEMANDE" : "NOUVELLE DEMANDE"}</span>
           <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
         </div>
-        <div style={{ padding:"20px 24px", display:"flex", flexDirection:"column", gap:14 }}>
+        <div className="cotation-modal-form" style={{ padding:"20px 24px", display:"flex", flexDirection:"column", gap:14 }}>
           <div style={{ display:"flex", gap:12 }}>
             <div style={{ flex:1 }}>
               {lbl("PRIORITÉ")}
@@ -427,7 +441,7 @@ function CotationView({ settings }) {
   const [noteModal, setNoteModal] = React.useState(null);
   const [sortCol, setSortCol] = React.useState("requestDate");
   const [sortAsc, setSortAsc] = React.useState(false);
-  const [colWidths, setColWidths] = React.useState({ priority:44, clientName:160, clientCode:70, requestDate:82, requester:90, status:88, authorizedAmount:82, need:82, obtainedAmount:82, label:96, closeDate:82 });
+  const [colWidths, setColWidths] = React.useState({ priority:44, clientName:160, clientCode:70, requestDate:82, requester:90, status:88, authorizedAmount:82, need:82, obtainedAmount:90, label:100, closeDate:82 });
 
   const startResize = (col, e) => {
     e.preventDefault();
@@ -461,7 +475,8 @@ function CotationView({ settings }) {
   const handleSort = (col) => { if (sortCol === col) setSortAsc(a => !a); else { setSortCol(col); setSortAsc(true); } };
   const si = (col) => sortCol === col ? (sortAsc ? " ▲" : " ▼") : "";
 
-  const gridTemplate = "28px " + Object.values(colWidths).map(w => w+"px").join(" ") + " 30px 30px";
+  const colOrder = ["priority","clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
+  const gridTemplate = "28px " + colOrder.map(k => (colWidths[k]||82)+"px").join(" ") + " 30px 30px";
 
   const colDefs = [
     { id:"priority", label:"PRIO." },
@@ -513,7 +528,7 @@ function CotationView({ settings }) {
           {colDefs.map(col => (
             <div key={col.id} style={{ position:"relative", display:"flex", alignItems:"center", justifyContent: col.right ? "flex-end" : "flex-start" }}>
               <span onClick={() => handleSort(col.id)}
-                style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
+                style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none", overflow:"hidden", maxWidth:"100%", display:"block" }}>
                 {col.label}{si(col.id)}
               </span>
               <div onMouseDown={(e) => startResize(col.id, e)}
@@ -3843,7 +3858,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.091<br />29/04/26 à 14h32
+          v.0.092<br />29/04/26 à 15h30
         </div>
       </div>
 
@@ -3878,7 +3893,7 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? "100%" : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 16px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? "100%" : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
