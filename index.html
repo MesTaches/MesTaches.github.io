@@ -45,15 +45,12 @@
       font-family: 'Lora', serif !important;
     }
   .tasks2-modal select,
-.tasks2-modal input,
-.tasks2-modal textarea,
-.tasks2-modal option,
-.tasks2-modal select option {
+.tasks2-modal input[type="text"],
+.tasks2-modal input[type="date"],
+.tasks2-modal textarea {
   font-size: 10px !important;
   font-family: 'Lora', serif !important;
-  line-height: 1.4 !important;
 }
-.tasks2-modal select { font-size: 10px !important; }
 </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -3599,7 +3596,11 @@ function fmtT2Eur(v) {
   if (v===""||v===null||v===undefined) return "—";
   const n=parseFloat(String(v).replace(/[\s\u00A0]/g,"").replace(",","."));
   if (isNaN(n)) return "—";
-  return n.toLocaleString("fr-Ffunction Tasks2Modal({ item, onSave, onClose }) {
+  return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €";
+}
+
+/* ── Modal Tasks2 ── */
+function Tasks2Modal({ item, onSave, onClose }) {
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState(() => {
     const base = { priority:"normal", clientName:"", clientCode:"", requestDate:today0,
@@ -3609,6 +3610,16 @@ function fmtT2Eur(v) {
     return base;
   });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const fmtNum = (v) => { const n=parseInt(String(v||"").replace(/[^0-9]/g,"")); return isNaN(n)?"":n.toLocaleString("fr-FR"); };
+  const parseNum = (v) => String(v||"").replace(/[^0-9]/g,"");
+  const [focusField, setFocusField] = React.useState(null);
+  const moneyInput = (field) => ({
+    value: focusField===field ? d[field] : fmtNum(d[field]),
+    onFocus: ()=>setFocusField(field),
+    onBlur: ()=>setFocusField(null),
+    onChange: e=>set(field, parseNum(e.target.value)),
+    style: inp, placeholder:"0", inputMode:"numeric"
+  });
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:3, fontWeight:600, letterSpacing:"0.04em" }}>{t}</div>;
   const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
   return (
@@ -3634,24 +3645,9 @@ function fmtT2Eur(v) {
             <div style={{ flex:1 }}>{lbl("DEMANDEUR")}<input value={d.requester} onChange={e=>set("requester",e.target.value)} style={inp} placeholder="Prénom" /></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:1 }}>{lbl("ENCOURS AUTORISÉ (€)")}<input
-  value={document.activeElement && document.activeElement.dataset.field==="authorizedAmount" ? d.authorizedAmount : (d.authorizedAmount===""?"":Number(String(d.authorizedAmount).replace(/\s/g,"").replace(",","."))||d.authorizedAmount||"").toLocaleString ? (parseFloat(String(d.authorizedAmount).replace(/[\s]/g,"").replace(",","."))||"").toLocaleString("fr-FR",{maximumFractionDigits:0}) : d.authorizedAmount}
-  onFocus={e=>{e.target.dataset.field="authorizedAmount";}}
-  onBlur={e=>{e.target.dataset.field="";}}
-  onChange={e=>set("authorizedAmount", e.target.value.replace(/[^0-9]/g,""))}
-  style={inp} placeholder="0" inputMode="numeric" /></div>
-            <div style={{ flex:1 }}>{lbl("BESOIN (€)")}<input
-  value={document.activeElement && document.activeElement.dataset.field==="need" ? d.need : (parseFloat(String(d.need||"").replace(/[\s]/g,"").replace(",","."))||"").toLocaleString ? (parseFloat(String(d.need||"").replace(/[\s]/g,"").replace(",","."))||"").toLocaleString("fr-FR",{maximumFractionDigits:0}) : d.need}
-  onFocus={e=>{e.target.dataset.field="need";}}
-  onBlur={e=>{e.target.dataset.field="";}}
-  onChange={e=>set("need", e.target.value.replace(/[^0-9]/g,""))}
-  style={inp} placeholder="0" inputMode="numeric" /></div>
-            <div style={{ flex:1 }}>{lbl("MONTANT OBTENU (€)")}<input
-  value={document.activeElement && document.activeElement.dataset.field==="obtainedAmount" ? d.obtainedAmount : (parseFloat(String(d.obtainedAmount||"").replace(/[\s]/g,"").replace(",","."))||"").toLocaleString ? (parseFloat(String(d.obtainedAmount||"").replace(/[\s]/g,"").replace(",","."))||"").toLocaleString("fr-FR",{maximumFractionDigits:0}) : d.obtainedAmount}
-  onFocus={e=>{e.target.dataset.field="obtainedAmount";}}
-  onBlur={e=>{e.target.dataset.field="";}}
-  onChange={e=>set("obtainedAmount", e.target.value.replace(/[^0-9]/g,""))}
-  style={inp} placeholder="0" inputMode="numeric" /></div>
+            <div style={{ flex:1 }}>{lbl("ENCOURS AUTORISÉ (€)")}<input {...moneyInput("authorizedAmount")} /></div>
+            <div style={{ flex:1 }}>{lbl("BESOIN (€)")}<input {...moneyInput("need")} /></div>
+            <div style={{ flex:1 }}>{lbl("MONTANT OBTENU (€)")}<input {...moneyInput("obtainedAmount")} /></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
             <div style={{ flex:1 }}>{lbl("ÉTIQUETTE")}<select value={d.label} onChange={e=>set("label",e.target.value)} style={inp}>
@@ -3690,15 +3686,14 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
   };
   const [deletedItem, setDeletedItem] = React.useState(null);
   const [deleteTimer, setDeleteTimer] = React.useState(null);
-
   const handleDelete = (id) => {
-    const item = items.find(c=>c.id===id);
-    if (!item) return;
-    saveData(items.filter(c=>c.id!==id));
-    setDeletedItem(item);
+    const found = items.find(c=>c.id===id);
+    if (!found) return;
+    const newList = items.filter(c=>c.id!==id);
+    saveData(newList);
+    setDeletedItem(found);
     if (deleteTimer) clearTimeout(deleteTimer);
-    const t = setTimeout(()=>{ setDeletedItem(null); }, 5000);
-    setDeleteTimer(t);
+    setDeleteTimer(setTimeout(()=>setDeletedItem(null), 5000));
   };
   const handleUndo = () => {
     if (!deletedItem) return;
@@ -3801,7 +3796,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
 
       {/* ── Tableau ── */}
       <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
-        <div style={{ padding:"0 48px" }}>
+        <div style={{ padding:"0 48px", background:"transparent" }}>
         <div style={{ minWidth:"max-content" }}>
 
           {/* Header colonnes */}
@@ -3916,24 +3911,17 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       </div>
 
       {modal!==null&&<Tasks2Modal item={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
-
-      {/* Toast suppression */}
-      {deletedItem && (
-        <div style={{ position:"fixed", bottom:24, right:24, zIndex:9999, background:"#2C3E50", color:"white",
-          borderRadius:12, padding:"12px 16px", boxShadow:"0 8px 24px rgba(0,0,0,0.25)",
-          display:"flex", alignItems:"center", gap:12, fontFamily:"'Lora',serif", fontSize:11 }}>
+      {deletedItem&&(
+        <div style={{position:"fixed",bottom:24,right:24,zIndex:9999,background:"#2C3E50",color:"white",
+          borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",
+          display:"flex",alignItems:"center",gap:12,fontFamily:"'Lora',serif",fontSize:11}}>
           <span>« <strong>{(deletedItem.clientName||"Demande").slice(0,30)}</strong> » supprimée</span>
-          <button onClick={handleUndo} style={{ background:"#27AE60", border:"none", borderRadius:6,
-            color:"white", padding:"5px 12px", fontSize:11, cursor:"pointer",
-            fontFamily:"'DM Mono',monospace", fontWeight:700 }}>↩ Annuler</button>
-          <button onClick={()=>setDeletedItem(null)} style={{ background:"none", border:"none",
-            color:"rgba(255,255,255,0.5)", fontSize:16, cursor:"pointer", padding:"0 4px" }}>×</button>
+          <button onClick={handleUndo} style={{background:"#27AE60",border:"none",borderRadius:6,color:"white",
+            padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontWeight:700}}>↩ Annuler</button>
+          <button onClick={()=>setDeletedItem(null)} style={{background:"none",border:"none",
+            color:"rgba(255,255,255,0.5)",fontSize:16,cursor:"pointer",padding:"0 4px"}}>×</button>
         </div>
       )}
-    </div>
-  );
-}
-dal item={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
     </div>
   );
 }
@@ -4229,7 +4217,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.108<br />29/04/26 à 19h00
+          v.0.108<br />29/04/26 à 19h05
         </div>
       </div>
 
