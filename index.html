@@ -657,9 +657,7 @@ const DEFAULT_SETTINGS = {
     { id: "lbl2", name: "Power BI",    color: "#2980B9", bg: "#EBF5FB" },
     { id: "lbl3", name: "Factor",      color: "#27AE60", bg: "#E8F8F5" },
     { id: "lbl4", name: "Financement", color: "#8E44AD", bg: "#F4ECF7" },
-  ],,
-  morningMail: { enabled:false, time:"07:30", to:"", subject:"Ma journée", cc:"", bcc:"", includeDone:false },
-  smtp: { host:"", port:587, secure:false, user:"", pass:"", from:"", enabled:false }
+  ],
 };
 
 function loadSettings() {
@@ -674,7 +672,6 @@ function loadSettings() {
       hiddenTabs: parsed.hiddenTabs || [],
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
       groqKey: (parsed.groqKey || "").trim(),
-      morningMail: parsed.morningMail || DEFAULT_SETTINGS.morningMail,
     };
   } catch { return DEFAULT_SETTINGS; }
 }
@@ -698,99 +695,6 @@ const isOverdue  = (d) => d && new Date(d) < new Date(new Date().toDateString())
 const isToday    = (d) => d && new Date(d).toDateString() === new Date().toDateString();
 const daysBefore = (d, n) => { if (!d) return false; const diff = (new Date(d) - new Date()) / 864e5; return diff >= 0 && diff <= n; };
 const fmtTime = (s) => { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60; return h > 0 ? `${h}h ${String(m).padStart(2,"0")}m` : `${String(m).padStart(2,"0")}:${String(ss).padStart(2,"0")}`; };
-
-const escapeHtml = (str) => String(str || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
-
-const getMyDayTasks = (tasks, includeDone=false) => (tasks || []).filter(t => t.inMyDay && (includeDone || !t.completed));
-
-
-const buildMorningMailSubject = (settings) => (settings?.morningMail?.subject || "Ma journée");
-const buildMorningMailBody = (tasks, settings) => {
-  const lines = [];
-  lines.push((settings?.morningMail?.subject || "Ma journée") + " - " + new Date().toLocaleDateString("fr-FR"));
-  lines.push("");
-  (tasks || []).forEach((t, i) => {
-    lines.push((i+1) + ". " + (t.title || "Sans titre") + (t.dueDate ? " — " + fmtDate(t.dueDate) : "") + (t.priority ? " — " + t.priority : ""));
-    if (t.category) lines.push("   Catégorie : " + t.category);
-    if (t.type) lines.push("   Type : " + t.type);
-    if (t.notes) lines.push("   Notes : " + String(t.notes).replace(/
-/g, ' '));
-    lines.push("");
-  });
-  if (!tasks || !tasks.length) lines.push("Aucune tâche dans Ma journée.");
-  return lines.join("\n");
-};
-
-
-const pushMorningMailLog = (entry) => {
-  try {
-    const key = "morningMailLog";
-    const arr = JSON.parse(localStorage.getItem(key) || "[]");
-    arr.unshift({ ts: new Date().toISOString(), ...entry });
-    localStorage.setItem(key, JSON.stringify(arr.slice(0, 20)));
-  } catch {}
-};
-
-const sendMorningMailSMTP = async (tasks, settings) => {
-  if (!window.require) throw new Error("Fonction SMTP disponible uniquement dans Electron");
-  const nodemailer = window.require("nodemailer");
-  const transport = nodemailer.createTransport({
-    host: settings?.smtp?.host,
-    port: Number(settings?.smtp?.port || 587),
-    secure: !!settings?.smtp?.secure,
-    auth: { user: settings?.smtp?.user, pass: settings?.smtp?.pass }
-  });
-  const html = buildMorningMailHtml(tasks, settings);
-  await transport.sendMail({
-    from: settings?.smtp?.from || settings?.smtp?.user,
-    to: settings?.morningMail?.to,
-    cc: settings?.morningMail?.cc || undefined,
-    bcc: settings?.morningMail?.bcc || undefined,
-    subject: buildMorningMailSubject(settings),
-    text: buildMorningMailBody(tasks, settings),
-    html
-  });
-};
-
-const sendMorningMailDraft = (tasks, settings) => {
-  const subject = encodeURIComponent(buildMorningMailSubject(settings));
-  const body = encodeURIComponent(buildMorningMailBody(tasks, settings));
-  const to = encodeURIComponent(settings?.morningMail?.to || "");
-  const cc = settings?.morningMail?.cc ? `&cc=${encodeURIComponent(settings.morningMail.cc)}` : "";
-  const bcc = settings?.morningMail?.bcc ? `&bcc=${encodeURIComponent(settings.morningMail.bcc)}` : "";
-  window.location.href = `mailto:${to}?subject=${subject}&body=${body}${cc}${bcc}`;
-  pushMorningMailLog({ mode:"mailto", ok:true, to: settings?.morningMail?.to || "" });
-};
-
-const buildMorningMailHtml = (tasks, settings) => {
-  const todayLabel = new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"2-digit", month:"long" });
-  const rows = (tasks || []).map(t => `
-    <div style="padding:12px 14px;border:1px solid #E9EEF7;border-radius:12px;margin-bottom:10px;background:#fff;box-shadow:0 1px 4px rgba(16,42,99,.04)">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px">
-        <div style="font-family:'Lora',serif;font-size:14px;color:#2C3E50;font-weight:700;line-height:1.3">${escapeHtml(t.title || "Sans titre")}</div>
-        <div style="font-family:'DM Mono',monospace;font-size:10px;color:${PRIORITY_COLORS[t.priority] || '#7F8C8D'};font-weight:700;white-space:nowrap">${escapeHtml(PRIORITY_ICONS[t.priority] || '▬ P3')}</div>
-      </div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;font-family:'DM Mono',monospace;font-size:10px;color:#6B7280">
-        ${t.dueDate ? `<span style="background:#F3F6FB;border-radius:999px;padding:3px 8px">Échéance : ${escapeHtml(fmtDate(t.dueDate))}</span>` : ''}
-        ${t.category ? `<span style="background:#F3F6FB;border-radius:999px;padding:3px 8px">${escapeHtml(t.category)}</span>` : ''}
-        ${t.type ? `<span style="background:#F3F6FB;border-radius:999px;padding:3px 8px">${escapeHtml(t.type)}</span>` : ''}
-      </div>
-      ${t.notes ? `<div style="margin-top:8px;font-family:'Lora',serif;font-size:12px;line-height:1.5;color:#4B5563">${escapeHtml(t.notes)}</div>` : ''}
-    </div>`).join('');
-  return `<!doctype html><html><body style="margin:0;background:#F7F9FC;padding:24px;font-family:'Lora',serif;color:#2C3E50">
-    <div style="max-width:720px;margin:0 auto;background:#fff;border-radius:18px;overflow:hidden;border:1px solid #E6ECF5;box-shadow:0 8px 30px rgba(16,42,99,.08)">
-      <div style="padding:22px 24px;background:linear-gradient(135deg,#102A63 0%,#1A3D8F 100%);color:#fff">
-        <div style="font-family:'DM Mono',monospace;font-size:11px;letter-spacing:.08em;opacity:.8">RÉCAPITULATIF QUOTIDIEN</div>
-        <div style="font-size:24px;font-weight:700;margin-top:6px">Ma journée</div>
-        <div style="font-size:12px;opacity:.85;margin-top:6px">${escapeHtml(todayLabel)}</div>
-      </div>
-      <div style="padding:22px 24px">
-        <div style="font-size:13px;line-height:1.7;color:#4B5563;margin-bottom:18px">Voici les tâches prévues pour aujourd'hui. Gardez cet e-mail comme aperçu rapide de votre journée.</div>
-        ${rows || `<div style="padding:18px;border:1px dashed #D6DEEA;border-radius:12px;color:#6B7280;font-size:13px;text-align:center">Aucune tâche dans Ma journée.</div>`}
-      </div>
-      <div style="padding:16px 24px;border-top:1px solid #EEF2F7;background:#FBFCFE;font-family:'DM Mono',monospace;font-size:10px;color:#94A3B8">Envoyé automatiquement par votre assistant tâches.</div>
-    </div></body></html>`;
-};
 
 /* ─── SAMPLE DATA ─── */
 function sampleTasks(cats) {
@@ -2282,7 +2186,7 @@ const ALL_TABS = [
 ];
 
 function SettingsView({ settings, onSave }) {
-  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "", morningMail: settings.morningMail || DEFAULT_SETTINGS.morningMail, smtp: settings.smtp || DEFAULT_SETTINGS.smtp })));
+  const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "" })));
   const [tab, setTab] = useState("categories");
   const Tab = ({ id, label }) => (
     <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
@@ -2325,9 +2229,6 @@ function SettingsView({ settings, onSave }) {
           <Tab id="tasks" label="✅ Tâches" />
           <Tab id="demands" label="📨 Demandes" />
           <Tab id="payments" label="💳 Paiements" />
-          <Tab id="mail" label="✉ Mail" />
-          <Tab id="smtp" label="📨 SMTP" />
-          <Tab id="log" label="🧾 Journal" />
           <Tab id="tabs" label="👁 Onglets" />
         </div>
         <div style={{ padding: "20px 24px" }}>
@@ -2400,108 +2301,6 @@ function SettingsView({ settings, onSave }) {
               </Row>
             ))}
             <button onClick={addStat} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter un statut</button>
-          </>}
-
-          {tab === "mail" && <>
-            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Automatisation d'un mail quotidien avec les tâches de "Ma journée".</div>
-            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>DESTINATAIRE</div>
-                  <input value={s.morningMail?.to || ""} onChange={e=>setS({...s, morningMail:{...(s.morningMail||DEFAULT_SETTINGS.morningMail), to:e.target.value}})} placeholder="email@domaine.com" style={{ ...S.input, width:"100%", fontSize: 11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>HEURE D'ENVOI</div>
-                  <input type="time" value={s.morningMail?.time || "07:30"} onChange={e=>setS({...s, morningMail:{...(s.morningMail||DEFAULT_SETTINGS.morningMail), time:e.target.value}})} style={{ ...S.input, width:"100%", fontSize: 11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:10, marginTop:10 }}>
-                <div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>OBJET</div>
-                  <input value={s.morningMail?.subject || "Ma journée"} onChange={e=>setS({...s, morningMail:{...(s.morningMail||DEFAULT_SETTINGS.morningMail), subject:e.target.value}})} style={{ ...S.input, width:"100%", fontSize: 11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-              </div>
-              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:10, fontSize:11, fontFamily:"'Lora',serif", color:"#555" }}>
-                <input type="checkbox" checked={s.morningMail?.enabled || false} onChange={e=>setS({...s, morningMail:{...(s.morningMail||DEFAULT_SETTINGS.morningMail), enabled:e.target.checked}})} style={{ accentColor:"#102A63", width:14, height:14 }} />
-                Activer l'envoi automatique chaque matin
-              </label>
-              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:8, fontSize:11, fontFamily:"'Lora',serif", color:"#555" }}>
-                <input type="checkbox" checked={s.morningMail?.includeDone || false} onChange={e=>setS({...s, morningMail:{...(s.morningMail||DEFAULT_SETTINGS.morningMail), includeDone:e.target.checked}})} style={{ accentColor:"#102A63", width:14, height:14 }} />
-                Inclure aussi les tâches terminées
-              </label>
-              <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 10 }}>L'envoi réel nécessitera une fonction d'export/email côté app ou serveur, que nous pouvons ajouter ensuite.</div>
-              <div style={{ display:"flex", gap:8, marginTop:12, flexWrap:"wrap" }}>
-                <button onClick={() => {
-                  const html = buildMorningMailHtml([{title:"Préparer le dossier", priority:"haute", dueDate: today(), category:"Travail", type:"Tâche", notes:"Exemple de prévisualisation"}], s);
-                  alert("Aperçu HTML généré (voir console) : " + html.substring(0, 240));
-                  console.log(html);
-                }} style={{ ...S.btn("#F0F5FF", "#102A63"), border:"1px solid #C7D2FE", fontSize:11 }}>Aperçu mail</button>
-                <button onClick={() => sendMorningMailDraft([{title:"Préparer le dossier", priority:"haute", dueDate: today(), category:"Travail", type:"Tâche", notes:"Exemple de prévisualisation"}], s)} style={{ ...S.btn("#102A63"), fontSize:11 }}>Envoyer un test</button>
-                <button onClick={async () => { try { await sendMorningMailSMTP([{title:"Préparer le dossier", priority:"haute", dueDate: today(), category:"Travail", type:"Tâche", notes:"Exemple de prévisualisation"}], s); alert("Mail envoyé via SMTP"); } catch(e) { alert("SMTP indisponible : " + e.message); } }} style={{ ...S.btn("#27AE60"), fontSize:11 }}>Tester SMTP</button>
-              </div>
-            </div>
-          </>}
-
-          {tab === "smtp" && <>
-            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Configuration du serveur d'envoi pour envoyer les mails sans intervention.</div>
-            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 120px", gap:10 }}>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>HÔTE SMTP</div>
-                  <input value={s.smtp?.host || ""} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), host:e.target.value}})} placeholder="smtp.exemple.com" style={{ ...S.input, width:"100%", fontSize:11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>PORT</div>
-                  <input type="number" value={s.smtp?.port || 587} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), port:parseInt(e.target.value||'587',10)}})} style={{ ...S.input, width:"100%", fontSize:11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>UTILISATEUR</div>
-                  <input value={s.smtp?.user || ""} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), user:e.target.value}})} placeholder="adresse@exemple.com" style={{ ...S.input, width:"100%", fontSize:11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>EXPÉDITEUR</div>
-                  <input value={s.smtp?.from || ""} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), from:e.target.value}})} placeholder="Nom <adresse@exemple.com>" style={{ ...S.input, width:"100%", fontSize:11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>MOT DE PASSE / MOT DE PASSE D'APPLICATION</div>
-                  <input type="password" value={s.smtp?.pass || ""} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), pass:e.target.value}})} style={{ ...S.input, width:"100%", fontSize:11, fontFamily:"'DM Mono',monospace" }} />
-                </div>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:6 }}>SÉCURISÉ</div>
-                  <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, fontFamily:"'Lora',serif", color:"#555", paddingTop:12 }}>
-                    <input type="checkbox" checked={!!s.smtp?.secure} onChange={e=>setS({...s, smtp:{...(s.smtp||DEFAULT_SETTINGS.smtp), secure:e.target.checked}})} style={{ accentColor:"#102A63", width:14, height:14 }} />
-                    SSL/TLS
-                  </label>
-                </div>
-              </div>
-              <div style={{ fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace", marginTop:10 }}>Conseil : utilisez un mot de passe d'application, pas votre mot de passe principal.</div>
-            </div>
-          </>}
-
-          {tab === "log" && <>
-            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Historique des derniers envois automatiques.</div>
-            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
-              {(() => {
-                let logs = [];
-                try { logs = JSON.parse(localStorage.getItem("morningMailLog") || "[]"); } catch {}
-                if (!logs.length) return <div style={{ fontSize: 11, color: "#888", fontFamily: "'Lora',serif" }}>Aucun envoi enregistré pour le moment.</div>;
-                return logs.map((l, i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0", borderBottom: i === logs.length-1 ? "none" : "1px solid #F0F0F0" }}>
-                    <span style={{ fontSize: 11, fontFamily:"'DM Mono',monospace", color: l.ok ? "#065F46" : "#B91C1C", fontWeight:700 }}>
-                      {l.ok ? "OK" : "ERR"}
-                    </span>
-                    <span style={{ fontSize: 11, fontFamily:"'DM Mono',monospace", color: "#555" }}>{new Date(l.ts).toLocaleString("fr-FR")}</span>
-                    <span style={{ fontSize: 11, fontFamily:"'Lora',serif", color: "#2C3E50" }}>
-                      {l.mode || ""} → {l.to || "destinataire inconnu"}
-                    </span>
-                  </div>
-                ));
-              })()}
-            </div>
           </>}
           {tab === "tabs" && <>
             <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Masquez les onglets que vous ne souhaitez pas afficher dans la navigation. Les onglets "Tâches" et "Paramètres" sont toujours visibles.</div>
@@ -4475,32 +4274,6 @@ function App() {
 
   const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "tasks2";
 
-  useEffect(() => {
-    const tick = async () => {
-      const m = settings.morningMail || {};
-      if (!m.enabled || !m.to) return;
-      const now = new Date();
-      const hhmm = now.toTimeString().slice(0,5);
-      const key = "morningMailSent_" + now.toISOString().split("T")[0];
-      const sent = localStorage.getItem(key);
-      if (hhmm === (m.time || "07:30") && sent !== "1") {
-        const myDay = (tasks || []).filter(t => t.inMyDay && (m.includeDone || !t.completed));
-        try {
-          if (settings.smtp?.enabled && settings.smtp?.host && settings.smtp?.user) {
-            await sendMorningMailSMTP(myDay, settings);
-          } else {
-            sendMorningMailDraft(myDay, settings);
-          }
-          localStorage.setItem(key, "1");
-        } catch (e) {
-          console.error("Morning mail error:", e);
-        }
-      }
-    };
-    const id = setInterval(tick, 30000);
-    return () => clearInterval(id);
-  }, [settings, tasks]);
-
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
       <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
@@ -4558,7 +4331,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.136<br />30/04/26 à 00h18
+          v.0.128<br />29/04/26 à 23h58
         </div>
       </div>
 
