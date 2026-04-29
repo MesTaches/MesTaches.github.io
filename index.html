@@ -2754,7 +2754,7 @@ function PaymentsView({ settings }) {
   const [filterStatus, setFilterStatus] = React.useState("all");
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
-  const [colWidths, setColWidths] = React.useState({ priority: 56, supplier: 220, account: 70, requestDate: 82, requester: 100, estimatedDate: 100, amount: 85, status: 90 });
+  const [colWidths, setColWidths] = React.useState({ priority: 44, supplier: 220, account: 70, requestDate: 82, requester: 100, estimatedDate: 100, amount: 85, status: 90 });
 
   const startResize = (col, e) => {
     e.preventDefault();
@@ -2957,7 +2957,8 @@ function PaymentsView({ settings }) {
           {filtered.length > 0 && (
             <div style={{ padding: "6px 10px", background: "#F8F9FB", borderTop: "2px solid #ECEAE5", overflowX: "auto" }}>
               <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
-                <div /><div /><div /><div /><div /><div /><div />
+                <div /><div /><div /><div /><div /><div />
+                <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "\'Lora\',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "\'Lora\',serif", textAlign: "right", paddingRight: 4 }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
@@ -3527,7 +3528,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.083<br />29/04/26 à 11h15
+          v.0.084<br />29/04/26 à 11h20
         </div>
       </div>
 
