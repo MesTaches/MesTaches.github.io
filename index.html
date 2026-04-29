@@ -23,7 +23,7 @@
     ::-webkit-scrollbar-thumb{background:#D0D0D0;border-radius:3px}
     [contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}
     button,[role="button"]{cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-    input,select,textarea{font-size:16px !important}
+    input,select,textarea{font-size:13px}
     .payment-field{font-size:11px !important;font-family:'Lora',serif !important}
     .report-field{font-size:10px !important;font-family:'Lora',serif !important}
     .search-input-small{font-size:11px !important}
@@ -44,9 +44,8 @@
       font-size: 10px !important;
       font-family: 'Lora', serif !important;
     }
-  .tasks2-modal select,
-.tasks2-modal input[type="text"],
-.tasks2-modal input[type="date"],
+  .tasks2-modal input,
+.tasks2-modal select,
 .tasks2-modal textarea {
   font-size: 10px !important;
   font-family: 'Lora', serif !important;
@@ -3360,6 +3359,8 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   const [search,       setSearch]       = useState("");
   const [filterLabel,  setFilterLabel]  = useState("Toutes");
   const [grouped,      setGrouped]      = useState(false);
+  const [aiText,       setAiText]       = useState("");
+  const [aiLoading,    setAiLoading]    = useState(false);
   const [sortCol,      setSortCol]      = useState(null);
   const [sortDir,      setSortDir]      = useState("asc");
   const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
@@ -3427,6 +3428,38 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
     </div>
   );
 
+  const parseWithAI = async () => {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    const todayStr = new Date().toLocaleDateString("fr-FR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
+    const prompt = `Aujourd'hui c'est ${todayStr}. Extrais les informations de ce texte et renvoie UNIQUEMENT un objet JSON valide (sans markdown, sans explication) avec ces champs :
+- "title" : string, titre court et propre de la tâche (reformulé si nécessaire)
+- "priority" : une valeur parmi exactement : "urgente", "haute", "normale", "basse"
+- "dueDate" : string ISO 8601 avec heure si mentionnée (ex: "2026-05-07T14:00"), ou null
+- "notes" : string, contexte utile extrait du texte, ou null
+
+Texte : "${aiText.trim()}"`;
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey)||""}` },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 300, temperature: 0.1,
+          messages: [{ role: "user", content: prompt }] })
+      });
+      const data = await resp.json();
+      const raw = data.choices?.[0]?.message?.content?.trim() || "";
+      let parsed = {};
+      try { parsed = JSON.parse(raw.replace(/^```json|```$/g,"")); } catch(e) { parsed = { title: aiText.trim() }; }
+      onAdd({ title: parsed.title||aiText.trim(), priority: parsed.priority||"normale",
+              dueDate: parsed.dueDate||null, notes: parsed.notes||"" });
+      setAiText("");
+    } catch(e) {
+      onAdd({ title: aiText.trim() });
+      setAiText("");
+    }
+    setAiLoading(false);
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: fullscreen ? "calc(100vh - 56px)" : "auto" }}>
       {/* Toolbar */}
@@ -3463,6 +3496,43 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
       {isMobile && (
         <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", padding: "6px 10px", display: "flex", gap: 6, overflowX: "auto", flexShrink: 0 }}>
           {["Toutes", ...settings.categories.map(c => c.name)].map(c => { const co = settings.categories.find(x => x.name === c); return <FBtn key={c} label={c} active={filterCat === c} onClick={() => setFilterCat(c)} color={co?.accent} />; })}
+        </div>
+      )}
+
+      {/* ── AI Natural Input ── */}
+      {!isMobile && (
+        <div style={{ background:"#F0F3FA", borderBottom:"1px solid #DDE3F0", padding:"10px 100px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, background:"white",
+                        border:"1.5px solid #D0D8F0", borderRadius:12, padding:"8px 14px",
+                        boxShadow:"0 2px 8px rgba(16,42,99,0.06)" }}>
+            <span style={{ fontSize:16, flexShrink:0, opacity:0.7 }}>✦</span>
+            <input
+              value={aiText}
+              onChange={e=>setAiText(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); parseWithAI(); }}}
+              placeholder="Décrivez une tâche en langage naturel… ex : Préparer le bilan trimestriel pour vendredi à 9h"
+              style={{ flex:1, border:"none", outline:"none", fontSize:11, fontFamily:"'Lora',serif",
+                       color:"#2C3E50", background:"transparent", lineHeight:1.5 }}
+            />
+            {aiLoading
+              ? <div style={{ width:22, height:22, border:"2.5px solid #D0D8F0",
+                              borderTop:"2.5px solid #102A63", borderRadius:"50%",
+                              animation:"spin 0.7s linear infinite", flexShrink:0 }} />
+              : <button onClick={parseWithAI} disabled={!aiText.trim()}
+                  style={{ background: aiText.trim() ? "#102A63" : "#E8ECF5",
+                           color: aiText.trim() ? "white" : "#AAB",
+                           border:"none", borderRadius:8, padding:"6px 16px",
+                           fontSize:10, fontFamily:"'DM Mono',monospace", fontWeight:700,
+                           letterSpacing:"0.06em", cursor: aiText.trim() ? "pointer" : "default",
+                           flexShrink:0, transition:"all 0.2s" }}>
+                  CRÉER ↵
+                </button>
+            }
+          </div>
+          <div style={{ marginTop:5, paddingLeft:4, fontSize:9, color:"#8896B3",
+                        fontFamily:"'DM Mono',monospace", letterSpacing:"0.04em" }}>
+            IA · L'ASSISTANT ANALYSE VOTRE TEXTE ET PRÉ-REMPLIT LA TÂCHE · APPUYEZ SUR ENTRÉE OU CLIQUEZ CRÉER
+          </div>
         </div>
       )}
 
@@ -3583,10 +3653,10 @@ const T2_LABELS = [
   { id:"allianz",    label:"Allianz",     bg:"#FEF3C7", color:"#92400E" },
 ];
 const T2_PRIOS = [
-  { id:"urgent", label:"Urgent", rank:0, color:"#E74C3C", tag:"P1" },
-  { id:"high",   label:"P1",     rank:1, color:"#E67E22", tag:"P1" },
-  { id:"normal", label:"P3",     rank:2, color:"#95A5A6", tag:"P3" },
-  { id:"low",    label:"P4",     rank:3, color:"#BDC3C7", tag:"P4" },
+  { id:"urgent", label:"⊛ P1", rank:0, color:"#C0392B" },
+  { id:"high",   label:"▲ P2", rank:1, color:"#E67E22" },
+  { id:"normal", label:"▬ P3", rank:2, color:"#7F8C8D" },
+  { id:"low",    label:"▼ P4", rank:3, color:"#27AE60" },
 ];
 
 function loadTasks2()   { try { const s=localStorage.getItem(TASKS2_KEY);    return s?JSON.parse(s):[]; } catch { return []; } }
@@ -3621,7 +3691,7 @@ function Tasks2Modal({ item, onSave, onClose }) {
     style: inp, placeholder:"0", inputMode:"numeric"
   });
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:3, fontWeight:600, letterSpacing:"0.04em" }}>{t}</div>;
-  const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
+  const inp = { border:"1px solid #E8E8E8", borderRadius:8, padding:"5px 10px", fontSize:10, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"#FAFAFA", lineHeight:"1.4" };
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={(e)=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}} onMouseUp={(e)=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
       <div style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
@@ -3835,9 +3905,8 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 {/* Checkbox */}
                 <div style={{ width:28, flexShrink:0 }} onClick={e=>e.stopPropagation()}><input type="checkbox" style={{ cursor:"pointer" }} /></div>
                 {/* Prio */}
-                <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", gap:2 }}>
-                  {(c.priority==="urgent"||c.priority==="high")&&<span style={{ fontSize:8, color:pr.color }}>▲</span>}
-                  <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'DM Mono',monospace" }}>{pr.tag}</span>
+                <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center" }}>
+                  <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'DM Mono',monospace" }}>{pr.label}</span>
                 </div>
                 {/* Client */}
                 <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
@@ -4217,7 +4286,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.110<br />29/04/26 à 22h20
+          v.0.115<br />29/04/26 à 22h50
         </div>
       </div>
 
