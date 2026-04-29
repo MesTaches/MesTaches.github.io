@@ -336,7 +336,7 @@ function CotationModal({ cotation, onSave, onClose }) {
   const set = (k,v) => setD(p => ({ ...p, [k]: v }));
   const today = new Date().toISOString().split("T")[0];
   const lbl = (txt) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:4 }}>{txt}</div>;
-  const inputStyle = { ...S.input, fontSize:10, fontFamily:"'Lora',serif" };
+  const inputStyle = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
@@ -506,7 +506,7 @@ function CotationView({ settings }) {
         ))}
       </div>
 
-      <div style={{ overflowX:"hidden", background:"white", borderRadius:"0 0 8px 8px", border:"1px solid #ECEAE5", borderTop:"none" }}>
+      <div style={{ overflowX:"auto", background:"white", borderRadius:"0 0 8px 8px", border:"1px solid #ECEAE5", borderTop:"none" }}>
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"4px 10px", background:"#102A63", minWidth:"fit-content" }}>
           <div />
@@ -3784,7 +3784,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks";
+  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -3843,7 +3843,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.089<br />29/04/26 à 14h15
+          v.0.090<br />29/04/26 à 14h30
         </div>
       </div>
 
@@ -3878,7 +3878,7 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 24px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 16px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
