@@ -3623,7 +3623,7 @@ function Tasks2Modal({ item, onSave, onClose }) {
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:3, fontWeight:600, letterSpacing:"0.04em" }}>{t}</div>;
   const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={(e)=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}} onMouseUp={(e)=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
       <div style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
         <div style={{ padding:"16px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LA DEMANDE":"NOUVELLE DEMANDE"}</span>
@@ -3631,18 +3631,18 @@ function Tasks2Modal({ item, onSave, onClose }) {
         </div>
         <div style={{ padding:"16px 24px", display:"flex", flexDirection:"column", gap:12 }}>
           <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:1 }}>{lbl("PRIORITÉ")}<select value={d.priority} onChange={e=>set("priority",e.target.value)} style={inp}>
+            <div style={{ flex:1 }}>{lbl("PRIORITÉ")}<select value={d.priority} onChange={e=>set("priority",e.target.value)} style={{...inp,fontSize:10,fontFamily:"'Lora',serif"}}>
               {T2_PRIOS.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
-            <div style={{ flex:1 }}>{lbl("STATUT")}<select value={d.status} onChange={e=>set("status",e.target.value)} style={inp}>
+            <div style={{ flex:1 }}>{lbl("STATUT")}<select value={d.status} onChange={e=>set("status",e.target.value)} style={{...inp,fontSize:10,fontFamily:"'Lora',serif"}}>
               {T2_STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:2 }}>{lbl("NOM CLIENT")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={inp} placeholder="Nom du client" /></div>
-            <div style={{ flex:1 }}>{lbl("CODE CLIENT")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={inp} placeholder="Code" /></div>
+            <div style={{ flex:2 }}>{lbl("NOM CLIENT")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={{...inp,fontSize:10}} placeholder="Nom du client" /></div>
+            <div style={{ flex:1 }}>{lbl("CODE CLIENT")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={{...inp,fontSize:10}} placeholder="Code" /></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:1 }}>{lbl("DATE DEMANDE")}<input type="date" value={d.requestDate} onChange={e=>set("requestDate",e.target.value)} style={inp} /></div>
-            <div style={{ flex:1 }}>{lbl("DEMANDEUR")}<input value={d.requester} onChange={e=>set("requester",e.target.value)} style={inp} placeholder="Prénom" /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DEMANDE")}<input type="date" value={d.requestDate} onChange={e=>set("requestDate",e.target.value)} style={{...inp,fontSize:10}} /></div>
+            <div style={{ flex:1 }}>{lbl("DEMANDEUR")}<input value={d.requester} onChange={e=>set("requester",e.target.value)} style={{...inp,fontSize:10}} placeholder="Prénom" /></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
             <div style={{ flex:1 }}>{lbl("ENCOURS AUTORISÉ (€)")}<input {...moneyInput("authorizedAmount")} /></div>
@@ -3650,9 +3650,9 @@ function Tasks2Modal({ item, onSave, onClose }) {
             <div style={{ flex:1 }}>{lbl("MONTANT OBTENU (€)")}<input {...moneyInput("obtainedAmount")} /></div>
           </div>
           <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:1 }}>{lbl("ÉTIQUETTE")}<select value={d.label} onChange={e=>set("label",e.target.value)} style={inp}>
+            <div style={{ flex:1 }}>{lbl("ÉTIQUETTE")}<select value={d.label} onChange={e=>set("label",e.target.value)} style={{...inp,fontSize:10,fontFamily:"'Lora',serif"}}>
               {T2_LABELS.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></div>
-            <div style={{ flex:1 }}>{lbl("DATE CLÔTURE")}<input type="date" value={d.closeDate} onChange={e=>set("closeDate",e.target.value)} style={inp} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE CLÔTURE")}<input type="date" value={d.closeDate} onChange={e=>set("closeDate",e.target.value)} style={{...inp,fontSize:10}} /></div>
           </div>
           <div>{lbl("NOTES")}<RichTextArea value={d.notes} onChange={v=>set("notes",v)} placeholder="Notes libres…" rows={4} /></div>
         </div>
@@ -3841,7 +3841,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 </div>
                 {/* Client */}
                 <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                  fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, cursor:"pointer", paddingRight:8 }}
+                  fontSize:12, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
                   onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
                 {/* Code */}
                 <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
@@ -3912,7 +3912,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
 
       {modal!==null&&<Tasks2Modal item={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
       {deletedItem&&(
-        <div style={{position:"fixed",bottom:24,right:24,zIndex:9999,background:"#2C3E50",color:"white",
+        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9999,background:"#2C3E50",color:"white",
           borderRadius:12,padding:"12px 16px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",
           display:"flex",alignItems:"center",gap:12,fontFamily:"'Lora',serif",fontSize:11}}>
           <span>« <strong>{(deletedItem.clientName||"Demande").slice(0,30)}</strong> » supprimée</span>
@@ -4217,7 +4217,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.108<br />29/04/26 à 19h05
+          v.0.109<br />29/04/26 à 19h10
         </div>
       </div>
 
