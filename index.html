@@ -2547,7 +2547,7 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
         {reportingTasks.length === 0 ? (
           <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>Aucune tâche de type Reporting</div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div style={{ overflowX: "hidden" }}>
             {/* En-têtes */}
             <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#102A63", padding: "6px 8px", minWidth: "fit-content" }}>
               {/* Spacer : marginLeft(5) + checkbox(14) + gap(7) + num(16) = 42px, puis prio et soleil comme colonnes */}
@@ -2754,7 +2754,7 @@ function PaymentsView({ settings }) {
   const [filterStatus, setFilterStatus] = React.useState("all");
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
-  const [colWidths, setColWidths] = React.useState({ priority: 56, supplier: 220, account: 70, requestDate: 82, requester: 100, estimatedDate: 100, amount: 100, status: 90 });
+  const [colWidths, setColWidths] = React.useState({ priority: 56, supplier: 220, account: 70, requestDate: 82, requester: 100, estimatedDate: 100, amount: 85, status: 90 });
 
   const startResize = (col, e) => {
     e.preventDefault();
@@ -2826,7 +2826,7 @@ function PaymentsView({ settings }) {
     { id: "status",        label: "STATUT" },
   ];
 
-  const gridTemplate = "32px " + colDef.map(c => colWidths[c.id] + "px").join(" ") + " 50px";
+  const gridTemplate = "32px " + colDef.map(c => colWidths[c.id] + "px").join(" ") + " 36px";
 
   const HeaderCell = ({ col }) => (
     <div style={{ display: "flex", alignItems: "center", gap: 2, position: "relative", userSelect: "none", justifyContent: col.alignRight ? "flex-end" : "flex-start" }}>
@@ -2957,10 +2957,9 @@ function PaymentsView({ settings }) {
           {filtered.length > 0 && (
             <div style={{ padding: "6px 10px", background: "#F8F9FB", borderTop: "2px solid #ECEAE5", overflowX: "auto" }}>
               <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
-                <div /><div /><div /><div />
-                <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", textAlign: "right", paddingRight: 8 }}>
-                  {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\s/g,"").replace(",",".")) || 0), 0))}
+                <div /><div /><div /><div /><div /><div /><div />
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: "\'Lora\',serif", textAlign: "right", paddingRight: 4 }}>
+                  {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
                 <div /><div />
               </div>
@@ -3528,7 +3527,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.082<br />29/04/26 à 11h00
+          v.0.083<br />29/04/26 à 11h15
         </div>
       </div>
 
