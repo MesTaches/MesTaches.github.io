@@ -523,10 +523,10 @@ function CotationView({ settings }) {
 
       <div style={{ overflowX:"auto", background:"white", borderRadius:"0 0 8px 8px", border:"1px solid #ECEAE5", borderTop:"none" }}>
         {/* Header */}
-        <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"4px 10px", background:"#102A63", minWidth:"fit-content" }}>
+        <div style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"4px 10px", background:"#102A63", minWidth:"fit-content" }}>
           <div />
           {colDefs.map(col => (
-            <div key={col.id} style={{ position:"relative", display:"flex", alignItems:"center", justifyContent: col.right ? "flex-end" : "flex-start" }}>
+            <div key={col.id} style={{ position:"relative", display:"flex", alignItems:"center", justifyContent: col.right ? "flex-end" : "flex-start", overflow:"hidden" }}>
               <span onClick={() => handleSort(col.id)}
                 style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none", overflow:"hidden", maxWidth:"100%", display:"block" }}>
                 {col.label}{si(col.id)}
@@ -546,7 +546,7 @@ function CotationView({ settings }) {
           const lbObj = COTATION_LABELS.find(l => l.id === c.label) || COTATION_LABELS[0];
           const prObj = COTATION_PRIORITIES.find(p => p.id === (c.priority||"normal")) || COTATION_PRIORITIES[2];
           return (
-            <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"3px 10px", borderBottom:"1px solid #F5F5F5",
+            <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"3px 10px", borderBottom:"1px solid #F5F5F5",
               background: i % 2 === 0 ? "white" : "#FAFAFA", alignItems:"center", minWidth:"fit-content" }}>
               <div><input type="checkbox" style={{ cursor:"pointer" }} /></div>
               <div style={{ display:"flex", alignItems:"center", gap:3 }}>
@@ -584,7 +584,7 @@ function CotationView({ settings }) {
 
         {/* Footer totaux */}
         {filtered.length > 0 && (
-          <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"6px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
+          <div style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"6px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
             <div /><div /><div /><div /><div /><div /><div />
             <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
               {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0))}
@@ -3800,7 +3800,6 @@ function App() {
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
   const isFullWidthView = view === "tasks" || view === "categorytasks";
-  const isWideLayout = isFullWidthView || view === "cotation";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -3859,7 +3858,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.093<br />29/04/26 à 15h35
+          v.0.094<br />29/04/26 à 16h20
         </div>
       </div>
 
@@ -3871,9 +3870,9 @@ function App() {
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#102A63", flex: 1 }}>
             {(visibleNav.find(n => n.id === view) || {}).icon} {(visibleNav.find(n => n.id === view) || {}).label || ""}
           </div>
-          {view !== "cotation" && <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             + {isMobile ? "" : "Nouvelle tâche"}
-          </button>}
+          </button>
         </div>
 
       {overdueCount > 0 && (
@@ -3884,7 +3883,7 @@ function App() {
       )}
 
       {/* Full-width views (tasks, categorytasks) vs contained views */}
-      {isWideLayout ? (
+      {isFullWidthView ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -3892,16 +3891,16 @@ function App() {
           {view === "categorytasks" && (
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
           )}
-          {view === "cotation" && <CotationView settings={settings} />}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
+          {view === "cotation"      && <CotationView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
