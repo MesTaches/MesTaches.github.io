@@ -340,13 +340,13 @@ const COTATION_PRIORITIES = [
 
 function fmtEuroCot(v) {
   if (v === "" || v === null || v === undefined) return "—";
-  const n = parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+  const n = parseFloat(String(v).replace(/[\s\u00A0]/g,"").replace(",","."));
   if (isNaN(n)) return "—";
-  return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+  return n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
 }
 
 function CotationModal({ cotation, onSave, onClose }) {
-  const [d, setD] = React.useState({ priority:"normal", clientName:"", clientCode:"", requestDate:"", requester:"", status:"todo", authorizedAmount:"", need:"", obtainedAmount:"", label:"toassign", closeDate:"", notes:"", ...cotation });
+  const [d, setD] = React.useState({ priority:"normal", clientName:"", clientCode:"", requestDate:new Date().toISOString().split("T")[0], requester:"", status:"todo", authorizedAmount:"", need:"", obtainedAmount:"", label:"toassign", closeDate:"", notes:"", ...cotation });
   const set = (k,v) => setD(p => ({ ...p, [k]: v }));
   const today = new Date().toISOString().split("T")[0];
   const lbl = (txt) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:4 }}>{txt}</div>;
@@ -441,7 +441,12 @@ function CotationView({ settings }) {
   const [noteModal, setNoteModal] = React.useState(null);
   const [sortCol, setSortCol] = React.useState("requestDate");
   const [sortAsc, setSortAsc] = React.useState(false);
-  const [colWidths, setColWidths] = React.useState({ priority:44, clientName:160, clientCode:70, requestDate:82, requester:90, status:88, authorizedAmount:82, need:82, obtainedAmount:90, label:100, closeDate:82 });
+  const [search, setSearch] = React.useState("");
+  const [colWidths, setColWidths] = React.useState({
+    priority:44, clientName:160, clientCode:72, requestDate:84, requester:90,
+    status:88, authorizedAmount:90, need:90, obtainedAmount:90, label:105, closeDate:84
+  });
+  const colOrder = ["priority","clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
 
   const startResize = (col, e) => {
     e.preventDefault();
@@ -453,6 +458,8 @@ function CotationView({ settings }) {
     document.addEventListener("mouseup", onUp);
   };
 
+  const gridTemplate = "28px " + colOrder.map(k => colWidths[k]+"px").join(" ") + " 30px 30px";
+
   const save = (list) => { setCotations(list); saveCotations(list); };
   const handleSave = (d) => {
     const list = d.id ? cotations.map(c => c.id === d.id ? d : c) : [...cotations, { ...d, id: Date.now().toString() }];
@@ -463,6 +470,7 @@ function CotationView({ settings }) {
   const filtered = cotations
     .filter(c => filterStatus === "all" || c.status === filterStatus)
     .filter(c => filterLabel === "all" || c.label === filterLabel)
+    .filter(c => !search || [c.clientName, c.clientCode, c.requester].some(v => (v||"").toLowerCase().includes(search.toLowerCase())))
     .sort((a,b) => {
       let va = a[sortCol]||"", vb = b[sortCol]||"";
       if (["need","obtainedAmount","authorizedAmount"].includes(sortCol)) {
@@ -475,64 +483,75 @@ function CotationView({ settings }) {
   const handleSort = (col) => { if (sortCol === col) setSortAsc(a => !a); else { setSortCol(col); setSortAsc(true); } };
   const si = (col) => sortCol === col ? (sortAsc ? " ▲" : " ▼") : "";
 
-  const colOrder = ["priority","clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
-  const gridTemplate = "28px " + colOrder.map(k => (colWidths[k]||82)+"px").join(" ") + " 30px 30px";
-
   const colDefs = [
-    { id:"priority", label:"PRIO." },
-    { id:"clientName", label:"CLIENT" },
-    { id:"clientCode", label:"CODE" },
-    { id:"requestDate", label:"DATE DEM." },
-    { id:"requester", label:"DEMANDEUR" },
-    { id:"status", label:"STATUT" },
-    { id:"authorizedAmount", label:"ENCOURS", right:true },
-    { id:"need", label:"BESOIN", right:true },
-    { id:"obtainedAmount", label:"OBTENU", right:true },
-    { id:"label", label:"ÉTIQUETTE" },
-    { id:"closeDate", label:"CLÔTURE" },
+    { id:"priority",         label:"PRIO.",      right:false },
+    { id:"clientName",       label:"CLIENT",     right:false },
+    { id:"clientCode",       label:"CODE",       right:false },
+    { id:"requestDate",      label:"DATE DEM.",  right:false },
+    { id:"requester",        label:"DEMANDEUR",  right:false },
+    { id:"status",           label:"STATUT",     right:false },
+    { id:"authorizedAmount", label:"ENCOURS",    right:true  },
+    { id:"need",             label:"BESOIN",     right:true  },
+    { id:"obtainedAmount",   label:"OBTENU",     right:true  },
+    { id:"label",            label:"ÉTIQUETTE",  right:false },
+    { id:"closeDate",        label:"CLÔTURE",    right:false },
   ];
 
+  const hCell = (col) => ({
+    position:"relative", overflow:"hidden",
+    textAlign: col.right ? "right" : "left",
+    paddingRight: col.right ? 8 : 0,
+  });
+
   return (
-    <div>
-      <div style={{ marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+    <div style={{ padding:"20px 16px" }}>
+      {/* Header */}
+      <div style={{ marginBottom:14, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
         <div>
           <h2 style={{ fontSize:22, fontFamily:"'Lora',serif", color:"#2C3E50", margin:0 }}>Demandes de garanties</h2>
           <div style={{ fontSize:11, color:"#999", marginTop:3, fontFamily:"'DM Mono',monospace" }}>
-            {filtered.length} demande{filtered.length > 1 ? "s" : ""} · {cotations.filter(c=>c.status!=="done"&&c.status!=="refused").length} en cours
+            {filtered.length} demande{filtered.length !== 1 ? "s" : ""} · {cotations.filter(c=>c.status!=="done"&&c.status!=="refused").length} en cours
           </div>
         </div>
         <button onClick={() => setModal({})} style={{ ...S.btn("#102A63"), padding:"8px 18px", fontSize:12 }}>+ Nouvelle demande</button>
       </div>
 
-      <div style={{ padding:"8px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", gap:5, flexWrap:"wrap", alignItems:"center", marginBottom:8, background:"white", borderRadius:"8px 8px 0 0", border:"1px solid #ECEAE5" }}>
-        <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginRight:4 }}>STATUT :</span>
+      {/* Barre filtres style Tâches */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6, alignItems:"center", marginBottom:10 }}>
+        {/* Recherche */}
+        <div style={{ position:"relative" }}>
+          <span style={{ position:"absolute", left:8, top:"50%", transform:"translateY(-50%)", fontSize:11, color:"#AAA" }}>🔍</span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher..."
+            style={{ border:"1px solid #E0E0E0", borderRadius:20, padding:"4px 12px 4px 26px", fontSize:11, fontFamily:"'Lora',serif", outline:"none", width:140 }} />
+        </div>
+        {/* Statuts */}
         {[{ id:"all", label:"Tous" }, ...COTATION_STATUSES].map(s => (
           <button key={s.id} onClick={() => setFilterStatus(s.id)}
-            style={{ border:"none", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11,
-              background: filterStatus === s.id ? "#102A63" : "#F0F0F0",
-              color: filterStatus === s.id ? "white" : "#555" }}>{s.label}</button>
+            style={{ border:"none", borderRadius:20, padding:"4px 13px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11, fontWeight: filterStatus===s.id ? 700 : 400,
+              background: filterStatus===s.id ? "#102A63" : "#F0F0F0", color: filterStatus===s.id ? "white" : "#555" }}>{s.label}</button>
         ))}
-        <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginLeft:8, marginRight:4 }}>ÉTIQUETTE :</span>
+        <span style={{ width:1, height:18, background:"#DDD", margin:"0 2px" }} />
+        {/* Étiquettes */}
         {[{ id:"all", label:"Toutes" }, ...COTATION_LABELS].map(l => (
           <button key={l.id} onClick={() => setFilterLabel(l.id)}
-            style={{ border:"none", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11,
-              background: filterLabel === l.id ? "#102A63" : "#F0F0F0",
-              color: filterLabel === l.id ? "white" : "#555" }}>{l.label}</button>
+            style={{ border:"none", borderRadius:20, padding:"4px 13px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11, fontWeight: filterLabel===l.id ? 700 : 400,
+              background: filterLabel===l.id ? "#102A63" : "#F0F0F0", color: filterLabel===l.id ? "white" : "#555" }}>{l.label}</button>
         ))}
       </div>
 
-      <div style={{ overflowX:"auto", background:"white", borderRadius:"0 0 8px 8px", border:"1px solid #ECEAE5", borderTop:"none" }}>
+      {/* Tableau */}
+      <div style={{ overflowX:"auto", background:"white", borderRadius:8, border:"1px solid #ECEAE5" }}>
         {/* Header */}
-        <div style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"4px 10px", background:"#102A63", minWidth:"fit-content" }}>
+        <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"5px 10px", background:"#102A63", minWidth:"max-content" }}>
           <div />
           {colDefs.map(col => (
-            <div key={col.id} style={{ position:"relative", display:"flex", alignItems:"center", justifyContent: col.right ? "flex-end" : "flex-start", overflow:"hidden" }}>
+            <div key={col.id} style={hCell(col)}>
               <span onClick={() => handleSort(col.id)}
-                style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none", overflow:"hidden", maxWidth:"100%", display:"block" }}>
+                style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
                 {col.label}{si(col.id)}
               </span>
-              <div onMouseDown={(e) => startResize(col.id, e)}
-                style={{ position:"absolute", right:-4, top:0, bottom:0, width:8, cursor:"col-resize", zIndex:10 }} />
+              <div onMouseDown={e => startResize(col.id, e)}
+                style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", zIndex:10 }} />
             </div>
           ))}
           <div /><div />
@@ -546,33 +565,34 @@ function CotationView({ settings }) {
           const lbObj = COTATION_LABELS.find(l => l.id === c.label) || COTATION_LABELS[0];
           const prObj = COTATION_PRIORITIES.find(p => p.id === (c.priority||"normal")) || COTATION_PRIORITIES[2];
           return (
-            <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"3px 10px", borderBottom:"1px solid #F5F5F5",
-              background: i % 2 === 0 ? "white" : "#FAFAFA", alignItems:"center", minWidth:"fit-content" }}>
+            <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"3px 10px",
+              borderBottom:"1px solid #F5F5F5", background: i%2===0 ? "white" : "#FAFAFA",
+              alignItems:"center", minWidth:"max-content" }}>
               <div><input type="checkbox" style={{ cursor:"pointer" }} /></div>
               <div style={{ display:"flex", alignItems:"center", gap:3 }}>
-                {c.priority === "urgent" && <span style={{ fontSize:9, color:"#E74C3C" }}>▲</span>}
+                {c.priority==="urgent" && <span style={{ fontSize:9, color:"#E74C3C" }}>▲</span>}
                 <span style={{ fontSize:10, fontWeight:700, color:prObj.color, fontFamily:"'DM Mono',monospace" }}>
                   {prObj.id==="urgent"||prObj.id==="high"?"P1":prObj.id==="normal"?"P3":"P4"}
                 </span>
               </div>
               <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}
-                onClick={() => setModal(c)}>{c.clientName || "—"}</div>
-              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888" }}>{c.clientCode || "—"}</div>
+                onClick={() => setModal(c)}>{c.clientName||"—"}</div>
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888" }}>{c.clientCode||"—"}</div>
               <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#555" }}>
                 {c.requestDate ? c.requestDate.split("-").reverse().join("/") : "—"}
               </div>
-              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#555" }}>{c.requester || "—"}</div>
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#555" }}>{c.requester||"—"}</div>
               <div><span style={{ fontSize:9, fontWeight:700, background:stObj.bg, color:stObj.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{stObj.label}</span></div>
-              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.authorizedAmount)}</div>
-              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.need)}</div>
-              <div style={{ fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.obtainedAmount)}</div>
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(c.authorizedAmount)}</div>
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(c.need)}</div>
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(c.obtainedAmount)}</div>
               <div><span style={{ fontSize:9, fontWeight:700, background:lbObj.bg, color:lbObj.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lbObj.label}</span></div>
               <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color: c.closeDate && c.closeDate < new Date().toISOString().split("T")[0] ? "#E74C3C" : "#555" }}>
                 {c.closeDate ? c.closeDate.split("-").reverse().join("/") : "—"}
               </div>
               <div style={{ display:"flex", justifyContent:"center" }}>
                 <button onClick={() => setNoteModal({ id:c.id, notes:c.notes||"" })}
-                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity: c.notes ? 1 : 0.3, color: c.notes ? "#102A63" : "#999" }}>💬</button>
+                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:c.notes?1:0.3, color:c.notes?"#102A63":"#999" }}>💬</button>
               </div>
               <div style={{ display:"flex", gap:3, justifyContent:"center" }}>
                 <button onClick={() => setModal(c)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.5 }} title="Modifier">✎</button>
@@ -583,21 +603,20 @@ function CotationView({ settings }) {
         })}
 
         {/* Footer totaux */}
-        {filtered.length > 0 && (
-          <div style={{ display:"grid", gridTemplateColumns:gridTemplate, columnGap:"4px", padding:"6px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
-            <div /><div /><div /><div /><div /><div /><div />
-            <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
-              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0))}
+        {filtered.length > 0 && (() => {
+          const totAuth = filtered.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0);
+          const totNeed = filtered.reduce((s,c)=>s+(parseFloat(String(c.need||0).replace(",","."))||0),0);
+          const totObt  = filtered.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"6px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5", minWidth:"max-content" }}>
+              <div/><div/><div/><div/><div/><div/><div/>
+              <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(totAuth)}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(totNeed)}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:8 }}>{fmtEuroCot(totObt)}</div>
+              <div/><div/><div/><div/>
             </div>
-            <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
-              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.need||0).replace(",","."))||0),0))}
-            </div>
-            <div style={{ fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
-              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0))}
-            </div>
-            <div /><div /><div /><div />
-          </div>
-        )}
+          );
+        })()}
       </div>
 
       {/* Modal note */}
@@ -610,10 +629,8 @@ function CotationView({ settings }) {
             </div>
             <div style={{ padding:"10px 18px 16px", display:"flex", justifyContent:"flex-end", gap:8 }}>
               <button onClick={() => setNoteModal(null)} style={{ ...S.btn("#F0F0F0","#666"), fontSize:10, padding:"6px 12px" }}>Annuler</button>
-              <button onClick={() => {
-                const updated = cotations.map(c => c.id === noteModal.id ? { ...c, notes: noteModal.notes } : c);
-                save(updated); setNoteModal(null);
-              }} style={{ ...S.btn("#102A63"), fontSize:10, padding:"6px 12px" }}>✓ Enregistrer</button>
+              <button onClick={() => { const u = cotations.map(c => c.id===noteModal.id ? {...c,notes:noteModal.notes} : c); save(u); setNoteModal(null); }}
+                style={{ ...S.btn("#102A63"), fontSize:10, padding:"6px 12px" }}>✓ Enregistrer</button>
             </div>
           </div>
         </div>
@@ -3858,7 +3875,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.094<br />29/04/26 à 16h20
+          v.0.095<br />29/04/26 à 16h55
         </div>
       </div>
 
