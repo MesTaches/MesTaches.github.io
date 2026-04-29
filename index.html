@@ -3784,7 +3784,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation";
+  const isFullWidthView = view === "tasks" || view === "categorytasks";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -3843,7 +3843,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.090<br />29/04/26 à 14h30
+          v.0.091<br />29/04/26 à 14h32
         </div>
       </div>
 
@@ -3878,7 +3878,7 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 16px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? "100%" : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 16px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
