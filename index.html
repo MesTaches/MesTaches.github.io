@@ -663,7 +663,7 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
   try {
     const s = localStorage.getItem(SETTINGS_KEY);
-    if (!s) return DEFAULT_SETTINGS;
+    if (!s) { const b = localStorage.getItem(SETTINGS_KEY + "_backup"); if (b) { try { const p = JSON.parse(b); return { categories: p.categories || DEFAULT_SETTINGS.categories, types: p.types || DEFAULT_SETTINGS.types, statuses: p.statuses || DEFAULT_SETTINGS.statuses, hiddenTabs: p.hiddenTabs || [], labels: p.labels || DEFAULT_SETTINGS.labels, groqKey: (p.groqKey || "").trim(), showAiDebug: p.showAiDebug || false }; } catch {} } return DEFAULT_SETTINGS; }
     const parsed = JSON.parse(s);
     return {
       categories: parsed.categories || DEFAULT_SETTINGS.categories,
@@ -671,12 +671,16 @@ function loadSettings() {
       statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
       hiddenTabs: parsed.hiddenTabs || [],
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
-      groqKey: parsed.groqKey || "",
+      groqKey: (parsed.groqKey || "").trim(),
     };
   } catch { return DEFAULT_SETTINGS; }
 }
 function saveSettings(s) {
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {}
+  try {
+    const clean = { ...s, groqKey: (s.groqKey || "").trim() };
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(clean));
+    localStorage.setItem(SETTINGS_KEY + "_backup", JSON.stringify(clean));
+  } catch {}
 }
 
 /* ─── PRIORITY ─── */
