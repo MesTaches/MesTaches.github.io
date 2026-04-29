@@ -3762,11 +3762,11 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       </div>
 
       {/* ── Tableau ── */}
-      <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
+      <div style={{ flex:1, overflowY:"auto", overflowX:"auto", padding:"0 16px" }}>
         <div style={{ minWidth:"max-content" }}>
 
           {/* Header colonnes */}
-          <div style={{ display:"flex", alignItems:"center", padding:"6px 16px", background:"#FAFAFA",
+          <div style={{ display:"flex", alignItems:"center", gap:4, padding:"6px 6px", background:"#FAFAFA",
             borderBottom:"2px solid #ECEAE5", position:"sticky", top:0, zIndex:2, gap:0, height:32 }}>
             <div style={{ width:28, flexShrink:0 }} />
             <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", height:"100%" }}><span style={{ fontSize:9, fontWeight:700, color:"#666", fontFamily:"'Lora',serif" }}>PRIO.</span></div>
@@ -3792,7 +3792,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
             const pr=T2_PRIOS.find(p=>p.id===(c.priority||"normal"))||T2_PRIOS[2];
             const today=new Date().toISOString().split("T")[0];
             return (
-              <div key={c.id} style={{ display:"flex", alignItems:"center", padding:"4px 16px",
+              <div key={c.id} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 6px",
                 borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
                 transition:"background 0.1s" }}
                 onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"}
@@ -3846,7 +3846,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
 
           {/* Footer totaux */}
           {displayed.length>0&&(
-            <div style={{ display:"flex", alignItems:"center", padding:"5px 16px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 6px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
               <div style={{ width:28+44, flexShrink:0 }} />
               <div style={{ width:colWidths.clientName, flexShrink:0 }} />
               <div style={{ width:colWidths.clientCode, flexShrink:0 }} />
@@ -4169,7 +4169,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.102<br />29/04/26 à 18h20
+          v.0.103<br />29/04/26 à 18h25
         </div>
       </div>
 
