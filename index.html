@@ -2167,6 +2167,7 @@ const ALL_TABS = [
   { id: "meetings",      label: "Réunions",         icon: "◷" },
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "🔔" },
+  { id: "tasks2",        label: "Tâche V2",         icon: "📋" },
   { id: "reporting",     label: "Reporting",        icon: "📊" },
   { id: "cotation",      label: "Cotation",         icon: "📋" },
   { id: "payments",      label: "Paiements",        icon: "💶" },
@@ -3784,7 +3785,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks";
+  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "tasks2";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -3843,7 +3844,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.097<br />29/04/26 à 17h25
+          v.0.098<br />29/04/26 à 17h40
         </div>
       </div>
 
@@ -3875,6 +3876,9 @@ function App() {
           )}
           {view === "categorytasks" && (
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
+          )}
+          {view === "tasks2" && (
+            <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
           )}
         </div>
       ) : (
