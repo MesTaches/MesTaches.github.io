@@ -370,7 +370,7 @@ function CotationModal({ cotation, onSave, onClose }) {
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:4, fontWeight:600, letterSpacing:"0.04em" }}>{t}</div>;
   const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) e.currentTarget._mdOutside=true; }} onMouseUp={(e)=>{ if(e.target===e.currentTarget&&e.currentTarget._mdOutside){e.currentTarget._mdOutside=false;onClose();}}}>
       <div className="tasks2-modal" style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
         <div style={{ padding:"18px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LA DEMANDE":"NOUVELLE DEMANDE"}</span>
@@ -3698,9 +3698,9 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       fontFamily:"'Lora',serif", fontSize:11, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>
   );
 
-  const ColHeader = ({label, col, right}) => (
+  const ColHeader = ({label, col, right, center}) => (
     <div style={{ display:"flex", alignItems:"center", height:"100%", flexShrink:0, width:col?colWidths[col]:undefined,
-      cursor:col?"pointer":"default", userSelect:"none", justifyContent:right?"flex-end":"flex-start",
+      cursor:col?"pointer":"default", userSelect:"none", justifyContent:right?"flex-end":center?"center":"flex-start",
       position:"relative" }} onClick={()=>col&&handleSort(col)}>
       <span style={{ fontSize:9, fontWeight:700, color:sortCol===col?"#102A63":"#666",
         fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{label}{si(col)}</span>
@@ -3762,7 +3762,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       </div>
 
       {/* ── Sous-titre ── */}
-      <div style={{ padding:"6px 12px 2px", background:"#F7F6F3", borderBottom:"1px solid #ECEAE5", display:"flex", gap:12, alignItems:"center" }}>
+      <div style={{ padding:"6px 48px 2px", background:"#F7F6F3", borderBottom:"1px solid #ECEAE5", display:"flex", gap:12, alignItems:"center" }}>
         <span style={{ fontSize:11, color:"#999", fontFamily:"'DM Mono',monospace" }}>
           {displayed.length} demande{displayed.length!==1?"s":""} · {items.filter(c=>!["done","refused"].includes(c.status)).length} en cours
         </span>
@@ -3786,8 +3786,8 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
             <ColHeader label="BESOIN"    col="need" right />
             <ColHeader label="OBTENU"    col="obtainedAmount" right />
             <div style={{ width:20, flexShrink:0 }} />
-            <ColHeader label="ÉTIQUETTE" col="label" />
-            <ColHeader label="CLÔTURE"   col="closeDate" />
+            <ColHeader label="ÉTIQUETTE" col="label" center />
+            <ColHeader label="CLÔTURE"   col="closeDate" center />
             <div style={{ width:60, flexShrink:0 }} />
           </div>
 
@@ -3800,13 +3800,13 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
             const pr=T2_PRIOS.find(p=>p.id===(c.priority||"normal"))||T2_PRIOS[2];
             const today=new Date().toISOString().split("T")[0];
             return (
-              <div key={c.id} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 6px",
+              <div key={c.id} onClick={()=>setModal(c)} style={{ display:"flex", alignItems:"center", gap:4, padding:"4px 6px",
                 borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
-                transition:"background 0.1s" }}
+                transition:"background 0.1s", cursor:"pointer" }}
                 onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"}
                 onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"white":"#FAFAFA"}>
                 {/* Checkbox */}
-                <div style={{ width:28, flexShrink:0 }}><input type="checkbox" style={{ cursor:"pointer" }} /></div>
+                <div style={{ width:28, flexShrink:0 }} onClick={e=>e.stopPropagation()}><input type="checkbox" style={{ cursor:"pointer" }} /></div>
                 {/* Prio */}
                 <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", gap:2 }}>
                   {(c.priority==="urgent"||c.priority==="high")&&<span style={{ fontSize:8, color:pr.color }}>▲</span>}
@@ -3826,7 +3826,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 <div style={{ width:colWidths.requester, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#555", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
                 {/* Statut */}
                 <div style={{ width:colWidths.status, flexShrink:0, paddingRight:8 }}>
-                  <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.label}</span>
+                  <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{st.label}</span>
                 </div>
                 {/* Encours */}
                 <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.authorizedAmount)}</div>
@@ -3837,7 +3837,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 <div style={{ width:20, flexShrink:0 }} />
                 {/* Étiquette */}
                 <div style={{ width:colWidths.label, flexShrink:0, paddingRight:8 }}>
-                  <span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lb.label}</span>
+                  <span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{lb.label}</span>
                 </div>
                 {/* Clôture */}
                 <div style={{ width:colWidths.closeDate, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif",
@@ -3846,8 +3846,8 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 </div>
                 {/* Actions */}
                 <div style={{ width:60, flexShrink:0, display:"flex", gap:4, justifyContent:"flex-end" }}>
-                  <button onClick={()=>setModal(c)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:0.4, color:"#555" }} title="Modifier">✎</button>
-                  <button onClick={()=>handleDelete(c.id)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#E74C3C", opacity:0.4 }} title="Supprimer">×</button>
+                  <button onClick={e=>{e.stopPropagation();setModal(c);}} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:0.4, color:"#555" }} title="Modifier">✎</button>
+                  <button onClick={e=>{e.stopPropagation();handleDelete(c.id);}} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#E74C3C", opacity:0.4 }} title="Supprimer">×</button>
                 </div>
               </div>
             );
@@ -3875,7 +3875,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
       </div>
 
       {/* ── Pied de page ── */}
-      <div style={{ padding:"4px 12px", background:"white", borderTop:"1px solid #ECEAE5", display:"flex", gap:16, flexShrink:0 }}>
+      <div style={{ padding:"4px 48px", background:"white", borderTop:"1px solid #ECEAE5", display:"flex", gap:16, flexShrink:0 }}>
         <span style={{ fontSize:10, color:"#999", fontFamily:"'DM Mono',monospace" }}>
           Créées {items.length} (100%) · Actives {items.filter(c=>!["done","refused"].includes(c.status)).length} · Terminées {items.filter(c=>c.status==="done").length} · <span style={{ color:"#E74C3C" }}>En retard 0</span>
         </span>
@@ -4178,7 +4178,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.105<br />29/04/26 à 18h40
+          v.0.107<br />29/04/26 à 18h50
         </div>
       </div>
 
