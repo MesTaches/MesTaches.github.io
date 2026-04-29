@@ -3554,6 +3554,329 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   );
 }
 
+
+/* ─── TASKS2 (Cotation) - données indépendantes ─── */
+const TASKS2_KEY          = "taskmanager_tasks2_v1";
+const TASKS2_COL_KEY      = "taskmanager_tasks2_colwidths";
+const TASKS2_DEFAULT_COLS = { clientName:200, clientCode:75, requestDate:85, requester:95, status:90, authorizedAmount:95, need:95, obtainedAmount:95, label:108, closeDate:85 };
+
+const T2_STATUSES = [
+  { id:"todo",       label:"À faire",    bg:"#F0F0F0", color:"#666"    },
+  { id:"inprogress", label:"En cours",   bg:"#FEF9C3", color:"#B45309" },
+  { id:"waiting",    label:"En attente", bg:"#DBEAFE", color:"#1D4ED8" },
+  { id:"blocked",    label:"Bloqué",     bg:"#FEE2E2", color:"#DC2626" },
+  { id:"refused",    label:"Refusé",     bg:"#F3F4F6", color:"#9CA3AF" },
+  { id:"done",       label:"Fait",       bg:"#D1FAE5", color:"#065F46" },
+];
+const T2_LABELS = [
+  { id:"toassign",   label:"À affecter",  bg:"#F3F4F6", color:"#6B7280" },
+  { id:"ld_allianz", label:"L.D. Allianz",bg:"#EDE9FE", color:"#6D28D9" },
+  { id:"natixis",    label:"Natixis",     bg:"#DBEAFE", color:"#1E40AF" },
+  { id:"bnp",        label:"BNP",         bg:"#D1FAE5", color:"#065F46" },
+  { id:"allianz",    label:"Allianz",     bg:"#FEF3C7", color:"#92400E" },
+];
+const T2_PRIOS = [
+  { id:"urgent", label:"Urgent", rank:0, color:"#E74C3C", tag:"P1" },
+  { id:"high",   label:"P1",     rank:1, color:"#E67E22", tag:"P1" },
+  { id:"normal", label:"P3",     rank:2, color:"#95A5A6", tag:"P3" },
+  { id:"low",    label:"P4",     rank:3, color:"#BDC3C7", tag:"P4" },
+];
+
+function loadTasks2()   { try { const s=localStorage.getItem(TASKS2_KEY);    return s?JSON.parse(s):[]; } catch { return []; } }
+function saveTasks2(d)  { try { localStorage.setItem(TASKS2_KEY, JSON.stringify(d)); } catch {} }
+
+function fmtT2Eur(v) {
+  if (v===""||v===null||v===undefined) return "—";
+  const n=parseFloat(String(v).replace(/[\s\u00A0]/g,"").replace(",","."));
+  if (isNaN(n)) return "—";
+  return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €";
+}
+
+/* ── Modal Tasks2 ── */
+function Tasks2Modal({ item, onSave, onClose }) {
+  const today0 = new Date().toISOString().split("T")[0];
+  const [d, setD] = React.useState(() => {
+    const base = { priority:"normal", clientName:"", clientCode:"", requestDate:today0,
+      requester:"", status:"todo", authorizedAmount:"", need:"", obtainedAmount:"",
+      label:"toassign", closeDate:"", notes:"", ...item };
+    if (!base.requestDate) base.requestDate = today0;
+    return base;
+  });
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", marginBottom:3, fontWeight:600, letterSpacing:"0.04em" }}>{t}</div>;
+  const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
+        <div style={{ padding:"16px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LA DEMANDE":"NOUVELLE DEMANDE"}</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+        </div>
+        <div style={{ padding:"16px 24px", display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>{lbl("PRIORITÉ")}<select value={d.priority} onChange={e=>set("priority",e.target.value)} style={inp}>
+              {T2_PRIOS.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
+            <div style={{ flex:1 }}>{lbl("STATUT")}<select value={d.status} onChange={e=>set("status",e.target.value)} style={inp}>
+              {T2_STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+          </div>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:2 }}>{lbl("NOM CLIENT")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={inp} placeholder="Nom du client" /></div>
+            <div style={{ flex:1 }}>{lbl("CODE CLIENT")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={inp} placeholder="Code" /></div>
+          </div>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>{lbl("DATE DEMANDE")}<input type="date" value={d.requestDate} onChange={e=>set("requestDate",e.target.value)} style={inp} /></div>
+            <div style={{ flex:1 }}>{lbl("DEMANDEUR")}<input value={d.requester} onChange={e=>set("requester",e.target.value)} style={inp} placeholder="Prénom" /></div>
+          </div>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>{lbl("ENCOURS AUTORISÉ (€)")}<input value={d.authorizedAmount} onChange={e=>set("authorizedAmount",e.target.value)} style={inp} placeholder="0" /></div>
+            <div style={{ flex:1 }}>{lbl("BESOIN (€)")}<input value={d.need} onChange={e=>set("need",e.target.value)} style={inp} placeholder="0" /></div>
+            <div style={{ flex:1 }}>{lbl("MONTANT OBTENU (€)")}<input value={d.obtainedAmount} onChange={e=>set("obtainedAmount",e.target.value)} style={inp} placeholder="0" /></div>
+          </div>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>{lbl("ÉTIQUETTE")}<select value={d.label} onChange={e=>set("label",e.target.value)} style={inp}>
+              {T2_LABELS.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></div>
+            <div style={{ flex:1 }}>{lbl("DATE CLÔTURE")}<input type="date" value={d.closeDate} onChange={e=>set("closeDate",e.target.value)} style={inp} /></div>
+          </div>
+          <div>{lbl("NOTES")}<RichTextArea value={d.notes} onChange={v=>set("notes",v)} placeholder="Notes libres…" rows={4} /></div>
+        </div>
+        <div style={{ padding:"8px 24px 16px", display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
+          <button onClick={()=>onSave(d)} style={{ ...S.btn("#102A63"), fontSize:11, padding:"7px 14px" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Tasks2View : même architecture que TasksView, colonnes cotation ── */
+function Tasks2View({ fullscreen, onToggleFullscreen }) {
+  const isMobile = useIsMobile();
+  const [items, setItems]           = React.useState(()=>loadTasks2());
+  const [modal, setModal]           = React.useState(null);
+  const [search, setSearch]         = React.useState("");
+  const [filterStatus, setFilterStatus] = React.useState("Tous");
+  const [filterLabel,  setFilterLabel]  = React.useState("Toutes");
+  const [sortCol,  setSortCol]  = React.useState(null);
+  const [sortDir,  setSortDir]  = React.useState("asc");
+  const [colWidths, setColWidths] = React.useState(()=>{
+    try { const s=localStorage.getItem(TASKS2_COL_KEY); return s?{...TASKS2_DEFAULT_COLS,...JSON.parse(s)}:TASKS2_DEFAULT_COLS; } catch { return TASKS2_DEFAULT_COLS; }
+  });
+
+  const saveData = (list) => { setItems(list); saveTasks2(list); };
+  const handleSave = (d) => {
+    const list = d.id ? items.map(c=>c.id===d.id?d:c) : [...items,{...d,id:Date.now().toString()}];
+    saveData(list); setModal(null);
+  };
+  const handleDelete = (id) => { if(confirm("Supprimer cette demande ?")) saveData(items.filter(c=>c.id!==id)); };
+
+  const startResize = (col, e) => {
+    e.preventDefault();
+    const startX=e.clientX, startW=colWidths[col];
+    const onMove = ev => {
+      const nw=Math.max(40,startW+ev.clientX-startX);
+      setColWidths(w=>({...w,[col]:nw}));
+      localStorage.setItem(TASKS2_COL_KEY,JSON.stringify({...colWidths,[col]:nw}));
+    };
+    const onUp=()=>{ document.removeEventListener("mousemove",onMove); document.removeEventListener("mouseup",onUp); };
+    document.addEventListener("mousemove",onMove); document.addEventListener("mouseup",onUp);
+  };
+
+  const handleSort = col => { if(sortCol===col){ setSortDir(d=>d==="asc"?"desc":"asc"); } else { setSortCol(col); setSortDir("asc"); }};
+  const si = col => sortCol===col?(sortDir==="asc"?" ▲":" ▼"):"";
+
+  const FBtn = ({label,active,onClick,color}) => (
+    <button onClick={onClick} style={{ border:`1px solid ${active?color||"#102A63":"#E0E0E0"}`,
+      background:active?color||"#102A63":"white", color:active?"white":"#666",
+      borderRadius:20, padding:"3px 12px", cursor:"pointer",
+      fontFamily:"'Lora',serif", fontSize:11, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>
+  );
+
+  const ColHeader = ({label, col, right}) => (
+    <div style={{ display:"flex", alignItems:"center", flexShrink:0, width:col?colWidths[col]:undefined,
+      cursor:col?"pointer":"default", userSelect:"none", justifyContent:right?"flex-end":"flex-start",
+      position:"relative" }} onClick={()=>col&&handleSort(col)}>
+      <span style={{ fontSize:9, fontWeight:700, color:sortCol===col?"#102A63":"#AAA",
+        fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{label}{si(col)}</span>
+      {col && <div onMouseDown={e=>startResize(col,e)}
+        style={{ position:"absolute", right:-4, top:0, bottom:0, width:8, cursor:"col-resize", zIndex:5 }} />}
+    </div>
+  );
+
+  const displayed = items
+    .filter(c => filterStatus==="Tous" || (filterStatus==="En cours" ? !["done","refused"].includes(c.status) : T2_STATUSES.find(s=>s.label===filterStatus)?.id===c.status))
+    .filter(c => filterLabel==="Toutes" || T2_LABELS.find(l=>l.label===filterLabel)?.id===c.label)
+    .filter(c => !search || [c.clientName,c.clientCode,c.requester].some(v=>(v||"").toLowerCase().includes(search.toLowerCase())))
+    .sort((a,b) => {
+      if (!sortCol) {
+        return (T2_PRIOS.find(p=>p.id===a.priority)?.rank??2)-(T2_PRIOS.find(p=>p.id===b.priority)?.rank??2);
+      }
+      let va=a[sortCol]||"", vb=b[sortCol]||"";
+      if(["authorizedAmount","need","obtainedAmount"].includes(sortCol)){
+        va=parseFloat(String(va).replace(",","."))||0; vb=parseFloat(String(vb).replace(",","."))||0;
+      }
+      const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"});
+      return sortDir==="asc"?cmp:-cmp;
+    });
+
+  const totAuth = displayed.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0);
+  const totNeed = displayed.reduce((s,c)=>s+(parseFloat(String(c.need||0).replace(",","."))||0),0);
+  const totObt  = displayed.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", height:fullscreen?"calc(100vh - 56px)":"auto" }}>
+
+      {/* ── Toolbar identique TasksView ── */}
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:isMobile?"8px 10px":"7px 12px",
+        display:"flex", gap:isMobile?6:8, flexWrap:"wrap", alignItems:"center", flexShrink:0 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…"
+          className="search-input-small" style={{ ...S.input, width:isMobile?110:140, padding:"4px 8px", fontSize:10 }} />
+        <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
+        {["Tous","En cours","À faire","En attente","Bloqué","Refusé","Fait"].map(o=>(
+          <FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />
+        ))}
+        {!isMobile && <>
+          <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
+          {["Toutes",...T2_LABELS.map(l=>l.label)].map(o=>{
+            const lb=T2_LABELS.find(l=>l.label===o);
+            return <FBtn key={o} label={o} active={filterLabel===o} onClick={()=>setFilterLabel(o)} color={lb?.color} />;
+          })}
+        </>}
+        <div style={{ flex:1 }} />
+        {!isMobile && <>
+          <button onClick={()=>{setColWidths(TASKS2_DEFAULT_COLS);localStorage.removeItem(TASKS2_COL_KEY);}}
+            title="Réinitialiser colonnes"
+            style={{ border:"1px solid #E0E0E0", background:"white", color:"#AAA", borderRadius:5,
+              padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>↺</button>
+          <button onClick={()=>onToggleFullscreen&&onToggleFullscreen()}
+            style={{ border:`1px solid ${fullscreen?"#102A63":"#E0E0E0"}`, background:fullscreen?"#102A63":"white",
+              color:fullscreen?"white":"#AAA", borderRadius:5, padding:"3px 9px", fontSize:10, cursor:"pointer" }}>⛶</button>
+        </>}
+        <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:11 }}>+ Nouvelle</button>
+      </div>
+
+      {/* ── Sous-titre ── */}
+      <div style={{ padding:"6px 12px 2px", background:"#F7F6F3", borderBottom:"1px solid #ECEAE5", display:"flex", gap:12, alignItems:"center" }}>
+        <span style={{ fontSize:11, color:"#999", fontFamily:"'DM Mono',monospace" }}>
+          {displayed.length} demande{displayed.length!==1?"s":""} · {items.filter(c=>!["done","refused"].includes(c.status)).length} en cours
+        </span>
+      </div>
+
+      {/* ── Tableau ── */}
+      <div style={{ flex:1, overflowY:"auto", overflowX:"auto" }}>
+        <div style={{ minWidth:"max-content" }}>
+
+          {/* Header colonnes */}
+          <div style={{ display:"flex", alignItems:"center", padding:"5px 10px", background:"#FAFAFA",
+            borderBottom:"2px solid #ECEAE5", position:"sticky", top:0, zIndex:2, gap:0 }}>
+            <div style={{ width:28, flexShrink:0 }} />
+            <div style={{ width:44, flexShrink:0 }}><span style={{ fontSize:9, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace" }}>PRIO.</span></div>
+            <ColHeader label="CLIENT"    col="clientName" />
+            <ColHeader label="CODE"      col="clientCode" />
+            <ColHeader label="DATE DEM." col="requestDate" />
+            <ColHeader label="DEMANDEUR" col="requester" />
+            <ColHeader label="STATUT"    col="status" />
+            <ColHeader label="ENCOURS"   col="authorizedAmount" right />
+            <ColHeader label="BESOIN"    col="need" right />
+            <ColHeader label="OBTENU"    col="obtainedAmount" right />
+            <ColHeader label="ÉTIQUETTE" col="label" />
+            <ColHeader label="CLÔTURE"   col="closeDate" />
+            <div style={{ width:60, flexShrink:0 }} />
+          </div>
+
+          {/* Lignes */}
+          {displayed.length===0 ? (
+            <div style={{ fontFamily:"'Lora',serif", textAlign:"center", padding:"40px 0", color:"#CCC", fontSize:13 }}>Aucune demande</div>
+          ) : displayed.map((c,i)=>{
+            const st=T2_STATUSES.find(s=>s.id===c.status)||T2_STATUSES[0];
+            const lb=T2_LABELS.find(l=>l.id===c.label)||T2_LABELS[0];
+            const pr=T2_PRIOS.find(p=>p.id===(c.priority||"normal"))||T2_PRIOS[2];
+            const today=new Date().toISOString().split("T")[0];
+            return (
+              <div key={c.id} style={{ display:"flex", alignItems:"center", padding:"4px 10px",
+                borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
+                transition:"background 0.1s" }}
+                onMouseEnter={e=>e.currentTarget.style.background="#F0F4FF"}
+                onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"white":"#FAFAFA"}>
+                {/* Checkbox */}
+                <div style={{ width:28, flexShrink:0 }}><input type="checkbox" style={{ cursor:"pointer" }} /></div>
+                {/* Prio */}
+                <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", gap:2 }}>
+                  {(c.priority==="urgent"||c.priority==="high")&&<span style={{ fontSize:8, color:pr.color }}>▲</span>}
+                  <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'DM Mono',monospace" }}>{pr.tag}</span>
+                </div>
+                {/* Client */}
+                <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                  fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, cursor:"pointer", paddingRight:8 }}
+                  onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
+                {/* Code */}
+                <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
+                {/* Date demande */}
+                <div style={{ width:colWidths.requestDate, flexShrink:0, fontSize:11, fontFamily:"'DM Mono',monospace", color:"#555", paddingRight:8 }}>
+                  {c.requestDate?c.requestDate.split("-").reverse().join("/"):"—"}
+                </div>
+                {/* Demandeur */}
+                <div style={{ width:colWidths.requester, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#555", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
+                {/* Statut */}
+                <div style={{ width:colWidths.status, flexShrink:0, paddingRight:8 }}>
+                  <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.label}</span>
+                </div>
+                {/* Encours */}
+                <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.authorizedAmount)}</div>
+                {/* Besoin */}
+                <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.need)}</div>
+                {/* Obtenu */}
+                <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.obtainedAmount)}</div>
+                {/* Étiquette */}
+                <div style={{ width:colWidths.label, flexShrink:0, paddingRight:8 }}>
+                  <span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lb.label}</span>
+                </div>
+                {/* Clôture */}
+                <div style={{ width:colWidths.closeDate, flexShrink:0, fontSize:11, fontFamily:"'DM Mono',monospace",
+                  color:c.closeDate&&c.closeDate<today?"#E74C3C":"#555", paddingRight:8 }}>
+                  {c.closeDate?c.closeDate.split("-").reverse().join("/"):"—"}
+                </div>
+                {/* Actions */}
+                <div style={{ width:60, flexShrink:0, display:"flex", gap:4, justifyContent:"flex-end" }}>
+                  <button onClick={()=>setModal(c)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity:0.4, color:"#555" }} title="Modifier">✎</button>
+                  <button onClick={()=>handleDelete(c.id)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, color:"#E74C3C", opacity:0.4 }} title="Supprimer">×</button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Footer totaux */}
+          {displayed.length>0&&(
+            <div style={{ display:"flex", alignItems:"center", padding:"5px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
+              <div style={{ width:28+44, flexShrink:0 }} />
+              <div style={{ width:colWidths.clientName, flexShrink:0 }} />
+              <div style={{ width:colWidths.clientCode, flexShrink:0 }} />
+              <div style={{ width:colWidths.requestDate, flexShrink:0 }} />
+              <div style={{ width:colWidths.requester, flexShrink:0 }} />
+              <div style={{ width:colWidths.status, flexShrink:0 }} />
+              <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totAuth)}</div>
+              <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totNeed)}</div>
+              <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totObt)}</div>
+              <div style={{ width:colWidths.label, flexShrink:0 }} />
+              <div style={{ width:colWidths.closeDate, flexShrink:0 }} />
+              <div style={{ width:60, flexShrink:0 }} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Pied de page ── */}
+      <div style={{ padding:"4px 12px", background:"white", borderTop:"1px solid #ECEAE5", display:"flex", gap:16, flexShrink:0 }}>
+        <span style={{ fontSize:10, color:"#999", fontFamily:"'DM Mono',monospace" }}>
+          Créées {items.length} (100%) · Actives {items.filter(c=>!["done","refused"].includes(c.status)).length} · Terminées {items.filter(c=>c.status==="done").length} · <span style={{ color:"#E74C3C" }}>En retard 0</span>
+        </span>
+        <span style={{ marginLeft:"auto", fontSize:10, color:"#999", fontFamily:"'DM Mono',monospace" }}>{displayed.length} affiché{displayed.length!==1?"s":""}</span>
+      </div>
+
+      {modal!==null&&<Tasks2Modal item={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
+    </div>
+  );
+}
+
 /* ─── APP ─── */
 function App() {
   const [settings, setSettings] = useState(() => loadSettings());
@@ -3846,7 +4169,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.100<br />29/04/26 à 18h00
+          v.0.101<br />29/04/26 à 18h10
         </div>
       </div>
 
@@ -3880,7 +4203,7 @@ function App() {
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
           )}
           {view === "tasks2" && (
-            <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
+            <Tasks2View fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} />
           )}
         </div>
       ) : (
