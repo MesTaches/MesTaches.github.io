@@ -2217,17 +2217,34 @@ function SettingsView({ settings, onSave }) {
 
   return (
     <div>
-      <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 20 }}>⚙ Paramètres</div>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>⚙ Paramètres</div>
+        <div style={{ marginTop: 4, fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#8A8A8A", letterSpacing: "0.05em" }}>
+          GESTION DES CATÉGORIES, TYPES, STATUTS, ÉTIQUETTES ET ASSISTANT IA
+        </div>
+      </div>
       <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
         <div style={{ borderBottom: "1px solid #F0F0F0", display: "flex", paddingLeft: 8, flexWrap: "wrap" }}>
-          <Tab id="categories" label="📁 Catégories" />
-          <Tab id="types" label="🏷 Types" />
-          <Tab id="statuses" label="🔵 Statuts" />
+          <Tab id="general" label="⚙ Général" />
+          <Tab id="tasks" label="✅ Tâches" />
+          <Tab id="demands" label="📨 Demandes" />
+          <Tab id="payments" label="💳 Paiements" />
           <Tab id="tabs" label="👁 Onglets" />
-          <Tab id="labels" label="🏷 Étiquettes" />
         </div>
         <div style={{ padding: "20px 24px" }}>
-          {tab === "categories" && <>
+          {tab === "general" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Réglages généraux de l'application et de l'assistant IA.</div>
+            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API GROQ</div>
+              <input type="password" value={s.groqKey || ""} onChange={e => setS({ ...s, groqKey: e.target.value })} placeholder="gsk_…" style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
+              <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé gratuite disponible sur console.groq.com</div>
+              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:10, fontSize:11, fontFamily:"'Lora',serif", color:"#555", userSelect:"none" }}>
+                <input type="checkbox" checked={s.showAiDebug||false} onChange={e=>setS({...s, showAiDebug:e.target.checked})} style={{ accentColor:"#102A63", cursor:"pointer", width:14, height:14 }} />
+                Afficher le statut de l'assistant IA (mode debug)
+              </label>
+            </div>
+          </>}
+          {tab === "tasks" && <>
             <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Gérez les catégories disponibles lors de la création de tâches.</div>
             {s.categories.map(c => (
               <Row key={c.id}>
@@ -2255,7 +2272,20 @@ function SettingsView({ settings, onSave }) {
             ))}
             <button onClick={addType} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter un type</button>
           </>}
-          {tab === "statuses" && <>
+          {tab === "tasks" && <>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Paramètres communs des tâches : catégories, types, statuts et étiquettes.</div>
+            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#2C3E50", marginBottom: 8, fontFamily: "'Lora',serif" }}>Catégories</div>
+              {s.categories.map(c => (<Row key={c.id}> <div style={{ width:24, height:24, borderRadius:6, background:c.bg, border:`2px solid ${c.accent}`, flexShrink:0 }} /> <input value={c.name} onChange={e => updCat(c.id, "name", e.target.value)} style={{ ...S.input, flex:1, padding:"5px 8px", fontSize:12 }} /> <button onClick={() => delCat(c.id)} style={{ border:"none", background:"none", cursor:"pointer", color:"#E8A0A0", fontSize:16 }}>×</button></Row>))}
+              <button onClick={addCat} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter une catégorie</button>
+            </div>
+            <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#2C3E50", marginBottom: 8, fontFamily: "'Lora',serif" }}>Types</div>
+              {s.types.map(t => (<Row key={t.id}><input value={t.icon} onChange={e => updType(t.id, "icon", e.target.value)} style={{ ...S.input, width:44, padding:"5px 8px", fontSize:16, textAlign:"center" }} /><input value={t.name} onChange={e => updType(t.id, "name", e.target.value)} style={{ ...S.input, flex:1, padding:"5px 8px", fontSize:12 }} /><button onClick={() => delType(t.id)} style={{ border:"none", background:"none", cursor:"pointer", color:"#E8A0A0", fontSize:16 }}>×</button></Row>))}
+              <button onClick={addType} style={{ ...S.ghost, marginTop: 10 }}>+ Ajouter un type</button>
+            </div>
+          </>}
+          {tab === "demands" && <>
             <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Gérez les statuts disponibles pour vos tâches.</div>
             {s.statuses.map(st => (
               <Row key={st.id}>
@@ -4301,7 +4331,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.115<br />29/04/26 à 22h50
+          v.0.128<br />29/04/26 à 23h58
         </div>
       </div>
 
