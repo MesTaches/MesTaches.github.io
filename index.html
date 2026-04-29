@@ -297,6 +297,327 @@ function useIsMobile() {
 /* ─── STORAGE KEYS ─── */
 const STORAGE_KEY = "taskmanager_v4";
 const COL_WIDTHS_KEY = "taskmanager_colwidths";
+/* ─── COTATION KEY ─── */
+const COTATION_KEY = "taskmanager_cotations";
+function loadCotations() { try { const s = localStorage.getItem(COTATION_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
+function saveCotations(d) { try { localStorage.setItem(COTATION_KEY, JSON.stringify(d)); } catch {} }
+
+const COTATION_STATUSES = [
+  { id: "todo",      label: "À faire",     bg: "#F0F0F0", color: "#666" },
+  { id: "inprogress",label: "En cours",    bg: "#FEF9C3", color: "#B45309" },
+  { id: "waiting",   label: "En attente",  bg: "#DBEAFE", color: "#1D4ED8" },
+  { id: "blocked",   label: "Bloqué",      bg: "#FEE2E2", color: "#DC2626" },
+  { id: "refused",   label: "Refusé",      bg: "#F3F4F6", color: "#9CA3AF" },
+  { id: "done",      label: "Fait",        bg: "#D1FAE5", color: "#065F46" },
+];
+const COTATION_LABELS = [
+  { id: "toassign",  label: "À affecter",  bg: "#F3F4F6", color: "#6B7280" },
+  { id: "ld_allianz",label: "L.D. Allianz",bg: "#EDE9FE", color: "#6D28D9" },
+  { id: "natixis",   label: "Natixis",     bg: "#DBEAFE", color: "#1E40AF" },
+  { id: "bnp",       label: "BNP",         bg: "#D1FAE5", color: "#065F46" },
+  { id: "allianz",   label: "Allianz",     bg: "#FEF3C7", color: "#92400E" },
+];
+const COTATION_PRIORITIES = [
+  { id: "urgent", label: "Urgent", color: "#E74C3C" },
+  { id: "high",   label: "P1",     color: "#E67E22" },
+  { id: "normal", label: "P3",     color: "#95A5A6" },
+  { id: "low",    label: "P4",     color: "#BDC3C7" },
+];
+
+function fmtEuroCot(v) {
+  if (v === "" || v === null || v === undefined) return "—";
+  const n = parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+  if (isNaN(n)) return "—";
+  return n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+}
+
+function CotationModal({ cotation, onSave, onClose }) {
+  const [d, setD] = React.useState({ priority:"normal", clientName:"", clientCode:"", requestDate:"", requester:"", status:"todo", authorizedAmount:"", need:"", obtainedAmount:"", label:"toassign", closeDate:"", notes:"", ...cotation });
+  const set = (k,v) => setD(p => ({ ...p, [k]: v }));
+  const today = new Date().toISOString().split("T")[0];
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <div style={{ background:"white", borderRadius:16, width:620, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
+        <div style={{ padding:"20px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id ? "MODIFIER LA DEMANDE" : "NOUVELLE DEMANDE"}</span>
+          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+        </div>
+        <div style={{ padding:"20px 24px", display:"flex", flexDirection:"column", gap:14 }}>
+          {/* Ligne 1 : Priorité + Statut */}
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>PRIORITÉ</div>
+              <select value={d.priority} onChange={e=>set("priority",e.target.value)} style={{ ...S.input, fontSize:12 }}>
+                {COTATION_PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>STATUT</div>
+              <select value={d.status} onChange={e=>set("status",e.target.value)} style={{ ...S.input, fontSize:12 }}>
+                {COTATION_STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+          {/* Ligne 2 : Nom + Code client */}
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:2 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>NOM CLIENT</div>
+              <input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="Nom du client" />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>CODE CLIENT</div>
+              <input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="Code" />
+            </div>
+          </div>
+          {/* Ligne 3 : Date demande + Demandeur */}
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>DATE DEMANDE</div>
+              <input type="date" value={d.requestDate || today} onChange={e=>set("requestDate",e.target.value)} style={{ ...S.input, fontSize:12 }} />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>DEMANDEUR</div>
+              <input value={d.requester} onChange={e=>set("requester",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="Prénom" />
+            </div>
+          </div>
+          {/* Ligne 4 : Encours autorisé + Besoin + Montant obtenu */}
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>ENCOURS AUTORISÉ (€)</div>
+              <input value={d.authorizedAmount} onChange={e=>set("authorizedAmount",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="0,00" />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>BESOIN (€)</div>
+              <input value={d.need} onChange={e=>set("need",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="0,00" />
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>MONTANT OBTENU (€)</div>
+              <input value={d.obtainedAmount} onChange={e=>set("obtainedAmount",e.target.value)} style={{ ...S.input, fontSize:12 }} placeholder="0,00" />
+            </div>
+          </div>
+          {/* Ligne 5 : Étiquette + Date clôture */}
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>ÉTIQUETTE</div>
+              <select value={d.label} onChange={e=>set("label",e.target.value)} style={{ ...S.input, fontSize:12 }}>
+                {COTATION_LABELS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>DATE CLÔTURE</div>
+              <input type="date" value={d.closeDate} onChange={e=>set("closeDate",e.target.value)} style={{ ...S.input, fontSize:12 }} />
+            </div>
+          </div>
+          {/* Notes */}
+          <div>
+            <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:4 }}>NOTES</div>
+            <textarea value={d.notes} onChange={e=>set("notes",e.target.value)} rows={3} style={{ ...S.input, resize:"vertical", fontSize:12 }} placeholder="Notes libres…" />
+          </div>
+        </div>
+        <div style={{ padding:"12px 24px 20px", display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
+          <button onClick={() => onSave(d)} style={{ ...S.btn("#102A63"), fontSize:11, padding:"7px 14px" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CotationView({ settings }) {
+  const [cotations, setCotations] = React.useState(() => loadCotations());
+  const [modal, setModal] = React.useState(null);
+  const [filterStatus, setFilterStatus] = React.useState("all");
+  const [filterLabel, setFilterLabel] = React.useState("all");
+  const [noteModal, setNoteModal] = React.useState(null);
+  const [sortCol, setSortCol] = React.useState("requestDate");
+  const [sortAsc, setSortAsc] = React.useState(false);
+
+  const save = (list) => { setCotations(list); saveCotations(list); };
+
+  const handleSave = (d) => {
+    const list = d.id
+      ? cotations.map(c => c.id === d.id ? d : c)
+      : [...cotations, { ...d, id: Date.now().toString() }];
+    save(list);
+    setModal(null);
+  };
+
+  const handleDelete = (id) => { if (confirm("Supprimer cette demande ?")) save(cotations.filter(c => c.id !== id)); };
+
+  const filtered = cotations
+    .filter(c => filterStatus === "all" || c.status === filterStatus)
+    .filter(c => filterLabel === "all" || c.label === filterLabel)
+    .sort((a,b) => {
+      let va = a[sortCol]||"", vb = b[sortCol]||"";
+      if (sortCol === "need" || sortCol === "obtainedAmount" || sortCol === "authorizedAmount") {
+        va = parseFloat(String(va).replace(",",".")) || 0;
+        vb = parseFloat(String(vb).replace(",",".")) || 0;
+      }
+      return sortAsc ? (va > vb ? 1 : -1) : (va < vb ? 1 : -1);
+    });
+
+  const handleSort = (col) => { if (sortCol === col) setSortAsc(a => !a); else { setSortCol(col); setSortAsc(true); } };
+  const sortIcon = (col) => sortCol === col ? (sortAsc ? " ▲" : " ▼") : "";
+
+  const colStyle = (cursor=true) => ({ fontSize:9, fontWeight:700, color:"white", fontFamily:"'DM Mono',monospace", letterSpacing:"0.06em", cursor: cursor?"pointer":"default", userSelect:"none", whiteSpace:"nowrap" });
+
+  // Grille : checkbox | prio | clientName | clientCode | requestDate | requester | status | authorizedAmount | need | obtainedAmount | label | closeDate | note | actions
+  const gridTemplate = "28px 46px 1fr 72px 82px 90px 90px 82px 82px 90px 100px 82px 30px 30px";
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ marginBottom:16, display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+        <div>
+          <h2 style={{ fontSize:22, fontFamily:"'Lora',serif", color:"#2C3E50", margin:0 }}>Demandes de garanties</h2>
+          <div style={{ fontSize:11, color:"#999", marginTop:3, fontFamily:"'DM Mono',monospace" }}>
+            {filtered.length} demande{filtered.length > 1 ? "s" : ""} · {cotations.filter(c=>c.status!=="done"&&c.status!=="refused").length} en cours
+          </div>
+        </div>
+        <button onClick={() => setModal({})} style={{ ...S.btn("#102A63"), padding:"8px 18px", fontSize:12 }}>+ Nouvelle demande</button>
+      </div>
+
+      {/* Filtres statut */}
+      <div style={{ padding:"8px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", gap:5, flexWrap:"wrap", alignItems:"center", marginBottom:0 }}>
+        <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginRight:4 }}>STATUT :</span>
+        {[{ id:"all", label:"Tous" }, ...COTATION_STATUSES].map(s => (
+          <button key={s.id} onClick={() => setFilterStatus(s.id)}
+            style={{ border:"none", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11,
+              background: filterStatus === s.id ? "#102A63" : "#F0F0F0",
+              color: filterStatus === s.id ? "white" : "#555" }}>{s.label}</button>
+        ))}
+        <span style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginLeft:8, marginRight:4 }}>ÉTIQUETTE :</span>
+        {[{ id:"all", label:"Toutes" }, ...COTATION_LABELS].map(l => (
+          <button key={l.id} onClick={() => setFilterLabel(l.id)}
+            style={{ border:"none", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11,
+              background: filterLabel === l.id ? "#102A63" : "#F0F0F0",
+              color: filterLabel === l.id ? "white" : "#555" }}>{l.label}</button>
+        ))}
+      </div>
+
+      {/* Tableau */}
+      <div style={{ overflowX:"hidden", background:"white", borderRadius:8, border:"1px solid #ECEAE5", marginTop:8 }}>
+        {/* Header */}
+        <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"4px 10px", background:"#102A63", borderBottom:"1px solid #102A63", minWidth:"fit-content" }}>
+          <div />
+          <div style={colStyle()} onClick={()=>handleSort("priority")}>PRIO.{sortIcon("priority")}</div>
+          <div style={colStyle()} onClick={()=>handleSort("clientName")}>CLIENT{sortIcon("clientName")}</div>
+          <div style={colStyle(false)}>CODE</div>
+          <div style={colStyle()} onClick={()=>handleSort("requestDate")}>DATE DEM.{sortIcon("requestDate")}</div>
+          <div style={colStyle()} onClick={()=>handleSort("requester")}>DEMANDEUR{sortIcon("requester")}</div>
+          <div style={colStyle(false)}>STATUT</div>
+          <div style={{ ...colStyle(), textAlign:"right" }} onClick={()=>handleSort("authorizedAmount")}>ENCOURS{sortIcon("authorizedAmount")}</div>
+          <div style={{ ...colStyle(), textAlign:"right" }} onClick={()=>handleSort("need")}>BESOIN{sortIcon("need")}</div>
+          <div style={{ ...colStyle(), textAlign:"right" }} onClick={()=>handleSort("obtainedAmount")}>OBTENU{sortIcon("obtainedAmount")}</div>
+          <div style={colStyle()} onClick={()=>handleSort("label")}>ÉTIQUETTE{sortIcon("label")}</div>
+          <div style={colStyle()} onClick={()=>handleSort("closeDate")}>CLÔTURE{sortIcon("closeDate")}</div>
+          <div />
+          <div />
+        </div>
+
+        {/* Lignes */}
+        {filtered.length === 0 ? (
+          <div style={{ fontFamily:"'Lora',serif", textAlign:"center", padding:"30px 0", color:"#BBB", fontSize:13 }}>Aucune demande</div>
+        ) : filtered.map((c, i) => {
+          const stObj = COTATION_STATUSES.find(s => s.id === c.status) || COTATION_STATUSES[0];
+          const lbObj = COTATION_LABELS.find(l => l.id === c.label) || COTATION_LABELS[0];
+          const prObj = COTATION_PRIORITIES.find(p => p.id === (c.priority||"normal")) || COTATION_PRIORITIES[2];
+          const isUrgent = c.priority === "urgent";
+          return (
+            <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"3px 10px", borderBottom:"1px solid #F5F5F5",
+              background: i % 2 === 0 ? "white" : "#FAFAFA", alignItems:"center", minWidth:"fit-content" }}>
+              <div><input type="checkbox" style={{ cursor:"pointer" }} /></div>
+              {/* Priorité */}
+              <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                {isUrgent && <span style={{ fontSize:9, color:"#E74C3C" }}>▲</span>}
+                <span style={{ fontSize:10, fontWeight:700, color:prObj.color, fontFamily:"'DM Mono',monospace" }}>
+                  {prObj.id==="urgent"?"P1":prObj.id==="high"?"P1":prObj.id==="normal"?"P3":"P4"}
+                </span>
+              </div>
+              {/* Nom client */}
+              <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}
+                onClick={() => setModal(c)}>{c.clientName || "—"}</div>
+              {/* Code client */}
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888" }}>{c.clientCode || "—"}</div>
+              {/* Date demande */}
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#555" }}>
+                {c.requestDate ? c.requestDate.split("-").reverse().join("/") : "—"}
+              </div>
+              {/* Demandeur */}
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#555" }}>{c.requester || "—"}</div>
+              {/* Statut */}
+              <div><span style={{ fontSize:9, fontWeight:700, background:stObj.bg, color:stObj.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{stObj.label}</span></div>
+              {/* Encours */}
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.authorizedAmount)}</div>
+              {/* Besoin */}
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.need)}</div>
+              {/* Obtenu */}
+              <div style={{ fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:6 }}>{fmtEuroCot(c.obtainedAmount)}</div>
+              {/* Étiquette */}
+              <div><span style={{ fontSize:9, fontWeight:700, background:lbObj.bg, color:lbObj.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lbObj.label}</span></div>
+              {/* Clôture */}
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color: c.closeDate && c.closeDate < new Date().toISOString().split("T")[0] ? "#E74C3C" : "#555" }}>
+                {c.closeDate ? c.closeDate.split("-").reverse().join("/") : "—"}
+              </div>
+              {/* Note */}
+              <div style={{ display:"flex", justifyContent:"center" }}>
+                <button onClick={() => setNoteModal({ id:c.id, notes:c.notes||"" })}
+                  style={{ background:"none", border:"none", cursor:"pointer", fontSize:13, opacity: c.notes ? 1 : 0.3, color: c.notes ? "#102A63" : "#999" }}>💬</button>
+              </div>
+              {/* Actions */}
+              <div style={{ display:"flex", gap:3, justifyContent:"center" }}>
+                <button onClick={() => setModal(c)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.5 }} title="Modifier">✎</button>
+                <button onClick={() => handleDelete(c.id)} style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#E74C3C", opacity:0.5 }} title="Supprimer">×</button>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Footer total */}
+        {filtered.length > 0 && (
+          <div style={{ display:"grid", gridTemplateColumns:gridTemplate, padding:"6px 10px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5" }}>
+            <div /><div /><div /><div /><div /><div /><div />
+            <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
+              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0))}
+            </div>
+            <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
+              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.need||0).replace(",","."))||0),0))}
+            </div>
+            <div style={{ fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:6 }}>
+              {fmtEuroCot(filtered.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0))}
+            </div>
+            <div /><div /><div /><div />
+          </div>
+        )}
+      </div>
+
+      {/* Modal note */}
+      {noteModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"white", borderRadius:12, width:400, boxShadow:"0 16px 48px rgba(0,0,0,0.15)" }}>
+            <div style={{ padding:"14px 18px", borderBottom:"1px solid #F0F0F0", fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:700, color:"#102A63" }}>NOTE</div>
+            <div style={{ padding:"14px 18px" }}>
+              <textarea rows={5} value={noteModal.notes} onChange={e => setNoteModal(p=>({...p,notes:e.target.value}))}
+                style={{ ...S.input, resize:"vertical", fontSize:12 }} placeholder="Saisir une note…" />
+            </div>
+            <div style={{ padding:"10px 18px 16px", display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <button onClick={() => setNoteModal(null)} style={{ ...S.btn("#F0F0F0","#666"), fontSize:10, padding:"6px 12px" }}>Annuler</button>
+              <button onClick={() => {
+                const updated = cotations.map(c => c.id === noteModal.id ? { ...c, notes: noteModal.notes } : c);
+                save(updated); setNoteModal(null);
+              }} style={{ ...S.btn("#102A63"), fontSize:10, padding:"6px 12px" }}>✓ Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal création/édition */}
+      {modal !== null && <CotationModal cotation={modal} onSave={handleSave} onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+
 const PAYMENTS_KEY = "taskmanager_payments";
 const REPORTS_KEY  = "taskmanager_reports";
 const MEETING_STORAGE = "taskmanager_meetings_v1";
@@ -1855,6 +2176,7 @@ const ALL_TABS = [
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "🔔" },
   { id: "reporting",     label: "Reporting",        icon: "📊" },
+  { id: "cotation",      label: "Cotation",         icon: "📋" },
   { id: "payments",      label: "Paiements",        icon: "💶" },
 ];
 
@@ -3509,7 +3831,7 @@ function App() {
         ))}
         {/* Section : Finance & Suivi */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Finance & Suivi</div>
-        {visibleNav.filter(n => ["reporting","payments"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["cotation","reporting","payments"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "10px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
@@ -3528,7 +3850,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.085<br />29/04/26 à 11h30
+          v.0.086<br />29/04/26 à 13h45
         </div>
       </div>
 
@@ -3563,13 +3885,14 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 24px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
+          {view === "cotation"      && <CotationView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
