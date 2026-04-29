@@ -3800,6 +3800,7 @@ function App() {
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
   const isFullWidthView = view === "tasks" || view === "categorytasks";
+  const isWideLayout = isFullWidthView || view === "cotation";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -3858,7 +3859,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.092<br />29/04/26 à 15h30
+          v.0.093<br />29/04/26 à 15h35
         </div>
       </div>
 
@@ -3870,9 +3871,9 @@ function App() {
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#102A63", flex: 1 }}>
             {(visibleNav.find(n => n.id === view) || {}).icon} {(visibleNav.find(n => n.id === view) || {}).label || ""}
           </div>
-          <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {view !== "cotation" && <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             + {isMobile ? "" : "Nouvelle tâche"}
-          </button>
+          </button>}
         </div>
 
       {overdueCount > 0 && (
@@ -3883,7 +3884,7 @@ function App() {
       )}
 
       {/* Full-width views (tasks, categorytasks) vs contained views */}
-      {isFullWidthView ? (
+      {isWideLayout ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -3891,16 +3892,16 @@ function App() {
           {view === "categorytasks" && (
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
           )}
+          {view === "cotation" && <CotationView settings={settings} />}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? "100%" : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
-          {view === "cotation"      && <CotationView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
