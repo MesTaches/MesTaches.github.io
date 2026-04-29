@@ -3841,33 +3841,33 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 </div>
                 {/* Client */}
                 <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                  fontSize:12, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
+                  fontSize:10, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
                   onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
                 {/* Code */}
-                <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
+                <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
                 {/* Date demande */}
-                <div style={{ width:colWidths.requestDate, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#555", paddingRight:8 }}>
+                <div style={{ width:colWidths.requestDate, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#555", paddingRight:8 }}>
                   {c.requestDate?c.requestDate.split("-").reverse().join("/"):"—"}
                 </div>
                 {/* Demandeur */}
-                <div style={{ width:colWidths.requester, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#555", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
+                <div style={{ width:colWidths.requester, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#555", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
                 {/* Statut */}
                 <div style={{ width:colWidths.status, flexShrink:0, paddingRight:8 }}>
                   <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{st.label}</span>
                 </div>
                 {/* Encours */}
-                <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.authorizedAmount)}</div>
+                <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.authorizedAmount)}</div>
                 {/* Besoin */}
-                <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.need)}</div>
+                <div style={{ width:colWidths.need, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.need)}</div>
                 {/* Obtenu */}
-                <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(c.obtainedAmount)}</div>
+                <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", fontWeight:600, color:"#065F46", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(c.obtainedAmount)}</div>
                 <div style={{ width:20, flexShrink:0 }} />
                 {/* Étiquette */}
                 <div style={{ width:colWidths.label, flexShrink:0, paddingRight:8 }}>
                   <span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{lb.label}</span>
                 </div>
                 {/* Clôture */}
-                <div style={{ width:colWidths.closeDate, flexShrink:0, fontSize:11, fontFamily:"'Lora',serif",
+                <div style={{ width:colWidths.closeDate, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif",
                   color:c.closeDate&&c.closeDate<today?"#E74C3C":"#555", paddingRight:8 }}>
                   {c.closeDate?c.closeDate.split("-").reverse().join("/"):"—"}
                 </div>
@@ -3889,9 +3889,9 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
               <div style={{ width:colWidths.requestDate, flexShrink:0 }} />
               <div style={{ width:colWidths.requester, flexShrink:0 }} />
               <div style={{ width:colWidths.status, flexShrink:0 }} />
-              <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totAuth)}</div>
-              <div style={{ width:colWidths.need, flexShrink:0, fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totNeed)}</div>
-              <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(totObt)}</div>
+              <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:10, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totAuth)}</div>
+              <div style={{ width:colWidths.need, flexShrink:0, fontSize:10, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(totNeed)}</div>
+              <div style={{ width:colWidths.obtainedAmount, flexShrink:0, fontSize:10, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:20 }}>{fmtT2Eur(totObt)}</div>
               <div style={{ width:20, flexShrink:0 }} />
               <div style={{ width:colWidths.label, flexShrink:0 }} />
               <div style={{ width:colWidths.closeDate, flexShrink:0 }} />
@@ -4217,7 +4217,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.109<br />29/04/26 à 19h10
+          v.0.110<br />29/04/26 à 22h20
         </div>
       </div>
 
