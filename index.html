@@ -623,6 +623,7 @@ const SETTINGS_KEY = "taskmanager_settings_v1";
 
 /* ─── DEFAULT SETTINGS (1: configurable categories, types, statuses) ─── */
 const DEFAULT_SETTINGS = {
+  showAiDebug: false,
   categories: [
     { id: "cc", name: "Crédit clients", bg: "#E8F4FD", accent: "#2980B9" },
     { id: "tr", name: "Trésorerie",     bg: "#E8F8F5", accent: "#27AE60" },
@@ -2309,6 +2310,13 @@ function SettingsView({ settings, onSave }) {
               placeholder="gsk_…"
               style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
             <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé gratuite disponible sur console.groq.com — stockée uniquement dans votre navigateur</div>
+            <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:10,
+                            fontSize:11, fontFamily:"'Lora',serif", color:"#555", userSelect:"none" }}>
+              <input type="checkbox" checked={s.showAiDebug||false}
+                     onChange={e=>setS({...s, showAiDebug:e.target.checked})}
+                     style={{ accentColor:"#102A63", cursor:"pointer", width:14, height:14 }} />
+              Afficher le statut de l'assistant IA (mode debug)
+            </label>
           </div>
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
@@ -3361,6 +3369,8 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   const [grouped,      setGrouped]      = useState(false);
   const [aiText,       setAiText]       = useState("");
   const [aiLoading,    setAiLoading]    = useState(false);
+  const aiInputRef = React.useRef(null);
+  const [aiDebug, setAiDebug] = useState("");
   const [sortCol,      setSortCol]      = useState(null);
   const [sortDir,      setSortDir]      = useState("asc");
   const [colWidths, setColWidths] = useState(() => { try { const s = localStorage.getItem(COL_WIDTHS_KEY); return s ? { ...DEFAULT_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_COL_WIDTHS; } catch { return DEFAULT_COL_WIDTHS; } });
@@ -3429,34 +3439,35 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
   );
 
   const parseWithAI = async () => {
-    if (!aiText.trim()) return;
+    const userText = (aiInputRef.current ? aiInputRef.current.value : "").trim();
+    setAiDebug("⏳ Fonction appelée. Texte: [" + userText + "] | Clé: " + !!(settings && settings.groqKey));
+    if (!userText) { setAiDebug("⚠️ Champ vide"); return; }
+    if (!settings || !settings.groqKey) { setAiDebug("⚠️ Clé API manquante"); return; }
     setAiLoading(true);
+    setAiDebug("📡 Appel Groq en cours...");
     const todayStr = new Date().toLocaleDateString("fr-FR",{weekday:"long",year:"numeric",month:"long",day:"numeric"});
-    const prompt = `Aujourd'hui c'est ${todayStr}. Extrais les informations de ce texte et renvoie UNIQUEMENT un objet JSON valide (sans markdown, sans explication) avec ces champs :
-- "title" : string, titre court et propre de la tâche (reformulé si nécessaire)
-- "priority" : une valeur parmi exactement : "urgente", "haute", "normale", "basse"
-- "dueDate" : string ISO 8601 avec heure si mentionnée (ex: "2026-05-07T14:00"), ou null
-- "notes" : string, contexte utile extrait du texte, ou null
-
-Texte : "${aiText.trim()}"`;
+    const prompt = "Aujourd'hui c'est " + todayStr + ". Extrais les informations de ce texte et reponds UNIQUEMENT avec un objet JSON (sans markdown, sans backticks) avec ces cles: title, priority (urgente/haute/normale/basse), dueDate (ISO 8601 ou null), notes. Texte: " + JSON.stringify(userText);
     try {
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey)||""}` },
-        body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 300, temperature: 0.1,
-          messages: [{ role: "user", content: prompt }] })
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${settings.groqKey}` },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 400, temperature: 0.1,
+          messages: [
+            { role: "system", content: "Reponds uniquement avec du JSON valide, sans markdown." },
+            { role: "user", content: prompt }
+          ] }),
       });
+      setAiDebug("📨 HTTP " + resp.status);
+      if (!resp.ok) { const err = await resp.json().catch(()=>({})); setAiDebug("❌ Erreur API " + resp.status + " : " + (err?.error?.message||"")); setAiLoading(false); return; }
       const data = await resp.json();
       const raw = data.choices?.[0]?.message?.content?.trim() || "";
+      setAiDebug("✅ Groq OK : " + raw.substring(0,120));
       let parsed = {};
-      try { parsed = JSON.parse(raw.replace(/^```json|```$/g,"")); } catch(e) { parsed = { title: aiText.trim() }; }
-      onAdd({ title: parsed.title||aiText.trim(), priority: parsed.priority||"normale",
-              dueDate: parsed.dueDate||null, notes: parsed.notes||"" });
+      try { parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim()); } catch(e) { setAiDebug("⚠️ JSON.parse échoué sur: " + raw.substring(0,80)); }
+      if (aiInputRef.current) aiInputRef.current.value = "";
       setAiText("");
-    } catch(e) {
-      onAdd({ title: aiText.trim() });
-      setAiText("");
-    }
+      onAdd({ title: parsed.title || userText, priority: parsed.priority || "normale", dueDate: parsed.dueDate || null, notes: parsed.notes || "" });
+    } catch(e) { setAiDebug("❌ Fetch error: " + e.message); }
     setAiLoading(false);
   };
 
@@ -3507,8 +3518,8 @@ Texte : "${aiText.trim()}"`;
                         boxShadow:"0 2px 8px rgba(16,42,99,0.06)" }}>
             <span style={{ fontSize:16, flexShrink:0, opacity:0.7 }}>✦</span>
             <input
-              value={aiText}
-              onChange={e=>setAiText(e.target.value)}
+              defaultValue=""
+              ref={aiInputRef}
               onKeyDown={e=>{ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); parseWithAI(); }}}
               placeholder="Décrivez une tâche en langage naturel… ex : Préparer le bilan trimestriel pour vendredi à 9h"
               style={{ flex:1, border:"none", outline:"none", fontSize:11, fontFamily:"'Lora',serif",
@@ -3518,12 +3529,11 @@ Texte : "${aiText.trim()}"`;
               ? <div style={{ width:22, height:22, border:"2.5px solid #D0D8F0",
                               borderTop:"2.5px solid #102A63", borderRadius:"50%",
                               animation:"spin 0.7s linear infinite", flexShrink:0 }} />
-              : <button onClick={parseWithAI} disabled={!aiText.trim()}
-                  style={{ background: aiText.trim() ? "#102A63" : "#E8ECF5",
-                           color: aiText.trim() ? "white" : "#AAB",
+              : <button onClick={parseWithAI}
+                  style={{ background:"#102A63", color:"white",
                            border:"none", borderRadius:8, padding:"6px 16px",
                            fontSize:10, fontFamily:"'DM Mono',monospace", fontWeight:700,
-                           letterSpacing:"0.06em", cursor: aiText.trim() ? "pointer" : "default",
+                           letterSpacing:"0.06em", cursor:"pointer",
                            flexShrink:0, transition:"all 0.2s" }}>
                   CRÉER ↵
                 </button>
@@ -3533,6 +3543,7 @@ Texte : "${aiText.trim()}"`;
                         fontFamily:"'DM Mono',monospace", letterSpacing:"0.04em" }}>
             IA · L'ASSISTANT ANALYSE VOTRE TEXTE ET PRÉ-REMPLIT LA TÂCHE · APPUYEZ SUR ENTRÉE OU CLIQUEZ CRÉER
           </div>
+          {aiDebug && settings.showAiDebug && <div style={{ marginTop:4, padding:"4px 8px", borderRadius:6, background: aiDebug.startsWith("✅")?"#D1FAE5": aiDebug.startsWith("❌")||aiDebug.startsWith("⚠️")?"#FEE2E2":"#EEF2FF", fontSize:10, fontFamily:"'DM Mono',monospace", color: aiDebug.startsWith("✅")?"#065F46": aiDebug.startsWith("❌")||aiDebug.startsWith("⚠️")?"#B91C1C":"#3730A3" }}>{aiDebug}</div>}
         </div>
       )}
 
@@ -4200,7 +4211,7 @@ function App() {
 
   const saveSettingsFn = s => { setSettings(s); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
-  const openNew = (dueDate = "") => setModal({ id: uid(), title: "", category: "", type: "", dueDate, completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false });
+  const openNew = (arg = "") => { const pre = (arg && typeof arg === "object") ? arg : { dueDate: arg }; setModal({ id: uid(), title: "", category: "", type: "", dueDate: "", completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false, ...pre }); };
   const openEdit = t => setModal({ ...t });
 
   const activeCount  = tasks.filter(t => !t.completed).length;
