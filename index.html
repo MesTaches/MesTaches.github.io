@@ -3545,7 +3545,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
         {!isMobile && <>
           <button onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem(COL_WIDTHS_KEY); }} title="Réinitialiser colonnes" style={{ border: "1px solid #E0E0E0", background: "white", color: "#AAA", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>↺</button>
           <button onClick={() => setGrouped(!grouped)} style={{ border: `1px solid ${grouped ? "#2C3E50" : "#E0E0E0"}`, background: grouped ? "#102A63" : "white", color: grouped ? "white" : "#888", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" }}>{grouped ? "☰ Groupé" : "≡ À plat"}</button>
-          <button onClick={onToggleFullscreen} style={{ border: "1px solid #E0E0E0", background: "white", color: "#888", borderRadius: 5, padding: "3px 9px", fontSize: 12, cursor: "pointer", lineHeight: 1 }}>{fullscreen ? "⤡" : "⤢"}</button>
+          
         </>}
         <button onClick={() => onAdd()} style={{ ...S.btn("#102A63"), padding: isMobile ? "6px 12px" : "4px 12px", fontSize: 11, whiteSpace: "nowrap" }}>+ {isMobile ? "Ajouter" : "Nouvelle"}</button>
       </div>
@@ -3579,8 +3579,8 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
               : <button onClick={parseWithAI}
                   style={{ background:"#102A63", color:"white",
                            border:"none", borderRadius:8, padding:"6px 16px",
-                           fontSize:10, fontFamily:"'DM Mono',monospace", fontWeight:700,
-                           letterSpacing:"0.06em", cursor:"pointer",
+                           fontSize:10, fontFamily:"'Lora',serif", fontWeight:400,
+                           letterSpacing:"0.02em", cursor:"pointer",
                            flexShrink:0, transition:"all 0.2s" }}>
                   CRÉER ↵
                 </button>
@@ -3905,9 +3905,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
             title="Réinitialiser colonnes"
             style={{ border:"1px solid #E0E0E0", background:"white", color:"#AAA", borderRadius:5,
               padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>↺</button>
-          <button onClick={()=>onToggleFullscreen&&onToggleFullscreen()}
-            style={{ border:`1px solid ${fullscreen?"#102A63":"#E0E0E0"}`, background:fullscreen?"#102A63":"white",
-              color:fullscreen?"white":"#AAA", borderRadius:5, padding:"3px 9px", fontSize:10, cursor:"pointer" }}>⛶</button>
+          
         </>}
         <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:11 }}>+ Nouvelle</button>
       </div>
@@ -4341,7 +4339,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.141<br />30/04/26 à 18h41
+          v.0.142<br />30/04/26 à 21h39
         </div>
       </div>
 
