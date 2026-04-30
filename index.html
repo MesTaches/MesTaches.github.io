@@ -485,20 +485,27 @@ function CotationView({ settings }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"auto" }}>
       {/* ── Toolbar identique Tâches ── */}
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"4px 12px", display:"flex", gap:8, flexWrap:"nowrap", alignItems:"center", flexShrink:0, position:"relative" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…" className="search-input-small"
-          style={{ ...S.input, width:140, padding:"4px 8px", fontSize:10 }} />
-        <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
-        {["Tous","En cours","À faire","En attente","Bloqué","Refusé","Fait"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
-        <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
-        <div style={{ display:"flex", alignItems:"center", gap:6, position:"absolute", right:12, top:4 }}>
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"4px 12px", display:"flex", flexDirection:"column", gap:4, flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…" className="search-input-small"
+            style={{ ...S.input, width:140, padding:"4px 8px", fontSize:10 }} />
+          <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
+          {["Tous","En cours","À faire","En attente","Bloqué","Refusé","Fait"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"nowrap" }}>
+          <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
+          {["Toutes",...COT_LABELS.map(l=>l.label)].map(o=>{
+            const lb=COT_LABELS.find(l=>l.label===o);
+            return <FBtn key={o} label={o} active={filterLabel===o} onClick={()=>setFilterLabel(o)} color={lb?.color} />;
+          })}
+          <div style={{ flex:1 }} />
           <button onClick={()=>{setColWidths(DEFAULT_COT_WIDTHS);localStorage.removeItem(COT_COL_WIDTHS_KEY);}} title="Réinitialiser colonnes"
             style={{ border:"1px solid #E0E0E0", background:"white", color:"#AAA", borderRadius:5, padding:"2px 9px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>↺</button>
           <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"4px 14px", fontSize:11 }}>+ Nouvelle</button>
         </div>
       </div>
 
-      {/* ── Sous-titre ── */}
+      /* ── Sous-titre ── */}
       <div style={{ padding:"8px 12px 4px", background:"#F7F6F3" }}>
         <span style={{ fontSize:11, color:"#999", fontFamily:"'DM Mono',monospace" }}>
           {displayed.length} demande{displayed.length!==1?"s":""} · {cotations.filter(c=>!["done","refused"].includes(c.status)).length} en cours
@@ -4334,7 +4341,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.140<br />30/04/26 à 18h39
+          v.0.141<br />30/04/26 à 18h41
         </div>
       </div>
 
