@@ -485,7 +485,7 @@ function CotationView({ settings }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"auto" }}>
       {/* ── Toolbar identique Tâches ── */}
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"7px 12px", display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", flexShrink:0 }}>
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"4px 12px", display:"flex", gap:8, flexWrap:"wrap", alignItems:"center", flexShrink:0 }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…" className="search-input-small"
           style={{ ...S.input, width:140, padding:"4px 8px", fontSize:10 }} />
         <div style={{ width:1, height:20, background:"#E8E8E8", flexShrink:0 }} />
@@ -497,8 +497,8 @@ function CotationView({ settings }) {
         })}
         <div style={{ flex:1 }} />
         <button onClick={()=>{setColWidths(DEFAULT_COT_WIDTHS);localStorage.removeItem(COT_COL_WIDTHS_KEY);}} title="Réinitialiser colonnes"
-          style={{ border:"1px solid #E0E0E0", background:"white", color:"#AAA", borderRadius:5, padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>↺</button>
-        <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:11 }}>+ Nouvelle</button>
+          style={{ border:"1px solid #E0E0E0", background:"white", color:"#AAA", borderRadius:5, padding:"2px 9px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace" }}>↺</button>
+        <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"4px 14px", fontSize:11 }}>+ Nouvelle</button>
       </div>
 
       {/* ── Sous-titre ── */}
@@ -4337,7 +4337,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.136<br />30/04/26 à 18h00
+          v.0.137<br />30/04/26 à 18h19
         </div>
       </div>
 
