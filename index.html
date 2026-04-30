@@ -1246,8 +1246,10 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
         setShowLabelInput(false);
       }
     };
-    document.addEventListener("pointerdown", handleClose, true);
-    return () => document.removeEventListener("pointerdown", handleClose, true);
+    document.addEventListener("mousedown", handleClose);
+    document.addEventListener("touchstart", handleClose);
+    document.addEventListener("click", handleClose);
+    return () => { document.removeEventListener("mousedown", handleClose); document.removeEventListener("touchstart", handleClose); document.removeEventListener("click", handleClose); };
   }, [showLabelInput]);
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -1324,7 +1326,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </select>
           </div>
 
-          {/* Étiquettes */
+          {/* Étiquettes */}
           <div style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5, flexWrap: "wrap" }}>
               <span style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.06em" }}>ÉTIQUETTES</span>
@@ -1338,24 +1340,23 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
                   </span>
                 );
               })}
-              <div ref={labelPickerRef}>
-                <button type="button" onClick={() => setShowLabelInput(l => !l)}
-                  style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
-                {showLabelInput && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8", marginTop: 6 }}>
-                    {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).map(l => (
-                      <button key={l.id} type="button"
-                        onClick={() => { setD({ ...d, labels: [...d.labels, l.name] }); setShowLabelInput(false); }}
-                        style={{ background: l.bg, color: l.color, border: `1px solid ${l.color}40`, borderRadius: 20, padding: "3px 10px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>
-                        🏷 {l.name}
-                      </button>
-                    ))}
-                    {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).length === 0 &&
-                      <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>Toutes les étiquettes sont déjà ajoutées</span>}
-                  </div>
-                )}
-              </div>
+              <button type="button" onClick={() => setShowLabelInput(l => !l)}
+                style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
             </div>
+            {showLabelInput && (
+              <div ref={labelPickerRef} onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()} style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8" }}>
+                {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).map(l => (
+                  <button key={l.id} type="button"
+                    onClick={() => { setD({ ...d, labels: [...d.labels, l.name] }); setShowLabelInput(false); }}
+                    style={{ background: l.bg, color: l.color, border: `1px solid ${l.color}40`, borderRadius: 20, padding: "3px 10px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>
+                    🏷 {l.name}
+                  </button>
+                ))}
+                {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).length === 0 &&
+                  <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>Toutes les étiquettes sont déjà ajoutées</span>}
+              </div>
+            )}
+          </div>
 
           {/* 3) Full recurrence module */}
           <RecurrenceModule value={d.recurrence} dueDate={d.dueDate} onChange={rec => setD({ ...d, recurrence: rec })} />
@@ -4341,7 +4342,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.149<br />30/04/26 à 22h08
+          v.0.145<br />30/04/26 à 22h00
         </div>
       </div>
 
