@@ -1247,7 +1247,9 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
       }
     };
     document.addEventListener("mousedown", handleClose);
-    return () => document.removeEventListener("mousedown", handleClose);
+    document.addEventListener("touchstart", handleClose);
+    document.addEventListener("click", handleClose);
+    return () => { document.removeEventListener("mousedown", handleClose); document.removeEventListener("touchstart", handleClose); document.removeEventListener("click", handleClose); };
   }, [showLabelInput]);
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -1342,7 +1344,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
                 style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
             </div>
             {showLabelInput && (
-              <div ref={labelPickerRef} style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8" }}>
+              <div ref={labelPickerRef} onMouseDown={(e)=>e.stopPropagation()} onClick={(e)=>e.stopPropagation()} style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8" }}>
                 {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).map(l => (
                   <button key={l.id} type="button"
                     onClick={() => { setD({ ...d, labels: [...d.labels, l.name] }); setShowLabelInput(false); }}
@@ -4340,7 +4342,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.144<br />30/04/26 à 21h55
+          v.0.145<br />30/04/26 à 22h00
         </div>
       </div>
 
