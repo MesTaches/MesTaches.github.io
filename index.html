@@ -3113,7 +3113,7 @@ function PaymentsView({ settings }) {
   const [bulkStatus, setBulkStatus] = React.useState("");
   const [modal, setModal] = React.useState(null);
   const [noteModal, setNoteModal] = React.useState(null);
-  const [filterStatus, setFilterStatus] = React.useState("all");
+  const [filterStatus, setFilterStatus] = React.useState("unpaid");
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
   const [colWidths, setColWidths] = React.useState({ priority: 44, supplier: 220, account: 70, requestDate: 82, requester: 100, estimatedDate: 100, amount: 85, status: 90 });
@@ -3156,7 +3156,7 @@ function PaymentsView({ settings }) {
   };
 
   const filtered = payments
-    .filter(p => filterStatus === "all" || p.status === filterStatus)
+    .filter(p => filterStatus === "all" || (filterStatus === "unpaid" ? p.status !== "paid" : p.status === filterStatus))
     .sort((a, b) => {
       let va = a[sortField] || "", vb = b[sortField] || "";
       if (sortField === "amount") { va = parseFloat(String(a.amount).replace(/\s/g,"").replace(",","."))||0; vb = parseFloat(String(b.amount).replace(/\s/g,"").replace(",","."))||0; }
@@ -3220,7 +3220,7 @@ function PaymentsView({ settings }) {
           {/* Filtres */}
           <div style={{ padding: "8px 12px", borderBottom: "1px solid #F0F0F0", display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
             <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif", marginRight: 3 }}>FILTRER :</span>
-            {[{ id: "all", label: "Tous" }, ...PAYMENT_STATUSES].map(s => (
+            {[{ id: "all", label: "Tous" }, { id: "unpaid", label: "Non payés", bg: "#FEF3C7", color: "#92400E" }, ...PAYMENT_STATUSES].map(s => (
               <button key={s.id} onClick={() => setFilterStatus(s.id)}
                 style={{ border: `1px solid ${filterStatus === s.id ? "#102A63" : "#E0E0E0"}`, background: filterStatus === s.id ? "#102A63" : "white", color: filterStatus === s.id ? "white" : "#888", borderRadius: 5, padding: "2px 7px", fontSize: 9, cursor: "pointer", fontFamily: "'Lora',serif" }}>
                 {s.icon ? `${s.icon} ` : ""}{s.label}
@@ -4310,7 +4310,7 @@ function App() {
         ))}
         {/* Section : Finance & Suivi */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Finance & Suivi</div>
-        {visibleNav.filter(n => ["tasks2","reporting","payments"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["cotation","reporting","payments"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "10px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
@@ -4329,7 +4329,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.132<br />30/04/26 à 09h15
+          v.0.133<br />30/04/26 à 09h22
         </div>
       </div>
 
