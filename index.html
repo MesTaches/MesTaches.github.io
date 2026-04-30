@@ -1233,6 +1233,17 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
   const [d, setD] = useState({ ...task, category: task.category || "", type: task.type || "", status: task.status || "todo", recurrence: task.recurrence || "none", totalTime: task.totalTime || 0, inMyDay: task.inMyDay || false, labels: task.labels || [] });
   const [newLabel, setNewLabel] = useState("");
   const [showLabelInput, setShowLabelInput] = useState(false);
+  const labelPickerRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!showLabelInput) return;
+    const handleClose = (e) => {
+      if (labelPickerRef.current && !labelPickerRef.current.contains(e.target)) {
+        setShowLabelInput(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClose);
+    return () => document.removeEventListener("mousedown", handleClose);
+  }, [showLabelInput]);
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const [stopwatch, setStopwatch] = useState(false); // 7)
@@ -1322,11 +1333,12 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
                   </span>
                 );
               })}
-              <button type="button" onClick={() => setShowLabelInput(l => !l)}
+              <div ref={labelPickerRef} style={{ display: "contents" }}>
+                <button type="button" onClick={() => setShowLabelInput(l => !l)}
                 style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
             </div>
             {showLabelInput && (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8" }}>
+              <div ref={labelPickerRef} style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px", background: "#F8F8F8", borderRadius: 8, border: "1px solid #E8E8E8" }}>
                 {(settings.labels||[]).filter(l => !d.labels.includes(l.name)).map(l => (
                   <button key={l.id} type="button"
                     onClick={() => { setD({ ...d, labels: [...d.labels, l.name] }); setShowLabelInput(false); }}
@@ -3516,14 +3528,16 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
           <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
           {["Toutes", ...settings.categories.map(c => c.name)].map(c => { const co = settings.categories.find(x => x.name === c); return <FBtn key={c} label={c} active={filterCat === c} onClick={() => setFilterCat(c)} color={co?.accent} />; })}
         </>}
-          <div style={{ width: 1, height: 20, background: "#E8E8E8", flexShrink: 0 }} />
-          {(settings.labels||[]).length > 0 && <>
-            <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>🏷</span>
-            {["Toutes", ...(settings.labels||[]).map(l => l.name)].map(lbl => {
-              const lObj = (settings.labels||[]).find(l => l.name === lbl);
-              return <FBtn key={lbl} label={lbl} active={filterLabel === lbl} onClick={() => setFilterLabel(lbl)} color={lObj?.color} />;
-            })}
-          </>}
+          {(settings.labels||[]).length > 0 && (
+            <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, paddingTop: 4, flexWrap: "wrap" }}>
+              <div style={{ width: 1, height: 16, background: "#E8E8E8", flexShrink: 0 }} />
+              <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>🏷</span>
+              {["Toutes", ...(settings.labels||[]).map(l => l.name)].map(lbl => {
+                const lObj = (settings.labels||[]).find(l => l.name === lbl);
+                return <FBtn key={lbl} label={lbl} active={filterLabel === lbl} onClick={() => setFilterLabel(lbl)} color={lObj?.color} />;
+              })}
+            </div>
+          )}
         <div style={{ flex: 1 }} />
         {!isMobile && <>
           <button onClick={() => { setColWidths(DEFAULT_COL_WIDTHS); localStorage.removeItem(COL_WIDTHS_KEY); }} title="Réinitialiser colonnes" style={{ border: "1px solid #E0E0E0", background: "white", color: "#AAA", borderRadius: 5, padding: "3px 9px", fontSize: 10, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>↺</button>
@@ -3542,9 +3556,9 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
 
       {/* ── AI Natural Input ── */}
       {!isMobile && (
-        <div style={{ background:"#F0F3FA", borderBottom:"1px solid #DDE3F0", padding:"10px 100px" }}>
+        <div style={{ background:"#F0F3FA", borderBottom:"1px solid #DDE3F0", padding:"5px 100px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, background:"white",
-                        border:"1.5px solid #D0D8F0", borderRadius:12, padding:"8px 14px",
+                        border:"1.5px solid #D0D8F0", borderRadius:8, padding:"4px 12px",
                         boxShadow:"0 2px 8px rgba(16,42,99,0.06)" }}>
             <span style={{ fontSize:16, flexShrink:0, opacity:0.7 }}>✦</span>
             <input
