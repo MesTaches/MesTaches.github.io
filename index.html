@@ -553,7 +553,7 @@ function CotationView({ settings }) {
               </div>
               {/* Client */}
               <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer" }}
-                onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
+                onClick={()=>setModal(c)}><input type="checkbox" checked={!!c.closed} onClick={e=>e.stopPropagation()} onChange={e=>{ e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:e.target.checked}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:e.target.checked}); }} style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }} />{c.clientName||"—"}</div>
               {/* Code */}
               <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
               {/* Date demande */}
@@ -3940,7 +3940,7 @@ function SuiviClientView({ settings }) {
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <div style={{ width:"48%", minWidth:360, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
-          <div style={{ display:"grid", gridTemplateColumns:`${colWidths.clientName}px ${colWidths.clientCode}px ${colWidths.description}px ${colWidths.suiviType}px ${colWidths.followupDate}px ${colWidths.reminderDate}px ${colWidths.actions}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
+          <div style={{ display:"grid", gridTemplateColumns:`${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
             <HeaderCell col="clientName" label="NOM CLIENT" />
             <HeaderCell col="clientCode" label="CODE" />
             <HeaderCell col="description" label="DESCRIPTION" />
@@ -3951,7 +3951,7 @@ function SuiviClientView({ settings }) {
           </div>
           <div style={{ flex:1, overflowY:"auto" }}>
             {filtered.length===0 ? <div style={{ textAlign:"center", padding:"40px 0", color:"#CCC", fontFamily:"'Lora',serif", fontSize:13 }}>{clients.length===0 ? "Aucun client — cliquez sur « + Nouveau client »" : "Aucun résultat"}</div> : filtered.map((c,i)=>{ const active=selected?.id===c.id; const st=suiviTypes.find(t=>t.id===c.suiviType); const pastReminder=c.reminderDate && c.reminderDate<today; return <div key={c.id} onClick={()=>setSelected(c)} style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:6, borderBottom:"1px solid #F5F5F5", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", cursor:"pointer", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:c.closed?0.55:1, transition:"background 0.12s" }}>
-              <div style={{ flex:1.3, fontWeight:600, color:"#2C3E50", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.closed && <span style={{ fontSize:9, color:"#888", marginRight:4, fontFamily:"'DM Mono',monospace" }}>✓</span>}{c.clientName||"—"}</div>
+              <div style={{ flex:1.3, fontWeight:600, color:"#2C3E50", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.closed && <span style={{ fontSize:9, color:"#888", marginRight:4, fontFamily:"'DM Mono',monospace" }}>✓</span>}<input type="checkbox" checked={!!c.closed} onClick={e=>e.stopPropagation()} onChange={e=>{ e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:e.target.checked}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:e.target.checked}); }} style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }} />{c.clientName||"—"}</div>
               <div style={{ flex:0.6, fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientCode||"—"}</div>
               <div style={{ flex:0.7 }}>{st ? <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.name}</span> : <span style={{ color:"#CCC", fontSize:10 }}>—</span>}</div>
               <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate ? c.followupDate.split("-").reverse().join("/") : "—"}</div>
@@ -4261,7 +4261,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 {/* Client */}
                 <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
                   fontSize:10, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
-                  onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
+                  onClick={()=>setModal(c)}><input type="checkbox" checked={!!c.closed} onClick={e=>e.stopPropagation()} onChange={e=>{ e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:e.target.checked}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:e.target.checked}); }} style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }} />{c.clientName||"—"}</div>
                 {/* Code */}
                 <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
                 {/* Date demande */}
@@ -4637,7 +4637,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.149<br />01/05/26 à 14h00
+          v.0.152<br />01/05/26 à 12h44
         </div>
       </div>
 
