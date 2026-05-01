@@ -884,7 +884,80 @@ function BulletMenu({ onInsert }) {
 }
 
 /* ─── RICH TEXT AREA (4: checklist + text color) ─── */
-function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
+
+/* ── IA inline correction button for RichTextArea ── */
+function RichTextAiBtn({ editorRef, groqKey, onChange }) {
+  const [loading, setLoading] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+
+  const actions = [
+    { label: "✎ Corriger orthographe", prompt: "Corrige l'orthographe et la grammaire de ce texte sans changer le sens ni le style. Réponds UNIQUEMENT avec le texte corrigé en HTML simple, sans markdown ni backticks." },
+    { label: "↺ Reformuler", prompt: "Reformule ce texte de façon plus claire et professionnelle. Réponds UNIQUEMENT avec le texte reformulé en HTML simple, sans markdown ni backticks." },
+    { label: "▼ Résumer", prompt: "Fais un résumé concis de ce texte. Réponds UNIQUEMENT avec le résumé en HTML simple, sans markdown ni backticks." },
+    { label: "+ Développer", prompt: "Développe ce texte en ajoutant plus de détails pertinents. Réponds UNIQUEMENT avec le texte développé en HTML simple, sans markdown ni backticks." },
+  ];
+
+  const run = async (prompt) => {
+    setOpen(false);
+    const txt = editorRef.current?.innerText?.trim();
+    if (!txt) return;
+    setLoading(true);
+    try {
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1024, temperature: 0.3,
+          messages: [
+            { role: "system", content: "Tu es un assistant de rédaction. Réponds uniquement avec le texte demandé, sans explication." },
+            { role: "user", content: `${prompt}\n\nTexte:\n${txt}` }
+          ]
+        })
+      });
+      const data = await resp.json();
+      const result = data.choices?.[0]?.message?.content?.trim();
+      if (result && editorRef.current) {
+        editorRef.current.innerHTML = result;
+        onChange(result);
+      }
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); setOpen(o => !o); }}
+        disabled={loading}
+        style={{ border: "1px solid #102A63", background: loading ? "#EEF4FF" : "white", borderRadius: 4, padding: "2px 8px",
+          fontSize: 11, cursor: loading ? "wait" : "pointer", fontFamily: "'DM Mono',monospace", color: "#102A63", lineHeight: 1.5, fontWeight: 700 }}>
+        {loading ? "⟳ IA…" : "✦ IA"}
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, background: "white", border: "1px solid #E8E8E8",
+          borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", padding: 4, minWidth: 180, marginTop: 2 }}>
+          {actions.map(a => (
+            <button key={a.label} type="button" onMouseDown={(e) => { e.preventDefault(); run(a.prompt); }}
+              style={{ display: "block", width: "100%", textAlign: "left", border: "none", background: "none",
+                padding: "6px 10px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#333", borderRadius: 4 }}
+              onMouseEnter={e => e.currentTarget.style.background = "#F5F7FB"}
+              onMouseLeave={e => e.currentTarget.style.background = "none"}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, groqKey = "" }) {
   const ref = useRef(null);
   useEffect(() => { if (ref.current && ref.current.innerHTML !== (value || "")) ref.current.innerHTML = value || ""; }, []);
   const exec = (cmd, val = null) => { ref.current.focus(); document.execCommand(cmd, false, val); onChange(ref.current.innerHTML); };
@@ -912,6 +985,14 @@ function RichTextArea({ value, onChange, placeholder, rows = 5 }) {
         <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
         {/* 4) text color menu */}
         <ColorMenu onSelect={(c) => exec("foreColor", c)} />
+        <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("undo"); }} title="Annuler (Ctrl+Z)"
+          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>↩ Annuler</button>
+        <button type="button" onMouseDown={(e) => { e.preventDefault(); ref.current.focus(); document.execCommand("insertHTML", false, "<hr style='border:none;border-top:2px solid #ECEAE5;margin:12px 0;'/>"); onChange(ref.current.innerHTML); }} title="Séparateur"
+          style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>— Sépar.</button>
+        {showAi && groqKey && (
+          <RichTextAiBtn editorRef={ref} groqKey={groqKey} onChange={onChange} />
+        )}
       </div>
       <div ref={ref} contentEditable suppressContentEditableWarning
         onKeyDown={(e) => {
@@ -3721,6 +3802,7 @@ function SuiviClientModal({ item, onSave, onClose }) {
           </div>
           <div>{lbl("DESCRIPTION")}<input value={d.description} onChange={e=>set("description",e.target.value)} style={inp} placeholder="Courte description du suivi" /></div>
           <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate} onChange={e=>set("followupDate",e.target.value)} style={inp} /></div>
+          <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={inp} /></div>
         </div>
         <div style={{ padding:"10px 22px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
@@ -3731,7 +3813,7 @@ function SuiviClientModal({ item, onSave, onClose }) {
   );
 }
 
-function SuiviClientView() {
+function SuiviClientView({ settings }) {
   const [clients, setClients]   = React.useState(()=>loadSuiviClients());
   const [notes, setNotes]       = React.useState(()=>loadSuiviNotes());
   const [selected, setSelected] = React.useState(null);
@@ -3803,7 +3885,8 @@ function SuiviClientView() {
             <ColH col="clientName"  label="NOM CLIENT"   flex={1.4} />
             <ColH col="clientCode"  label="CODE"         flex={0.7} />
             <ColH col="description" label="DESCRIPTION"  flex={1.5} />
-            <ColH col="followupDate" label="DATE SUIVI"  flex={0.8} />
+            <ColH col="followupDate"  label="DATE SUIVI"   flex={0.8} />
+            <ColH col="reminderDate"  label="DATE RAPPEL"  flex={0.8} />
             <div style={{ width:44, flexShrink:0 }} />
           </div>
           {/* Rows */}
@@ -3825,6 +3908,7 @@ function SuiviClientView() {
                   <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientCode||"—"}</div>
                   <div style={{ flex:1.5, color:"#555", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.description||"—"}</div>
                   <div style={{ flex:0.8, fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate?c.followupDate.split("-").reverse().join("/"):"—"}</div>
+                  <div style={{ flex:0.8, fontFamily:"'DM Mono',monospace", color: c.reminderDate && c.reminderDate < new Date().toISOString().split("T")[0] ? "#E74C3C" : "#888", fontSize:10, whiteSpace:"nowrap" }}>{c.reminderDate?c.reminderDate.split("-").reverse().join("/"):"—"}</div>
                   <div style={{ width:44, display:"flex", gap:3, justifyContent:"flex-end", flexShrink:0 }}>
                     <button onClick={e=>{e.stopPropagation();setModal(c);}} title="Modifier"
                       style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.45, color:"#102A63" }}>✎</button>
@@ -3850,8 +3934,7 @@ function SuiviClientView() {
                   <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63" }}>{selected.clientName}</div>
                   <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:1 }}>{selected.clientCode} — Suivi au {selected.followupDate?selected.followupDate.split("-").reverse().join("/"):"—"}</div>
                 </div>
-                <button onClick={()=>{ saveNote(selected.id, editorRef.current?.innerHTML||""); }}
-                  style={{ ...S.btn("#102A63"), fontSize:11, padding:"6px 16px" }}>💾 Enregistrer</button>
+                <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#27AE60", opacity:0.7 }}>✓ Auto-sauvegarde</div>
               </div>
               <div style={{ flex:1, padding:16, overflow:"auto" }}>
                 <RichTextArea
@@ -3859,6 +3942,8 @@ function SuiviClientView() {
                   onChange={v=>saveNote(selected.id, v)}
                   placeholder="Saisir vos notes de suivi pour ce client… (mise en forme disponible)"
                   rows={22}
+                  showAi={!!(settings?.groqKey)}
+                  groqKey={settings?.groqKey||""}
                 />
               </div>
             </>
@@ -4564,7 +4649,7 @@ function App() {
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
           )}
           {view === "suiviclient" && (
-            <SuiviClientView />
+            <SuiviClientView settings={settings} />
           )}
           {view === "cotation" && (
             <Tasks2View fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} />
