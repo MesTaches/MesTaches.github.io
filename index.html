@@ -3828,6 +3828,9 @@ const SUIVI_CLIENT_KEY = "taskmanager_suiviclient_v1";
 function loadSuiviClients() { try { const s=localStorage.getItem(SUIVI_CLIENT_KEY); return s?JSON.parse(s):[]; } catch { return []; } }
 function saveSuiviClients(d) { try { localStorage.setItem(SUIVI_CLIENT_KEY, JSON.stringify(d)); } catch {} }
 const SUIVI_NOTES_KEY = "taskmanager_suiviclient_notes_v1";
+function loadSmartReminderState() { try { const r = localStorage.getItem("taskmanager_smartreminders_v1"); return r ? JSON.parse(r) : {}; } catch { return {}; } }
+function saveSmartReminderState(d) { try { localStorage.setItem("taskmanager_smartreminders_v1", JSON.stringify(d)); } catch {} }
+function reminderDates(d) { if (!d) return []; const base = new Date(d + "T00:00:00"); const offsets = [7,3,1,0]; return offsets.map(n => { const x = new Date(base); x.setDate(x.getDate() - n); return x.toISOString().split("T")[0]; }); }
 function loadSuiviNotes() { try { const s=localStorage.getItem(SUIVI_NOTES_KEY); return s?JSON.parse(s):{}; } catch { return {}; } }
 function saveSuiviNotes(d) { try { localStorage.setItem(SUIVI_NOTES_KEY, JSON.stringify(d)); } catch {} }
 
@@ -3897,10 +3900,11 @@ function SuiviClientView({ settings }) {
   const [colWidths, setColWidths] = React.useState(()=>{ try { return JSON.parse(localStorage.getItem("taskmanager_suivi_colwidths_v1")) || { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } catch { return { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } });
   const [deletedClient, setDeletedClient] = React.useState(null);
   const [deleteTimer, setDeleteTimer] = React.useState(null);
-  const [quickOpen, setQuickOpen] = React.useState(false);
+  const [reminderState, setReminderState] = React.useState(()=>loadSmartReminderState());
   const saveWidths = (w) => { setColWidths(w); try { localStorage.setItem("taskmanager_suivi_colwidths_v1", JSON.stringify(w)); } catch {} };
   const today = new Date().toISOString().split("T")[0];
   const emitReminderSync = (items) => { try { window.dispatchEvent(new CustomEvent("suiviReminderUpdated", { detail: items.filter(x => x.reminderDate) })); } catch {} };
+  const updateReminderState = (id, patch) => { const next = { ...reminderState, [id]: { ...(reminderState[id]||{}), ...patch } }; setReminderState(next); saveSmartReminderState(next); };
 
   const saveClients = (list) => { setClients(list); saveSuiviClients(list); emitReminderSync(list); };
   const handleSave = (d) => { let newClient; const list = d.id ? clients.map(c=>c.id===d.id?d:c) : (newClient={...d,id:Date.now().toString()}, [...clients, newClient]); saveClients(list); setModal(null); if(newClient) setSelected(newClient); };
@@ -3910,6 +3914,8 @@ function SuiviClientView({ settings }) {
   const handleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
   const si = (col) => sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : "";
   const FBtn = ({label,active,onClick,color}) => <button onClick={onClick} style={{ border:`1px solid ${active?(color||"#102A63"):"#E0E0E0"}`, background:active?(color||"#102A63"):"white", color:active?"white":"#666", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:10, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>;
+  const dueReminders = clients.filter(c => c.reminderDate && !c.closed).filter(c => c.reminderDate <= today);
+  const upcomingReminders = clients.filter(c => c.reminderDate && !c.closed).filter(c => reminderDates(c.reminderDate).includes(today));
   const filtered = clients.filter(c=>{
     if(filterStatus==="Actifs" && c.closed) return false;
     if(filterStatus==="Clôturés" && !c.closed) return false;
@@ -3934,7 +3940,7 @@ function SuiviClientView({ settings }) {
   };
 
 
-  const QuickCapture = () => quickOpen ? <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:5000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={e=>{ if(e.target===e.currentTarget) setQuickOpen(false); }}>
+
     <div style={{ background:"white", borderRadius:16, width:520, maxWidth:"92vw", boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
       <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>CAPTURE RAPIDE</span>
@@ -3966,9 +3972,12 @@ function SuiviClientView({ settings }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", position:"relative" }}>
-      <button onClick={()=>setQuickOpen(true)} style={{ position:"fixed", right:20, bottom:20, zIndex:4500, background:"#102A63", color:"white", border:"none", borderRadius:999, padding:"10px 14px", boxShadow:"0 8px 24px rgba(0,0,0,0.2)", fontFamily:"'DM Mono',monospace", fontSize:10, cursor:"pointer" }}>＋ Capture rapide</button>
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0, width:"100%", boxSizing:"border-box" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:140, minWidth:140, maxWidth:140, fontSize:10, padding:"6px 12px", boxSizing:"border-box", flexShrink:0 }} />
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", flexDirection:"column", gap:8, flexShrink:0, width:"100%", boxSizing:"border-box" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:140, minWidth:140, maxWidth:140, fontSize:10, padding:"6px 12px", boxSizing:"border-box", flexShrink:0 }} />
+          <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#102A63", background:"#F6F9FF", border:"1px solid #E6EEF9", borderRadius:20, padding:"4px 10px" }}>Rappels dus: {clients.filter(c=>c.reminderDate && !c.closed && c.reminderDate <= today).length}</div>
+          <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#102A63", background:"#F6F9FF", border:"1px solid #E6EEF9", borderRadius:20, padding:"4px 10px" }}>J-7/J-3/J-1/J: {clients.filter(c=>c.reminderDate && !c.closed).length}</div>
+        </div>
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flex:1 }}>
           {["Actifs","Clôturés","Tous"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
@@ -4012,7 +4021,7 @@ function SuiviClientView({ settings }) {
               </div>
             })}
           </div>
-          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""}</div>
+          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""} · rappels dus: {dueReminders.length} · rappels aujourd’hui: {upcomingReminders.length}</div>
         </div>
         <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC" }}>
           {selected ? <>
@@ -4031,7 +4040,6 @@ function SuiviClientView({ settings }) {
       </div>
       {deletedClient && <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9998, background:"#2C3E50", color:"white", borderRadius:12, padding:"12px 20px", boxShadow:"0 8px 24px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:16, fontFamily:"'DM Mono',monospace", fontSize:12 }}><span><strong>{deletedClient.clientName}</strong> supprimé</span><button onClick={undoDelete} style={{ background:"#27AE60", border:"none", borderRadius:6, color:"white", padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>Annuler</button><button onClick={()=>setDeletedClient(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, padding:0 }}>×</button></div>}
       {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
-      {quickOpen && <QuickCapture />}
     </div>
   );
 }
@@ -4688,10 +4696,12 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.162<br />01/05/26 à 14h46
+          v.0.166<br />01/05/26 à 14h56
         </div>
       </div>
 
+      {/* ── GLOBAL REMINDERS ── */}
+      {(() => { try { const raw = localStorage.getItem("taskmanager_smartreminders_v1"); const rs = raw ? JSON.parse(raw) : {}; const due = Object.entries(rs).filter(([id,v]) => v && v.snoozedUntil && v.snoozedUntil <= new Date().toISOString().split("T")[0]); return due.length ? <div style={{ position:"fixed", right:16, top:72, zIndex:6000, background:"white", border:"1px solid #E8E8E8", borderRadius:14, boxShadow:"0 12px 30px rgba(0,0,0,0.12)", width:320, maxWidth:"calc(100vw - 32px)", overflow:"hidden" }}><div style={{ padding:"10px 12px", background:"#102A63", color:"white", fontFamily:"'DM Mono',monospace", fontSize:11, fontWeight:700 }}>RAPPELS</div><div style={{ maxHeight:260, overflowY:"auto" }}>{due.slice(0,5).map(([id,v]) => <div key={id} style={{ padding:"10px 12px", borderBottom:"1px solid #F3F3F3", fontSize:11, fontFamily:"'Lora',serif" }}><div style={{ fontWeight:700, color:"#2C3E50" }}>{id}</div><div style={{ color:"#777", fontSize:10, marginTop:4 }}>Snoozé jusqu'au {v.snoozedUntil}</div></div>)}</div></div> : null; } catch { return null; } })()}
       {/* ── MAIN ── */}
       <div style={{ marginLeft: isMobile ? 0 : 200, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", minWidth: 0 }}>
         {/* Topbar */}
