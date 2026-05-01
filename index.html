@@ -4482,12 +4482,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    const hLog = (e) => { try { setActivityLog(prev => [{ id: Date.now().toString(), at: new Date().toISOString(), label: e.detail?.label || "Activité" }, ...prev].slice(0,200)); } catch {} };
+    window.addEventListener("appLogActivity", hLog);
     // Afficher bouton corbeille + écouter event
     const trashBtn = document.getElementById("fb-trash-btn");
     if (trashBtn) trashBtn.style.display = "none";
     const handleOpenTrash = () => setShowTrash(true);
     window.addEventListener("openTrash", handleOpenTrash);
-    return () => window.removeEventListener("openTrash", handleOpenTrash);
+    return () => { window.removeEventListener("openTrash", handleOpenTrash); window.removeEventListener("appLogActivity", hLog); };
   }, []);
 
   useEffect(() => {
@@ -4705,7 +4707,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.181<br />01/05/26 à 15h56
+          v.0.182<br />01/05/26 à 15h59
         </div>
       </div>
 
@@ -4755,7 +4757,8 @@ function App() {
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {/* cotation view supprimée */}
           {view === "payments"      && <PaymentsView settings={settings} />}
-          {view === "activities" || view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
+          {view === "activities" && <ActivitiesView activityLog={activityLog} />}
+          {view === "settings" && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
       )}
 
