@@ -3897,6 +3897,7 @@ function SuiviClientView({ settings }) {
   const [colWidths, setColWidths] = React.useState(()=>{ try { return JSON.parse(localStorage.getItem("taskmanager_suivi_colwidths_v1")) || { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } catch { return { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } });
   const [deletedClient, setDeletedClient] = React.useState(null);
   const [deleteTimer, setDeleteTimer] = React.useState(null);
+  const [quickOpen, setQuickOpen] = React.useState(false);
   const saveWidths = (w) => { setColWidths(w); try { localStorage.setItem("taskmanager_suivi_colwidths_v1", JSON.stringify(w)); } catch {} };
   const today = new Date().toISOString().split("T")[0];
   const emitReminderSync = (items) => { try { window.dispatchEvent(new CustomEvent("suiviReminderUpdated", { detail: items.filter(x => x.reminderDate) })); } catch {} };
@@ -3909,6 +3910,8 @@ function SuiviClientView({ settings }) {
   const handleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
   const si = (col) => sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : "";
   const FBtn = ({label,active,onClick,color}) => <button onClick={onClick} style={{ border:`1px solid ${active?(color||"#102A63"):"#E0E0E0"}`, background:active?(color||"#102A63"):"white", color:active?"white":"#666", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:10, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>;
+  const todayClients = clients.filter(c => c.followupDate === today && !c.closed);
+  const urgentClients = clients.filter(c => !c.closed && c.reminderDate && c.reminderDate <= today);
   const filtered = clients.filter(c=>{
     if(filterStatus==="Actifs" && c.closed) return false;
     if(filterStatus==="Clôturés" && !c.closed) return false;
@@ -3932,6 +3935,37 @@ function SuiviClientView({ settings }) {
     return <div onClick={()=>handleSort(col)} style={{ position:"relative", width:w, minWidth:w, maxWidth:w, padding:"0 6px", fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap", boxSizing:"border-box" }}>{label}{si(col)}<span onMouseDown={startResize} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", userSelect:"none" }} /></div>;
   };
 
+
+  const QuickCapture = () => quickOpen ? <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:5000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={e=>{ if(e.target===e.currentTarget) setQuickOpen(false); }}>
+    <div style={{ background:"white", borderRadius:16, width:520, maxWidth:"92vw", boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
+      <div style={{ padding:"16px 20px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>CAPTURE RAPIDE</span>
+        <button onClick={()=>setQuickOpen(false)} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+      </div>
+      <div style={{ padding:20, display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", gap:12 }}>
+          <input id="qc-name" placeholder="Nom du client" style={{ ...S.input, flex:2 }} />
+          <input id="qc-code" placeholder="Code" style={{ ...S.input, flex:1 }} />
+        </div>
+        <div style={{ display:"flex", gap:12 }}>
+          <input id="qc-desc" placeholder="Description rapide" style={{ ...S.input, flex:2 }} />
+          <input id="qc-date" type="date" defaultValue={today} style={{ ...S.input, flex:1 }} />
+        </div>
+        <div style={{ display:"flex", gap:12 }}>
+          <select id="qc-type" style={{ ...S.input, flex:1 }}>
+            <option value="">Type</option>
+            {(suiviTypes||[]).map(t=> <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+          <input id="qc-reminder" type="date" placeholder="Rappel" style={{ ...S.input, flex:1 }} />
+        </div>
+      </div>
+      <div style={{ padding:"0 20px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
+        <button onClick={()=>setQuickOpen(false)} style={{ ...S.btn("#F0F0F0","#666"), fontSize:10, padding:"7px 14px" }}>Annuler</button>
+        <button onClick={()=>{ const name=document.getElementById('qc-name').value.trim(); if(!name) return; const d={ id:Date.now().toString(), clientName:name, clientCode:document.getElementById('qc-code').value.trim(), description:document.getElementById('qc-desc').value.trim(), followupDate:document.getElementById('qc-date').value || today, reminderDate:document.getElementById('qc-reminder').value || '', suiviType:document.getElementById('qc-type').value || '', closed:false }; handleSave(d); setQuickOpen(false); }} style={{ ...S.btn("#102A63"), fontSize:10, padding:"7px 14px" }}>Enregistrer</button>
+      </div>
+    </div>
+  </div> : null;
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)" }}>
       <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0, width:"100%", boxSizing:"border-box" }}>
@@ -3945,7 +3979,13 @@ function SuiviClientView({ settings }) {
         </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
+        <QuickCapture />
         <div style={{ width:"52.8%", minWidth:396, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
+          <div style={{ padding:"8px 12px", borderBottom:"1px solid #F0F0F0", background:"#FAFBFD", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#102A63", display:"flex", gap:10, flexWrap:"wrap" }}>
+            <span><strong>Aujourd'hui:</strong> {todayClients.length}</span>
+            <span><strong>Urgents:</strong> {urgentClients.length}</span>
+            <span><strong>Rappels:</strong> {clients.filter(c=>c.reminderDate).length}</span>
+          </div>
           <div style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
             <div></div>
             <HeaderCell col="clientName" label="NOM CLIENT" />
@@ -3997,6 +4037,7 @@ function SuiviClientView({ settings }) {
       </div>
       {deletedClient && <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9998, background:"#2C3E50", color:"white", borderRadius:12, padding:"12px 20px", boxShadow:"0 8px 24px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:16, fontFamily:"'DM Mono',monospace", fontSize:12 }}><span><strong>{deletedClient.clientName}</strong> supprimé</span><button onClick={undoDelete} style={{ background:"#27AE60", border:"none", borderRadius:6, color:"white", padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>Annuler</button><button onClick={()=>setDeletedClient(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, padding:0 }}>×</button></div>}
       {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
+      {quickOpen && <QuickCapture />}
     </div>
   );
 }
