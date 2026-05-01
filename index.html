@@ -3979,7 +3979,7 @@ function SuiviClientView({ settings }) {
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
           {["Tous",...suiviTypes.map(t=>t.name)].map(o=>{ const st=suiviTypes.find(t=>t.name===o); return <FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} color={st?.color} />; })}
           <div style={{ flex:1 }} />
-          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>🔍 + Nouveau suivi</button>
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>+ Nouveau suivi</button>
         </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
@@ -4693,7 +4693,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.179<br />01/05/26 à 15h46
+          v.0.180<br />01/05/26 à 15h52
         </div>
       </div>
 
