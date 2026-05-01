@@ -3821,7 +3821,6 @@ function SuiviClientView({ settings }) {
   const [modal, setModal]       = React.useState(null);
   const [sortCol, setSortCol]   = React.useState(null);
   const [sortDir, setSortDir]   = React.useState("asc");
-  const editorRef               = React.useRef(null);
 
   const saveClients = (list) => { setClients(list); saveSuiviClients(list); };
   const handleSave  = (d) => {
@@ -3898,7 +3897,7 @@ function SuiviClientView({ settings }) {
             ) : filtered.map((c,i)=>{
               const active = selected?.id===c.id;
               return (
-                <div key={c.id} onClick={()=>{ setSelected(c); setTimeout(()=>{ if(editorRef.current){ editorRef.current.innerHTML=notes[c.id]||""; } },30); }}
+                <div key={c.id} onClick={()=>{ setSelected(c); }}
                   style={{ display:"flex", alignItems:"center", padding:"9px 14px", gap:8,
                     borderBottom:"1px solid #F5F5F5",
                     background: active ? "#EEF4FF" : i%2===0 ? "white" : "#FAFAFA",
@@ -3938,6 +3937,7 @@ function SuiviClientView({ settings }) {
               </div>
               <div style={{ flex:1, padding:16, overflow:"auto" }}>
                 <RichTextArea
+                  key={selected.id}
                   value={notes[selected.id]||""}
                   onChange={v=>saveNote(selected.id, v)}
                   placeholder="Saisir vos notes de suivi pour ce client… (mise en forme disponible)"
