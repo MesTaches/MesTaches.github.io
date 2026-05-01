@@ -1411,8 +1411,13 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
       <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", borderTop: `4px solid ${catAccent}`, transition: "border-color 0.2s" }}>
         <div className="task-modal-form" style={{ padding: "20px 24px 0" }}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "🔍 Nouvelle tâche" : "Modifier la tâche"}</h2>
+          
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#AAA", marginBottom: 6 }}>PIÈCES JOINTES / PREUVES</div>
+            <input value={d.attachments || ""} onChange={e => setD({ ...d, attachments: e.target.value })} placeholder="Lien fichier, mail, capture, PDF…" style={{ ...S.input, width: "100%", fontSize: 11 }} />
+          </div>
+<div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
             <div style={{ display: "flex", gap: 6 }}>
               {/* 9) Add to My Day */}
               <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} title={d.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
@@ -3974,7 +3979,7 @@ function SuiviClientView({ settings }) {
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
           {["Tous",...suiviTypes.map(t=>t.name)].map(o=>{ const st=suiviTypes.find(t=>t.name===o); return <FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} color={st?.color} />; })}
           <div style={{ flex:1 }} />
-          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>🔍 + 🔍 Nouveau suivi</button>
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>🔍 + Nouveau suivi</button>
         </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
@@ -4688,7 +4693,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.177<br />01/05/26 à 15h39
+          v.0.179<br />01/05/26 à 15h46
         </div>
       </div>
 
