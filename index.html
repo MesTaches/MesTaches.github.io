@@ -1412,7 +1412,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
         <div className="task-modal-form" style={{ padding: "20px 24px 0" }}>
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
+            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "🔍 Nouvelle tâche" : "Modifier la tâche"}</h2>
             <div style={{ display: "flex", gap: 6 }}>
               {/* 9) Add to My Day */}
               <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} title={d.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
@@ -1765,9 +1765,6 @@ function Dashboard({ tasks, onNavigate, settings }) {
         </div>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 8 }}>
           <span>{done.length} complétées</span><span>{active.length} restantes</span>
-        </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <input value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} placeholder="🔍 Recherche rapide…" style={{ ...S.input, width:260, minWidth:260, maxWidth:260, fontSize:11, padding:"8px 12px", borderRadius:22, background:"#FBFCFE" }} />
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 12 : 20 }}>
@@ -3977,7 +3974,7 @@ function SuiviClientView({ settings }) {
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
           {["Tous",...suiviTypes.map(t=>t.name)].map(o=>{ const st=suiviTypes.find(t=>t.name===o); return <FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} color={st?.color} />; })}
           <div style={{ flex:1 }} />
-          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>+ Nouveau suivi</button>
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>🔍 + 🔍 Nouveau suivi</button>
         </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
@@ -4416,8 +4413,6 @@ function App() {
   };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
-  const [globalQuery, setGlobalQuery] = useState("");
-  const globalHits = useMemo(() => { const q = globalQuery.trim().toLowerCase(); if (!q) return []; return tasks.filter(t => [t.title, t.notes, t.category, t.type].filter(Boolean).join(" ").toLowerCase().includes(q)).slice(0, 8); }, [globalQuery, tasks]);
   const [undoTask, setUndoTask] = useState(null); // 2) undo
   const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
   const notifTimerRef = useRef(null);
@@ -4693,7 +4688,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.174<br />01/05/26 à 15h31
+          v.0.177<br />01/05/26 à 15h39
         </div>
       </div>
 
