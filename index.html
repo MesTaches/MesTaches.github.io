@@ -563,7 +563,7 @@ function CotationView({ settings }) {
               {/* Demandeur */}
               <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#555", overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
               {/* Statut */}
-              <div><span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.label}</span></div>
+              <div><span style={{ fontSize:8, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.label}</span></div>
               {/* Montants */}
               <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:10 }}>{fmtCotEur(c.authorizedAmount)}</div>
               <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:10 }}>{fmtCotEur(c.need)}</div>
@@ -3926,50 +3926,62 @@ function SuiviClientView({ settings }) {
     };
     return <div onClick={()=>handleSort(col)} style={{ position:"relative", width:w, minWidth:w, maxWidth:w, padding:"0 6px", fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap", boxSizing:"border-box" }}>{label}{si(col)}<span onMouseDown={startResize} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", userSelect:"none" }} /></div>;
   };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)" }}>
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", flexDirection:"column", gap:6, flexShrink:0, width:"100%", boxSizing:"border-box" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           {["Actifs","Clôturés","Tous"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
           {["Tous",...suiviTypes.map(t=>t.name)].map(o=>{ const st=suiviTypes.find(t=>t.name===o); return <FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} color={st?.color} />; })}
           <div style={{ flex:1 }} />
-          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:11 }}>+ Nouveau client</button>
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>+ Nouveau client</button>
         </div>
-        <div style={{ width:"100%", maxWidth:"100%" }}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:"100%", maxWidth:"100%", fontSize:10, padding:"6px 12px", boxSizing:"border-box" }} /></div>
+        <div style={{ width:"100%", maxWidth:"100%" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:"100%", maxWidth:"100%", fontSize:10, padding:"6px 12px", boxSizing:"border-box" }} />
+        </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <div style={{ width:"48%", minWidth:360, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
           <div style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
-            <div style={{ width:34 }}></div>
+            <div></div>
             <HeaderCell col="clientName" label="NOM CLIENT" />
             <HeaderCell col="clientCode" label="CODE" />
             <HeaderCell col="description" label="DESCRIPTION" />
             <HeaderCell col="suiviType" label="TYPE" />
             <HeaderCell col="followupDate" label="SUIVI" />
             <HeaderCell col="reminderDate" label="RAPPEL" />
-            <div style={{ width:colWidths.actions, flexShrink:0 }} />
+            <div style={{ width:colWidths.actions }} />
           </div>
           <div style={{ flex:1, overflowY:"auto" }}>
-            {filtered.length===0 ? <div style={{ textAlign:"center", padding:"40px 0", color:"#CCC", fontFamily:"'Lora',serif", fontSize:13 }}>{clients.length===0 ? "Aucun client — cliquez sur « + Nouveau client »" : "Aucun résultat"}</div> : filtered.map((c,i)=>{ const active=selected?.id===c.id; const st=suiviTypes.find(t=>t.id===c.suiviType); const pastReminder=c.reminderDate && c.reminderDate<today; return <div key={c.id} onClick={()=>setSelected(c)} style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:6, borderBottom:"1px solid #F5F5F5", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", cursor:"pointer", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:c.closed?0.55:1, transition:"background 0.12s" }}>
-              <div style={{ flex:1.3, fontWeight:600, color:"#2C3E50", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.closed && <span style={{ fontSize:9, color:"#888", marginRight:4, fontFamily:"'DM Mono',monospace" }}>✓</span>}<input type="checkbox" checked={!!c.closed} onClick={e=>e.stopPropagation()} onChange={e=>{ e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:e.target.checked}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:e.target.checked}); }} style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }} />{c.clientName||"—"}</div>
-              <div style={{ flex:0.6, fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientCode||"—"}</div>
-              <div style={{ flex:0.7 }}>{st ? <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.name}</span> : <span style={{ color:"#CCC", fontSize:10 }}>—</span>}</div>
-              <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate ? c.followupDate.split("-").reverse().join("/") : "—"}</div>
-              <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:pastReminder?"#E74C3C":"#888", fontSize:10, whiteSpace:"nowrap", fontWeight:pastReminder?700:400 }}>{c.reminderDate ? c.reminderDate.split("-").reverse().join("/") : "—"}</div>
-              <div style={{ width:44, display:"flex", gap:3, justifyContent:"flex-end", flexShrink:0 }}>
-                <button onClick={e=>{e.stopPropagation();setModal(c);}} title="Modifier" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.5, color:"#102A63" }}>✎</button>
-                <button onClick={e=>{e.stopPropagation();handleDelete(c.id);}} title="Supprimer" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#E74C3C", opacity:0.5 }}>×</button>
+            {filtered.length===0 ? <div style={{ textAlign:"center", padding:"40px 0", color:"#CCC", fontFamily:"'Lora',serif", fontSize:13 }}>{clients.length===0 ? "Aucun client — cliquez sur « + Nouveau client »" : "Aucun résultat"}</div> : filtered.map((c,i)=>{
+              const active=selected?.id===c.id;
+              const st=suiviTypes.find(t=>t.id===c.suiviType);
+              const pastReminder=c.reminderDate && c.reminderDate<today;
+              return <div key={c.id} onClick={()=>setSelected(c)} style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"8px 12px", borderBottom:"1px solid #F5F5F5", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", cursor:"pointer", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:c.closed?0.55:1, transition:"background 0.12s", minWidth:"max-content" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }} style={{ width:18, height:18, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"white", padding:0, lineHeight:1 }}>✓</button>
+                </div>
+                <div style={{ fontSize:10, fontWeight:600, color:"#2C3E50", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.clientName||"—"}</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.clientCode||"—"}</div>
+                <div style={{ color:"#555", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.description||"—"}</div>
+                <div>{st ? <span style={{ fontSize:8, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.name}</span> : <span style={{ color:"#CCC", fontSize:10 }}>—</span>}</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate ? c.followupDate.split("-").reverse().join("/") : "—"}</div>
+                <div style={{ fontFamily:"'DM Mono',monospace", color:pastReminder?"#E74C3C":"#888", fontSize:10, whiteSpace:"nowrap", fontWeight:pastReminder?700:400 }}>{c.reminderDate ? c.reminderDate.split("-").reverse().join("/") : "—"}</div>
+                <div style={{ display:"flex", gap:3, justifyContent:"flex-end", flexShrink:0 }}>
+                  <button onClick={e=>{e.stopPropagation();setModal(c);}} title="Modifier" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.5, color:"#102A63" }}>✎</button>
+                  <button onClick={e=>{e.stopPropagation();handleDelete(c.id);}} title="Supprimer" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#E74C3C", opacity:0.5 }}>×</button>
+                </div>
               </div>
-            </div> })}
+            })}
           </div>
-          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""}{filterStatus!=="Tous" ? ` · ${filterStatus.toLowerCase()}` : ""}{search ? ` · filtrés` : ""}</div>
+          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""}</div>
         </div>
         <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC" }}>
           {selected ? <>
             <div style={{ padding:"12px 20px", borderBottom:"1px solid #ECEAE5", background:"white", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
-                <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{(()=>{const st=suiviTypes.find(t=>t.id===selected.suiviType);return st?<span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>{st.name}</span>:null;})()}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>Clôturé</span>}</div>
+                <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>Clôturé</span>}</div>
                 <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
               </div>
               <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div>
@@ -3984,7 +3996,6 @@ function SuiviClientView({ settings }) {
     </div>
   );
 }
-
 /* ─── TASKS2 (Cotation) - données indépendantes ─── */
 const TASKS2_KEY          = "taskmanager_tasks2_v1";
 const TASKS2_COL_KEY      = "taskmanager_tasks2_colwidths";
@@ -4273,7 +4284,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 <div style={{ width:colWidths.requester, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#555", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
                 {/* Statut */}
                 <div style={{ width:colWidths.status, flexShrink:0, paddingRight:8 }}>
-                  <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{st.label}</span>
+                  <span style={{ fontSize:8, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{st.label}</span>
                 </div>
                 {/* Encours */}
                 <div style={{ width:colWidths.authorizedAmount, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:12 }}>{fmtT2Eur(c.authorizedAmount)}</div>
@@ -4638,7 +4649,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.152<br />01/05/26 à 12h44
+          v.0.155<br />01/05/26 à 13h39
         </div>
       </div>
 
