@@ -1138,7 +1138,7 @@ function AIAssistant({ text, onApply, onClose, settings }) {
       bullets:   `Transforme le texte suivant en une liste à puces concise. Renvoie uniquement la liste, sans commentaire ni explication :\n\n${stripped}`,
     };
     if (!settings ) {
-      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
+      setResult("⚠️ Clé API manquante — configurez-la dans Activités • Paramètres ⚙");
       setLoading(false);
       return;
     }
@@ -2337,6 +2337,15 @@ const ALL_TABS = [
   { id: "reporting",     label: "Reporting",        icon: "▤" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
 ];
+
+function ActivitiesView({ activityLog }) {
+  return <div style={{ padding: 24 }}>
+    <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 12 }}>Activités</div>
+    <div style={{ background: "white", border: "1px solid #ECEAE5", borderRadius: 14, padding: 16 }}>
+      {activityLog.length === 0 ? <div style={{ color: "#AAA", fontSize: 12 }}>Aucune activité pour le moment.</div> : activityLog.map(a => <div key={a.id} style={{ padding: "8px 0", borderBottom: "1px solid #F3F3F3", fontSize: 12 }}><strong>{new Date(a.at).toLocaleString("fr-FR")}</strong> — {a.label}</div>)}
+    </div>
+  </div>;
+}
 
 function SettingsView({ settings, onSave }) {
   const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "" })));
@@ -4418,12 +4427,15 @@ function App() {
   };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const [activityLog, setActivityLog] = useState(() => { try { const raw = localStorage.getItem("taskmanager_activity_log_v1"); return raw ? JSON.parse(raw) : []; } catch { return []; } });
   const [undoTask, setUndoTask] = useState(null); // 2) undo
   const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
   const notifTimerRef = useRef(null);
+  const logActivity = (label) => setActivityLog(prev => [{ id: Date.now().toString(), at: new Date().toISOString(), label }, ...prev].slice(0,200));
   const isMobile = useIsMobile();
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+  useEffect(() => { try { localStorage.setItem("taskmanager_activity_log_v1", JSON.stringify(activityLog.slice(0,200))); } catch {} }, [activityLog]);
 
   // Auto Ma journée : tâches échues ou aujourd'hui
   useEffect(() => {
@@ -4693,7 +4705,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.180<br />01/05/26 à 15h52
+          v.0.181<br />01/05/26 à 15h56
         </div>
       </div>
 
@@ -4743,7 +4755,7 @@ function App() {
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {/* cotation view supprimée */}
           {view === "payments"      && <PaymentsView settings={settings} />}
-          {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
+          {view === "activities" || view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
       )}
 
