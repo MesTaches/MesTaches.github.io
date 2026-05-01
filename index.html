@@ -3910,8 +3910,6 @@ function SuiviClientView({ settings }) {
   const handleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
   const si = (col) => sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : "";
   const FBtn = ({label,active,onClick,color}) => <button onClick={onClick} style={{ border:`1px solid ${active?(color||"#102A63"):"#E0E0E0"}`, background:active?(color||"#102A63"):"white", color:active?"white":"#666", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:10, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>;
-  const todayClients = clients.filter(c => c.followupDate === today && !c.closed);
-  const urgentClients = clients.filter(c => !c.closed && c.reminderDate && c.reminderDate <= today);
   const filtered = clients.filter(c=>{
     if(filterStatus==="Actifs" && c.closed) return false;
     if(filterStatus==="Clôturés" && !c.closed) return false;
@@ -3967,7 +3965,8 @@ function SuiviClientView({ settings }) {
   </div> : null;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", position:"relative" }}>
+      <button onClick={()=>setQuickOpen(true)} style={{ position:"fixed", right:20, bottom:20, zIndex:4500, background:"#102A63", color:"white", border:"none", borderRadius:999, padding:"10px 14px", boxShadow:"0 8px 24px rgba(0,0,0,0.2)", fontFamily:"'DM Mono',monospace", fontSize:10, cursor:"pointer" }}>＋ Capture rapide</button>
       <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0, width:"100%", boxSizing:"border-box" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:140, minWidth:140, maxWidth:140, fontSize:10, padding:"6px 12px", boxSizing:"border-box", flexShrink:0 }} />
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flex:1 }}>
@@ -3981,11 +3980,6 @@ function SuiviClientView({ settings }) {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <QuickCapture />
         <div style={{ width:"52.8%", minWidth:396, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
-          <div style={{ padding:"8px 12px", borderBottom:"1px solid #F0F0F0", background:"#FAFBFD", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#102A63", display:"flex", gap:10, flexWrap:"wrap" }}>
-            <span><strong>Aujourd'hui:</strong> {todayClients.length}</span>
-            <span><strong>Urgents:</strong> {urgentClients.length}</span>
-            <span><strong>Rappels:</strong> {clients.filter(c=>c.reminderDate).length}</span>
-          </div>
           <div style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
             <div></div>
             <HeaderCell col="clientName" label="NOM CLIENT" />
@@ -4694,7 +4688,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.158<br />01/05/26 à 14h00
+          v.0.162<br />01/05/26 à 14h46
         </div>
       </div>
 
