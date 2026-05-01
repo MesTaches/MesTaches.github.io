@@ -3897,7 +3897,9 @@ function SuiviClientView({ settings }) {
   const [colWidths, setColWidths] = React.useState(()=>{ try { return JSON.parse(localStorage.getItem("taskmanager_suivi_colwidths_v1")) || { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } catch { return { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } });
   const saveWidths = (w) => { setColWidths(w); try { localStorage.setItem("taskmanager_suivi_colwidths_v1", JSON.stringify(w)); } catch {} };
   const today = new Date().toISOString().split("T")[0];
-  const saveClients = (list) => { setClients(list); saveSuiviClients(list); };
+  const emitReminderSync = (items) => { try { window.dispatchEvent(new CustomEvent("suiviReminderUpdated", { detail: items.filter(x => x.reminderDate) })); } catch {} };
+
+  const saveClients = (list) => { setClients(list); saveSuiviClients(list); emitReminderSync(list); };
   const handleSave = (d) => { let newClient; const list = d.id ? clients.map(c=>c.id===d.id?d:c) : (newClient={...d,id:Date.now().toString()}, [...clients, newClient]); saveClients(list); setModal(null); if(newClient) setSelected(newClient); };
   const handleDelete = (id) => { if(!confirm("Supprimer ce client ?")) return; saveClients(clients.filter(c=>c.id!==id)); if(selected?.id===id) setSelected(null); };
   const saveNote = (id, html) => { const n={...notes,[id]:html}; setNotes(n); saveSuiviNotes(n); };
@@ -3930,6 +3932,9 @@ function SuiviClientView({ settings }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)" }}>
       <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", flexDirection:"column", gap:6, flexShrink:0, width:"100%", boxSizing:"border-box" }}>
+        <div style={{ width:"100%", maxWidth:"100%" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:"100%", maxWidth:"100%", minWidth:"100ch", fontSize:10, padding:"6px 12px", boxSizing:"border-box" }} />
+        </div>
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
           {["Actifs","Clôturés","Tous"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
           <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
@@ -3937,12 +3942,9 @@ function SuiviClientView({ settings }) {
           <div style={{ flex:1 }} />
           <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>+ Nouveau client</button>
         </div>
-        <div style={{ width:"100%", maxWidth:"100%" }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:"100%", maxWidth:"100%", fontSize:10, padding:"6px 12px", boxSizing:"border-box" }} />
-        </div>
       </div>
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
-        <div style={{ width:"48%", minWidth:360, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
+        <div style={{ width:"52.8%", minWidth:396, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
           <div style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"6px 12px", background:"#102A63", gap:0, flexShrink:0, minWidth:"max-content" }}>
             <div></div>
             <HeaderCell col="clientName" label="NOM CLIENT" />
@@ -3982,7 +3984,7 @@ function SuiviClientView({ settings }) {
             <div style={{ padding:"12px 20px", borderBottom:"1px solid #ECEAE5", background:"white", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
                 <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>Clôturé</span>}</div>
-                <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
+<div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
               </div>
               <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div>
             </div>
@@ -4649,7 +4651,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.155<br />01/05/26 à 13h39
+          v.0.157<br />01/05/26 à 13h51
         </div>
       </div>
 
