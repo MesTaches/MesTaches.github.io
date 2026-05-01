@@ -662,6 +662,12 @@ const DEFAULT_SETTINGS = {
     { id: "lbl3", name: "Factor",      color: "#27AE60", bg: "#E8F8F5" },
     { id: "lbl4", name: "Financement", color: "#8E44AD", bg: "#F4ECF7" },
   ],
+  suiviTypes: [
+    { id: "retard", name: "Retard", color: "#C0392B", bg: "#FDEDEC" },
+    { id: "risque", name: "Risque", color: "#E67E22", bg: "#FEF9C3" },
+    { id: "litige", name: "Litige", color: "#2980B9", bg: "#EBF5FB" },
+    { id: "cotation", name: "Cotation", color: "#27AE60", bg: "#E8F8F5" },
+  ],
 };
 
 function loadSettings() {
@@ -676,6 +682,7 @@ function loadSettings() {
       hiddenTabs: parsed.hiddenTabs || [],
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
       groqKey: (parsed.groqKey || "").trim(),
+      suiviTypes: parsed.suiviTypes || DEFAULT_SETTINGS.suiviTypes,
     };
   } catch { return DEFAULT_SETTINGS; }
 }
@@ -787,6 +794,48 @@ function StopwatchWidget({ task, onStop, onClose }) {
   );
 }
 
+
+
+/* ─── HIGHLIGHT MENU ─── */
+function HighlightMenu({ onSelect }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const colors = [
+    { c: "#FFF176", label: "Jaune" },
+    { c: "#A5D6A7", label: "Vert" },
+    { c: "#90CAF9", label: "Bleu" },
+    { c: "#FFAB91", label: "Orange" },
+    { c: "#CE93D8", label: "Violet" },
+    { c: "inherit", label: "Effacer" },
+  ];
+  return (
+    <div ref={ref} style={{ position: "relative", display: "inline-block" }}>
+      <button type="button" onMouseDown={(e) => { e.preventDefault(); setOpen(o => !o); }} title="Surligner"
+        style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>
+        <mark style={{ background: "#FFF176", padding: "0 2px", borderRadius: 2 }}>ab</mark>
+      </button>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, zIndex: 9999, background: "white", border: "1px solid #E8E8E8", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", padding: 8, marginTop: 2, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 5, width: 108 }}>
+          {colors.map(({ c, label }) => (
+            <button key={c} type="button" title={label}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(c); setOpen(false); }}
+              style={{ width: 26, height: 26, background: c === "inherit" ? "white" : c, border: c === "inherit" ? "1px dashed #CCC" : "2px solid transparent", borderRadius: 4, cursor: "pointer", padding: 0, fontSize: c === "inherit" ? 10 : 12 }}
+              onMouseEnter={e => e.currentTarget.style.outline = "2px solid #333"}
+              onMouseLeave={e => e.currentTarget.style.outline = "none"}>
+              {c === "inherit" ? "✕" : ""}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ─── COLOR MENU ─── */
 function ColorMenu({ onSelect }) {
@@ -985,6 +1034,7 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
         <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
         {/* 4) text color menu */}
         <ColorMenu onSelect={(c) => exec("foreColor", c)} />
+        <HighlightMenu onSelect={(c) => { ref.current.focus(); document.execCommand("hiliteColor", false, c); onChange(ref.current.innerHTML); }} />
         <div style={{ width: 1, height: 16, background: "#E8E8E8", margin: "0 2px" }} />
         <button type="button" onMouseDown={(e) => { e.preventDefault(); exec("undo"); }} title="Annuler (Ctrl+Z)"
           style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5 }}>↩ Annuler</button>
@@ -2273,7 +2323,7 @@ const ALL_TABS = [
   { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
   { id: "myday",         label: "Ma journée",       icon: "☀" },
   { id: "tasks",         label: "Tâches",           icon: "☰" },
-  { id: "categorytasks", label: "Type de tâches",   icon: "◫" },
+  { id: "categorytasks", label: "Catégorie",   icon: "◫" },
   { id: "meetings",      label: "Réunions",         icon: "◷" },
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "◔" },
@@ -3781,16 +3831,18 @@ const SUIVI_NOTES_KEY = "taskmanager_suiviclient_notes_v1";
 function loadSuiviNotes() { try { const s=localStorage.getItem(SUIVI_NOTES_KEY); return s?JSON.parse(s):{}; } catch { return {}; } }
 function saveSuiviNotes(d) { try { localStorage.setItem(SUIVI_NOTES_KEY, JSON.stringify(d)); } catch {} }
 
-function SuiviClientModal({ item, onSave, onClose }) {
+
+function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
   const today0 = new Date().toISOString().split("T")[0];
-  const [d, setD] = React.useState({ clientName:"", clientCode:"", description:"", followupDate: today0, ...item });
+  const [d, setD] = React.useState({ clientName:"", clientCode:"", description:"", followupDate:today0, reminderDate:"", suiviType:"", closed:false, ...item });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
   const inp = { border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"#FAFAFA" };
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:3, fontWeight:700, letterSpacing:"0.04em" }}>{t}</div>;
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}
-      onMouseDown={e=>{ if(e.target===e.currentTarget) e.currentTarget._md=true; }} onMouseUp={e=>{ if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{ background:"white", borderRadius:16, width:520, boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{ background:"white", borderRadius:16, width:540, boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
         <div style={{ padding:"16px 22px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LE CLIENT":"NOUVEAU CLIENT"}</span>
           <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
@@ -3800,9 +3852,22 @@ function SuiviClientModal({ item, onSave, onClose }) {
             <div style={{ flex:2 }}>{lbl("NOM CLIENT")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={inp} placeholder="Nom du client" autoFocus /></div>
             <div style={{ flex:1 }}>{lbl("CODE CLIENT")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={inp} placeholder="Ex: ACM-001" /></div>
           </div>
-          <div>{lbl("DESCRIPTION")}<input value={d.description} onChange={e=>set("description",e.target.value)} style={inp} placeholder="Courte description du suivi" /></div>
-          <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate} onChange={e=>set("followupDate",e.target.value)} style={inp} /></div>
-          <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={inp} /></div>
+          <div>{lbl("DESCRIPTION")}<input value={d.description} onChange={e=>set("description",e.target.value)} style={inp} placeholder="Courte description" /></div>
+          <div style={{ display:"flex", gap:12 }}>
+            <div style={{ flex:1 }}>
+              {lbl("TYPE DE SUIVI")}
+              <select value={d.suiviType||""} onChange={e=>set("suiviType",e.target.value)} style={{...inp, cursor:"pointer"}}>
+                <option value="">— Aucun —</option>
+                {(suiviTypes||[]).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={inp} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={inp} /></div>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, paddingTop:4 }}>
+            <input type="checkbox" id="sc-closed" checked={!!d.closed} onChange={e=>set("closed",e.target.checked)} style={{ width:15, height:15, cursor:"pointer" }} />
+            <label htmlFor="sc-closed" style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", cursor:"pointer", userSelect:"none" }}>Clôturer ce client</label>
+          </div>
         </div>
         <div style={{ padding:"10px 22px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
@@ -3814,150 +3879,93 @@ function SuiviClientModal({ item, onSave, onClose }) {
 }
 
 function SuiviClientView({ settings }) {
-  const [clients, setClients]   = React.useState(()=>loadSuiviClients());
-  const [notes, setNotes]       = React.useState(()=>loadSuiviNotes());
+  const suiviTypes = settings?.suiviTypes || [
+    { id:"retard", name:"Retard", color:"#C0392B", bg:"#FDEDEC" },
+    { id:"risque", name:"Risque", color:"#E67E22", bg:"#FEF9C3" },
+    { id:"litige", name:"Litige", color:"#2980B9", bg:"#EBF5FB" },
+    { id:"cotation", name:"Cotation", color:"#27AE60", bg:"#E8F8F5" },
+  ];
+  const [clients, setClients] = React.useState(()=>loadSuiviClients());
+  const [notes, setNotes] = React.useState(()=>loadSuiviNotes());
   const [selected, setSelected] = React.useState(null);
-  const [search, setSearch]     = React.useState("");
-  const [modal, setModal]       = React.useState(null);
-  const [sortCol, setSortCol]   = React.useState(null);
-  const [sortDir, setSortDir]   = React.useState("asc");
-
+  const [search, setSearch] = React.useState("");
+  const [modal, setModal] = React.useState(null);
+  const [filterStatus, setFilterStatus] = React.useState("Actifs");
+  const [filterType, setFilterType] = React.useState("Tous");
+  const [sortCol, setSortCol] = React.useState(null);
+  const [sortDir, setSortDir] = React.useState("asc");
+  const today = new Date().toISOString().split("T")[0];
   const saveClients = (list) => { setClients(list); saveSuiviClients(list); };
-  const handleSave  = (d) => {
-    const list = d.id ? clients.map(c=>c.id===d.id?d:c) : [...clients,{...d,id:Date.now().toString()}];
-    saveClients(list); setModal(null);
-  };
-  const handleDelete = (id) => {
-    if(!confirm("Supprimer ce client ?")) return;
-    saveClients(clients.filter(c=>c.id!==id));
-    if(selected?.id===id) setSelected(null);
-  };
-
-  const saveNote = (id, html) => {
-    const n = {...notes, [id]: html};
-    setNotes(n); saveSuiviNotes(n);
-  };
-
-  const handleSort = (col) => {
-    if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc");
-    else { setSortCol(col); setSortDir("asc"); }
-  };
-  const si = (col) => sortCol===col?(sortDir==="asc"?" ▲":" ▼"):"";
-
-  const filtered = clients
-    .filter(c => !search || [c.clientName,c.clientCode,c.description].some(v=>(v||"").toLowerCase().includes(search.toLowerCase())))
-    .sort((a,b)=>{
-      if(!sortCol) return 0;
-      const va=(a[sortCol]||"").toLowerCase(), vb=(b[sortCol]||"").toLowerCase();
-      const cmp=va.localeCompare(vb,"fr",{sensitivity:"base"});
-      return sortDir==="asc"?cmp:-cmp;
-    });
-
-  const ColH = ({col,label,flex}) => (
-    <div onClick={()=>handleSort(col)}
-      style={{ flex:flex||1, fontSize:9, fontWeight:700, color:"white", fontFamily:"'DM Mono',monospace",
-        cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap" }}>
-      {label}{si(col)}
-    </div>
-  );
-
+  const handleSave = (d) => { let newClient; const list = d.id ? clients.map(c=>c.id===d.id?d:c) : (newClient={...d,id:Date.now().toString()}, [...clients, newClient]); saveClients(list); setModal(null); if(newClient) setSelected(newClient); };
+  const handleDelete = (id) => { if(!confirm("Supprimer ce client ?")) return; saveClients(clients.filter(c=>c.id!==id)); if(selected?.id===id) setSelected(null); };
+  const saveNote = (id, html) => { const n={...notes,[id]:html}; setNotes(n); saveSuiviNotes(n); };
+  const handleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
+  const si = (col) => sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : "";
+  const FBtn = ({label,active,onClick,color}) => <button onClick={onClick} style={{ border:`1px solid ${active?(color||"#102A63"):"#E0E0E0"}`, background:active?(color||"#102A63"):"white", color:active?"white":"#666", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:"'Lora',serif", fontSize:11, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>;
+  const filtered = clients.filter(c=>{
+    if(filterStatus==="Actifs" && c.closed) return false;
+    if(filterStatus==="Clôturés" && !c.closed) return false;
+    if(filterType!=="Tous"){
+      const t=suiviTypes.find(t=>t.name===filterType);
+      if(!t || c.suiviType!==t.id) return false;
+    }
+    if(search && ![c.clientName,c.clientCode,c.description].some(v=>(v||"").toLowerCase().includes(search.toLowerCase()))) return false;
+    return true;
+  }).sort((a,b)=>{ if(!sortCol) return 0; const va=(a[sortCol]||"").toLowerCase(), vb=(b[sortCol]||"").toLowerCase(); return (sortDir==="asc"?1:-1)*va.localeCompare(vb,"fr",{sensitivity:"base"}); });
+  const ColH = ({col,label,flex}) => <div onClick={()=>handleSort(col)} style={{ flex:flex||1, fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap" }}>{label}{si(col)}</div>;
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", padding:0 }}>
-      {/* ── Header */}
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"10px 20px", display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-        <div style={{ fontSize:16, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63", flex:1 }}>◈ Suivi clients</div>
-        <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"6px 16px", fontSize:11 }}>+ Nouveau client</button>
+    <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)" }}>
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          {["Actifs","Clôturés","Tous"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
+          <div style={{ width:1, height:20, background:"#E8E8E8", margin:"0 4px" }} />
+          {["Tous",...suiviTypes.map(t=>t.name)].map(o=>{ const st=suiviTypes.find(t=>t.name===o); return <FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} color={st?.color} />; })}
+          <div style={{ flex:1 }} />
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:11 }}>+ Nouveau client</button>
+        </div>
+        <div><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:"100%", fontSize:11, padding:"6px 12px" }} /></div>
       </div>
-
-      {/* ── Main layout */}
-      <div style={{ display:"flex", flex:1, overflow:"hidden", gap:0 }}>
-
-        {/* ── LEFT: table */}
-        <div style={{ width:"46%", minWidth:360, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
-          {/* Search bar */}
-          <div style={{ padding:"10px 14px", borderBottom:"1px solid #F0F0F0" }}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…"
-              style={{ ...S.input, width:"100%", fontSize:11, padding:"7px 12px" }} />
-          </div>
-          {/* Column header */}
-          <div style={{ display:"flex", alignItems:"center", padding:"6px 14px", background:"#102A63", gap:8, flexShrink:0 }}>
-            <ColH col="clientName"  label="NOM CLIENT"   flex={1.4} />
-            <ColH col="clientCode"  label="CODE"         flex={0.7} />
-            <ColH col="description" label="DESCRIPTION"  flex={1.5} />
-            <ColH col="followupDate"  label="DATE SUIVI"   flex={0.8} />
-            <ColH col="reminderDate"  label="DATE RAPPEL"  flex={0.8} />
+      <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
+        <div style={{ width:"48%", minWidth:360, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
+          <div style={{ display:"flex", alignItems:"center", padding:"6px 12px", background:"#102A63", gap:6, flexShrink:0 }}>
+            <ColH col="clientName" label="NOM CLIENT" flex={1.3} />
+            <ColH col="clientCode" label="CODE" flex={0.6} />
+            <ColH col="suiviType" label="TYPE" flex={0.7} />
+            <ColH col="followupDate" label="SUIVI" flex={0.7} />
+            <ColH col="reminderDate" label="RAPPEL" flex={0.7} />
             <div style={{ width:44, flexShrink:0 }} />
           </div>
-          {/* Rows */}
           <div style={{ flex:1, overflowY:"auto" }}>
-            {filtered.length===0 ? (
-              <div style={{ textAlign:"center", padding:"40px 0", color:"#CCC", fontFamily:"'Lora',serif", fontSize:13 }}>
-                {clients.length===0 ? "Aucun client — cliquez sur « + Nouveau client »" : "Aucun résultat"}
+            {filtered.length===0 ? <div style={{ textAlign:"center", padding:"40px 0", color:"#CCC", fontFamily:"'Lora',serif", fontSize:13 }}>{clients.length===0 ? "Aucun client — cliquez sur « + Nouveau client »" : "Aucun résultat"}</div> : filtered.map((c,i)=>{ const active=selected?.id===c.id; const st=suiviTypes.find(t=>t.id===c.suiviType); const pastReminder=c.reminderDate && c.reminderDate<today; return <div key={c.id} onClick={()=>setSelected(c)} style={{ display:"flex", alignItems:"center", padding:"8px 12px", gap:6, borderBottom:"1px solid #F5F5F5", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", cursor:"pointer", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:c.closed?0.55:1, transition:"background 0.12s" }}>
+              <div style={{ flex:1.3, fontWeight:600, color:"#2C3E50", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.closed && <span style={{ fontSize:9, color:"#888", marginRight:4, fontFamily:"'DM Mono',monospace" }}>✓</span>}{c.clientName||"—"}</div>
+              <div style={{ flex:0.6, fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientCode||"—"}</div>
+              <div style={{ flex:0.7 }}>{st ? <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.name}</span> : <span style={{ color:"#CCC", fontSize:10 }}>—</span>}</div>
+              <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate ? c.followupDate.split("-").reverse().join("/") : "—"}</div>
+              <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:pastReminder?"#E74C3C":"#888", fontSize:10, whiteSpace:"nowrap", fontWeight:pastReminder?700:400 }}>{c.reminderDate ? c.reminderDate.split("-").reverse().join("/") : "—"}</div>
+              <div style={{ width:44, display:"flex", gap:3, justifyContent:"flex-end", flexShrink:0 }}>
+                <button onClick={e=>{e.stopPropagation();setModal(c);}} title="Modifier" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.5, color:"#102A63" }}>✎</button>
+                <button onClick={e=>{e.stopPropagation();handleDelete(c.id);}} title="Supprimer" style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#E74C3C", opacity:0.5 }}>×</button>
               </div>
-            ) : filtered.map((c,i)=>{
-              const active = selected?.id===c.id;
-              return (
-                <div key={c.id} onClick={()=>{ setSelected(c); }}
-                  style={{ display:"flex", alignItems:"center", padding:"9px 14px", gap:8,
-                    borderBottom:"1px solid #F5F5F5",
-                    background: active ? "#EEF4FF" : i%2===0 ? "white" : "#FAFAFA",
-                    cursor:"pointer", borderLeft: active ? "3px solid #102A63" : "3px solid transparent",
-                    transition:"background 0.12s" }}>
-                  <div style={{ flex:1.4, fontWeight:600, color:"#2C3E50", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientName||"—"}</div>
-                  <div style={{ flex:0.7, fontFamily:"'DM Mono',monospace", color:"#6B7280", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientCode||"—"}</div>
-                  <div style={{ flex:1.5, color:"#555", fontSize:11, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.description||"—"}</div>
-                  <div style={{ flex:0.8, fontFamily:"'DM Mono',monospace", color:"#888", fontSize:10, whiteSpace:"nowrap" }}>{c.followupDate?c.followupDate.split("-").reverse().join("/"):"—"}</div>
-                  <div style={{ flex:0.8, fontFamily:"'DM Mono',monospace", color: c.reminderDate && c.reminderDate < new Date().toISOString().split("T")[0] ? "#E74C3C" : "#888", fontSize:10, whiteSpace:"nowrap" }}>{c.reminderDate?c.reminderDate.split("-").reverse().join("/"):"—"}</div>
-                  <div style={{ width:44, display:"flex", gap:3, justifyContent:"flex-end", flexShrink:0 }}>
-                    <button onClick={e=>{e.stopPropagation();setModal(c);}} title="Modifier"
-                      style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, opacity:0.45, color:"#102A63" }}>✎</button>
-                    <button onClick={e=>{e.stopPropagation();handleDelete(c.id);}} title="Supprimer"
-                      style={{ background:"none", border:"none", cursor:"pointer", fontSize:12, color:"#E74C3C", opacity:0.45 }}>×</button>
-                  </div>
-                </div>
-              );
-            })}
+            </div> })}
           </div>
-          {/* Footer count */}
-          <div style={{ padding:"6px 14px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>
-            {filtered.length} client{filtered.length!==1?"s":""}{search?` · filtrés sur ${clients.length}`:""}
-          </div>
+          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""}{filterStatus!=="Tous" ? ` · ${filterStatus.toLowerCase()}` : ""}{search ? ` · filtrés` : ""}</div>
         </div>
-
-        {/* ── RIGHT: rich text zone */}
         <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC" }}>
-          {selected ? (
-            <>
-              <div style={{ padding:"12px 20px", borderBottom:"1px solid #ECEAE5", background:"white", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63" }}>{selected.clientName}</div>
-                  <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:1 }}>{selected.clientCode} — Suivi au {selected.followupDate?selected.followupDate.split("-").reverse().join("/"):"—"}</div>
-                </div>
-                <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#27AE60", opacity:0.7 }}>✓ Auto-sauvegarde</div>
+          {selected ? <>
+            <div style={{ padding:"12px 20px", borderBottom:"1px solid #ECEAE5", background:"white", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{(()=>{const st=suiviTypes.find(t=>t.id===selected.suiviType);return st?<span style={{ fontSize:10, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>{st.name}</span>:null;})()}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace" }}>Clôturé</span>}</div>
+                <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
               </div>
-              <div style={{ flex:1, padding:16, overflow:"auto" }}>
-                <RichTextArea
-                  key={selected.id}
-                  value={notes[selected.id]||""}
-                  onChange={v=>saveNote(selected.id, v)}
-                  placeholder="Saisir vos notes de suivi pour ce client… (mise en forme disponible)"
-                  rows={22}
-                  showAi={!!(settings?.groqKey)}
-                  groqKey={settings?.groqKey||""}
-                />
-              </div>
-            </>
-          ) : (
-            <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", color:"#BDC3C7", fontFamily:"'Lora',serif" }}>
-              <div style={{ fontSize:40, marginBottom:12, opacity:0.4 }}>◈</div>
-              <div style={{ fontSize:14, color:"#AAA" }}>Sélectionnez un client pour afficher son suivi</div>
-              <div style={{ fontSize:11, color:"#CCC", marginTop:6 }}>Les notes sont sauvegardées automatiquement</div>
+              <div style={{ fontSize:10, fontFamily:"'DM Mono',monospace", color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div>
             </div>
-          )}
+            <div style={{ flex:1, padding:16, overflow:"auto" }}>
+              <RichTextArea key={selected.id} value={notes[selected.id]||""} onChange={v=>saveNote(selected.id, v)} placeholder="Saisir vos notes de suivi… (mise en forme disponible)" rows={22} showAi={!!(settings?.groqKey)} groqKey={settings?.groqKey||""} />
+            </div>
+          </> : <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:"'Lora',serif" }}><div style={{ fontSize:40, marginBottom:12, opacity:0.2 }}>◈</div><div style={{ fontSize:14, color:"#AAA" }}>Sélectionnez un client pour afficher son suivi</div><div style={{ fontSize:11, color:"#CCC", marginTop:6 }}>Les notes sont sauvegardées automatiquement</div></div>}
         </div>
       </div>
-
-      {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
+      {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
     </div>
   );
 }
@@ -4541,7 +4549,7 @@ function App() {
     { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
     { id: "myday",         label: "Ma journée",       icon: "☀",  badge: myDayCount },
     { id: "tasks",         label: "Tâches",           icon: "☰",  badge: activeCount },
-    { id: "categorytasks", label: "Type de tâches",   icon: "◫" },
+    { id: "categorytasks", label: "Catégorie",   icon: "◫" },
     { id: "meetings",      label: "Réunions",         icon: "◷" },
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
     { id: "notifications", label: "Rappels",          icon: "◔",  badge: remCount, iconColor: "white" },
@@ -4615,7 +4623,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.145<br />30/04/26 à 22h00
+          v.0.149<br />01/05/26 à 14h00
         </div>
       </div>
 
