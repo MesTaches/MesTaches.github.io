@@ -4888,7 +4888,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient";
+  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "kanban";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -5122,4 +5122,37 @@ window.exportPaymentsCSV = function(payments) {
 };
 </script>
 </body>
-</html>
+</html
+function KanbanView({ tasks, onEdit, onToggle, settings }) {
+  const isMobile = useIsMobile();
+  const cols = settings.statuses.map(st => ({ ...st, tasks: tasks.filter(t => (t.status || settings.statuses[0]?.id) === st.id) }));
+  return <div style={{display:"flex", flexDirection:"column", gap:16}}>
+    <div style={{fontSize:22, fontWeight:700, fontFamily:"Lora,serif", color:"#2C3E50"}}>Vue Kanban</div>
+    <div style={{fontSize:12, color:"#AAA", fontFamily:"DM Mono,monospace"}}>Les colonnes suivent vos statuts, avec les cartes glissées visuellement par statut.</div>
+    <div style={{display:"grid", gridTemplateColumns: isMobile ? "1fr" : `repeat(${Math.max(1, cols.length)}, minmax(220px, 1fr))`, gap:12, alignItems:"start"}}>
+      {cols.map(col => <div key={col.id} style={{background:"white", borderRadius:14, border:`1px solid ${col.bg || '#ECEAE5'}`, overflow:"hidden", minHeight:180}}>
+        <div style={{padding:"10px 12px", background:col.bg || '#F8F7F4', borderBottom:`1px solid ${col.accent || '#E0E0E0'}33`, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+          <span style={{fontSize:13, fontWeight:700, fontFamily:"Lora,serif", color:col.accent || '#555'}}>{col.name}</span>
+          <span style={{fontSize:10, fontFamily:"DM Mono,monospace", color:col.accent || '#888'}}>{col.tasks.length}</span>
+        </div>
+        <div style={{padding:10, display:"flex", flexDirection:"column", gap:8}}>
+          {col.tasks.length === 0 ? <div style={{fontSize:12, color:'#BBB', fontFamily:'Lora,serif', fontStyle:'italic', padding:'16px 4px'}}>Aucune tâche</div> : col.tasks.map(t => {
+            const cat = settings.categories.find(c => c.name === t.category);
+            return <div key={t.id} onClick={() => onEdit(t)} style={{borderLeft:`4px solid ${cat?.accent || '#102A63'}`, background:'#FAFAFA', borderRadius:10, padding:'10px 10px 9px', cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
+              <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start'}}>
+                <div style={{fontSize:13, fontWeight:600, fontFamily:'Lora,serif', color:'#2C3E50', lineHeight:1.35, flex:1, overflow:'hidden', textOverflow:'ellipsis'}}>{t.title}</div>
+                <button onClick={(e) => { e.stopPropagation(); onToggle(t.id); }} style={{border:'none', background:'#fff', borderRadius:999, width:22, height:22, cursor:'pointer', flexShrink:0, boxShadow:'0 0 0 1px #E8E8E8 inset'}}>✓</button>
+              </div>
+              <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
+                <span style={{fontSize:9, fontFamily:'DM Mono,monospace', background:col.bg || '#F0F0F0', color:col.accent || '#888', borderRadius:4, padding:'2px 6px'}}>{col.name}</span>
+                <span style={{fontSize:9, fontFamily:'DM Mono,monospace', background:'#F5F5F5', color:'#777', borderRadius:4, padding:'2px 6px'}}>{t.priority || 'normale'}</span>
+              </div>
+            </div>
+          })}
+        </div>
+      </div>)}
+    </div>
+  </div>
+}
+
+>
