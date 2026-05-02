@@ -235,7 +235,7 @@ async function fbLogout() {
     setTimeout(() => {
       window._logoutConfirm = false;
       const b = document.getElementById('fb-logout-btn');
-      if (b) { b.style.background='#102A63'; b.textContent='⏻ Déconnexion'; }
+      if (b) { b.style.background='#102A63'; b.textContent='<span style="display:inline-block;width:14px;text-align:center;margin-right:6px;font-size:12px;line-height:1">✕</span>Déconnexion'; }
     }, 3000);
   } else {
     await _auth.signOut();
@@ -291,9 +291,10 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.236<br/>02/05/26 à 18h54</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation">
-    ⏻ Déconnexion
+    <span style="display:inline-block;width:14px;text-align:center;margin-right:6px;font-size:12px;line-height:1">✕</span>Déconnexion
   </button>
 </div>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -673,13 +674,13 @@ const DEFAULT_SETTINGS = {
 function loadSettings() {
   try {
     const s = localStorage.getItem(SETTINGS_KEY);
-    if (!s) { const b = localStorage.getItem(SETTINGS_KEY + "_backup"); if (b) { try { const p = JSON.parse(b); return { categories: p.categories || DEFAULT_SETTINGS.categories, types: p.types || DEFAULT_SETTINGS.types, statuses: p.statuses || DEFAULT_SETTINGS.statuses, hiddenTabs: p.hiddenTabs || [], labels: p.labels || DEFAULT_SETTINGS.labels, groqKey: (p.groqKey || "").trim(), showAiDebug: p.showAiDebug || false }; } catch {} } return DEFAULT_SETTINGS; }
+    if (!s) { const b = localStorage.getItem(SETTINGS_KEY + "_backup"); if (b) { try { const p = JSON.parse(b); return { categories: p.categories || DEFAULT_SETTINGS.categories, types: p.types || DEFAULT_SETTINGS.types, statuses: p.statuses || DEFAULT_SETTINGS.statuses, hiddenTabs: (p.hiddenTabs || []).filter(id => id !== "kanban"), labels: p.labels || DEFAULT_SETTINGS.labels, groqKey: (p.groqKey || "").trim(), showAiDebug: p.showAiDebug || false }; } catch {} } return DEFAULT_SETTINGS; }
     const parsed = JSON.parse(s);
     return {
       categories: parsed.categories || DEFAULT_SETTINGS.categories,
       types: parsed.types || DEFAULT_SETTINGS.types,
       statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
-      hiddenTabs: parsed.hiddenTabs || [],
+      hiddenTabs: (parsed.hiddenTabs || []).filter(id => id !== "kanban"),
       labels: parsed.labels || DEFAULT_SETTINGS.labels,
       groqKey: (parsed.groqKey || "").trim(),
       suiviTypes: parsed.suiviTypes || DEFAULT_SETTINGS.suiviTypes,
@@ -1727,110 +1728,159 @@ function Dashboard({ tasks, onNavigate, settings }) {
   const todayT  = active.filter(t => isToday(t.dueDate));
   const done    = tasks.filter(t => t.completed);
   const total   = tasks.length || 1;
-  const byCat   = settings.categories.map(c => ({ name: c.name, total: tasks.filter(t => t.category === c.name).length, done: tasks.filter(t => t.category === c.name && t.completed).length, color: c.accent }));
-  const byType  = settings.types.map(tp => ({ name: tp.name, icon: tp.icon, count: active.filter(t => t.type === tp.name).length }));
-  const pct = n => Math.round((n / total) * 100);
+  const byCat   = settings.categories.map(c => ({
+    name: c.name, color: c.accent, bg: c.bg,
+    total: tasks.filter(t => t.category === c.name).length,
+    done:  tasks.filter(t => t.category === c.name && t.completed).length,
+  }));
+  const byStatus = settings.statuses.map(st => ({
+    ...st, count: active.filter(t => (t.status || settings.statuses[0]?.id) === st.id).length
+  }));
+  const byPrio = [
+    { label: 'Urgente', key: 'urgente', color: '#C0392B', bg: '#FDEDEC' },
+    { label: 'Haute',   key: 'haute',   color: '#E67E22', bg: '#FEF9E7' },
+    { label: 'Normale', key: 'normale', color: '#7F8C8D', bg: '#F5F5F5' },
+    { label: 'Basse',   key: 'basse',   color: '#27AE60', bg: '#E8F8F5' },
+  ].map(p => ({ ...p, count: active.filter(t => (t.priority || 'normale') === p.key).length }));
+  const pct = n => total === 0 ? 0 : Math.round(n / total * 100);
+  const weekDays = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - 6 + i);
+    const ds = d.toISOString().split('T')[0];
+    return {
+      label: d.toLocaleDateString('fr-FR', { weekday: 'short' }),
+      date: ds,
+      created: tasks.filter(t => t.createdAt?.split('T')[0] === ds).length,
+      done: tasks.filter(t => t.completed && t.createdAt?.split('T')[0] === ds).length,
+    };
+  });
+  const maxBar = Math.max(1, ...weekDays.map(d => d.created));
 
-  const StatCard = ({ label, value, pctVal, color, onClick }) => (
-    <div onClick={onClick} style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "18px 20px", border: "1px solid #ECEAE5", cursor: onClick ? "pointer" : "default", transition: "transform 0.15s,box-shadow 0.15s", borderTop: `3px solid ${color}` }}
-      onMouseEnter={e => { if (onClick && !isMobile) { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(0,0,0,0.08)"; } }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, lineHeight: 1 }}>
-        <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color, fontFamily: "'DM Mono',monospace" }}>{value}</div>
-        <div style={{ fontSize: 12, fontWeight: 600, color, fontFamily: "'DM Mono',monospace", opacity: 0.55 }}>{pctVal}%</div>
+  const StatCard = ({ label, value, sub, color, onClick }) => (
+    <div onClick={onClick} style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '18px 20px', border:'1px solid #ECEAE5', cursor: onClick ? 'pointer' : 'default', borderTop: `3px solid ${color}`}}
+      onMouseEnter={e => { if(onClick && !isMobile) { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 6px 20px rgba(0,0,0,0.08)'; }}}
+      onMouseLeave={e => { e.currentTarget.style.transform='none'; e.currentTarget.style.boxShadow='none'; }}>
+      <div style={{display:'flex', alignItems:'baseline', gap:6}}>
+        <div style={{fontSize: isMobile ? 24 : 30, fontWeight:700, color, fontFamily:'DM Mono,monospace'}}>{value}</div>
+        {sub && <div style={{fontSize:11, color, fontFamily:'DM Mono,monospace', opacity:0.55}}>{sub}</div>}
       </div>
-      <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 600, color: "#2C3E50", fontFamily: "'Lora',serif", marginTop: 5 }}>{label}</div>
+      <div style={{fontSize: isMobile ? 11 : 13, fontWeight:600, color:'#2C3E50', fontFamily:'Lora,serif', marginTop:5}}>{label}</div>
     </div>
   );
 
-  return (
+  return <div style={{display:'flex', flexDirection:'column', gap: isMobile ? 14 : 20}}>
+
+    {/* Titre */}
     <div>
-      <div style={{ marginBottom: isMobile ? 16 : 24 }}>
-        <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 4 }}>Tableau de bord</div>
-        <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'DM Mono',monospace" }}>{new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "repeat(2,1fr)" : "repeat(4,1fr)", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 16 : 24 }}>
-        <StatCard label="Tâches actives"  value={active.length}  pctVal={pct(active.length)}  color="#2C3E50" onClick={() => onNavigate("tasks")} />
-        <StatCard label="En retard"        value={overdue.length} pctVal={pct(overdue.length)} color="#C0392B" onClick={() => onNavigate("tasks")} />
-        <StatCard label="Aujourd'hui"      value={todayT.length}  pctVal={pct(todayT.length)}  color="#E67E22" onClick={() => onNavigate("calendar")} />
-        <StatCard label="Complétées"       value={done.length}    pctVal={pct(done.length)}    color="#27AE60" />
-      </div>
-      <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5", marginBottom: isMobile ? 12 : 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <span style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Avancement global</span>
-          <span style={{ fontSize: 20, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#27AE60" }}>{Math.round((done.length / total) * 100)}%</span>
-        </div>
-        <div style={{ height: 10, background: "#F0F0F0", borderRadius: 10, overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${(done.length / total) * 100}%`, background: "linear-gradient(90deg,#27AE60,#2ECC71)", borderRadius: 10, transition: "width 0.5s" }} />
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 8 }}>
-          <span>{done.length} complétées</span><span>{active.length} restantes</span>
-        </div>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 12 : 16, marginBottom: isMobile ? 12 : 20 }}>
-        <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 14 }}>Par catégorie</div>
-          {byCat.map(c => (
-            <div key={c.name} style={{ marginBottom: 12 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                <span style={{ fontSize: 12, fontFamily: "'DM Mono',monospace", color: "#555" }}>{c.name}</span>
-                <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{c.done}/{c.total}</span>
-              </div>
-              <div style={{ height: 6, background: "#F0F0F0", borderRadius: 6, overflow: "hidden" }}>
-                <div style={{ height: "100%", width: `${c.total ? (c.done / c.total) * 100 : 0}%`, background: c.color, borderRadius: 6, transition: "width 0.5s" }} />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 12 : 16 }}>
-          <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 12 }}>Par type</div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {byType.map(t => (
-                <div key={t.name} style={{ flex: 1, minWidth: 55, textAlign: "center", background: "#F8F8F6", borderRadius: 10, padding: "10px 6px" }}>
-                  <div style={{ fontSize: 16, marginBottom: 2 }}>{t.icon}</div>
-                  <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'DM Mono',monospace", color: "#2C3E50" }}>{t.count}</div>
-                  <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "#AAA", marginTop: 1 }}>{t.name}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5", flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 10 }}>Priorités hautes</div>
-            {active.filter(t => t.priority === "haute").slice(0, 3).map(t => {
-              const co = settings.categories.find(c => c.name === t.category);
-              return (
-                <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: "1px solid #F5F5F5" }}>
-                  <div style={{ width: 6, height: 6, borderRadius: "50%", background: co?.accent || "#888", flexShrink: 0 }} />
-                  <span style={{ fontSize: 12, fontFamily: "'Lora',serif", color: "#444", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                  {t.dueDate && <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#AAA", flexShrink: 0 }}>{fmtDate(t.dueDate)}</span>}
-                </div>
-              );
-            })}
-            {!active.filter(t => t.priority === "haute").length && <div style={{ fontSize: 12, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>Aucune tâche haute priorité</div>}
-          </div>
-        </div>
-      </div>
-      {(todayT.length > 0 || overdue.length > 0) && (
-        <div style={{ background: "white", borderRadius: 14, padding: isMobile ? "14px 16px" : "20px 24px", border: "1px solid #ECEAE5" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 12 }}>⚡ À traiter maintenant</div>
-          {[...overdue, ...todayT].slice(0, 5).map(t => {
-            const co = settings.categories.find(c => c.name === t.category);
-            return (
-              <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F5F5F5" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, background: isOverdue(t.dueDate) ? co?.bg : "#FEF9E7", color: isOverdue(t.dueDate) ? co?.accent : "#E67E22", borderRadius: 4, padding: "2px 7px", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>{t.category}</span>
-                <span style={{ fontSize: 13, fontFamily: "'Lora',serif", color: "#333", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.title}</span>
-                <span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#E67E22", flexShrink: 0 }}>{isOverdue(t.dueDate) ? "⚠" : "●"}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <div style={{fontSize: isMobile ? 18 : 22, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50'}}>Tableau de bord</div>
+      <div style={{fontSize:12, color:'#AAA', fontFamily:'DM Mono,monospace'}}>{new Date().toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'})}</div>
     </div>
-  );
+
+    {/* KPIs */}
+    <div style={{display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: isMobile ? 8 : 12}}>
+      <StatCard label="Tâches actives"   value={active.length}  sub={pct(active.length)+"%"}  color="#2C3E50" onClick={() => onNavigate('tasks')} />
+      <StatCard label="En retard"        value={overdue.length} sub={pct(overdue.length)+"%"} color="#C0392B" onClick={() => onNavigate('tasks')} />
+      <StatCard label="Aujourd'hui"      value={todayT.length}  sub={pct(todayT.length)+"%"}  color="#E67E22" onClick={() => onNavigate('calendar')} />
+      <StatCard label="Complétées"       value={done.length}    sub={pct(done.length)+"%"}    color="#27AE60" onClick={() => onNavigate('tasks')} />
+    </div>
+
+    {/* Barre de progression globale */}
+    <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12}}>
+        <span style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50'}}>Avancement global</span>
+        <span style={{fontSize:22, fontWeight:700, fontFamily:'DM Mono,monospace', color:'#27AE60'}}>{Math.round(done.length / total * 100)}%</span>
+      </div>
+      <div style={{height:10, background:'#F0F0F0', borderRadius:10, overflow:'hidden'}}>
+        <div style={{height:'100%', width: (done.length/total*100)+'%', background:'linear-gradient(90deg,#27AE60,#2ECC71)', borderRadius:10, transition:'width 0.5s'}} />
+      </div>
+      <div style={{display:'flex', justifyContent:'space-between', fontSize:11, color:'#AAA', fontFamily:'DM Mono,monospace', marginTop:8}}>
+        <span>{done.length} complétées</span><span>{active.length} restantes</span>
+      </div>
+    </div>
+
+    {/* 3 colonnes : par catégorie, par statut, par priorité */}
+    <div style={{display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? 12 : 16}}>
+
+      {/* Par catégorie */}
+      <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+        <div style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50', marginBottom:14}}>Par catégorie</div>
+        {byCat.map(c => <div key={c.name} style={{marginBottom:12}}>
+          <div style={{display:'flex', justifyContent:'space-between', marginBottom:4}}>
+            <span style={{fontSize:12, fontFamily:'DM Mono,monospace', color:'#555'}}>{c.name}</span>
+            <span style={{fontSize:11, fontFamily:'DM Mono,monospace', color:'#AAA'}}>{c.done}/{c.total}</span>
+          </div>
+          <div style={{height:6, background:'#F0F0F0', borderRadius:6, overflow:'hidden'}}>
+            <div style={{height:'100%', width: c.total ? (c.done/c.total*100)+'%' : '0%', background: c.color, borderRadius:6, transition:'width 0.5s'}} />
+          </div>
+        </div>)}
+      </div>
+
+      {/* Par statut */}
+      <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+        <div style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50', marginBottom:14}}>Par statut</div>
+        {byStatus.map(st => <div key={st.id} style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
+          <div style={{flex:1}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:3}}>
+              <span style={{fontSize:11, fontFamily:'DM Mono,monospace', fontWeight:700, background: st.bg, color: st.color, borderRadius:4, padding:'1px 7px'}}>{st.name}</span>
+              <span style={{fontSize:11, fontFamily:'DM Mono,monospace', color:'#AAA'}}>{st.count}</span>
+            </div>
+            <div style={{height:5, background:'#F0F0F0', borderRadius:5, overflow:'hidden'}}>
+              <div style={{height:'100%', width: active.length ? (st.count/active.length*100)+'%' : '0%', background: st.color, borderRadius:5, transition:'width 0.5s'}} />
+            </div>
+          </div>
+        </div>)}
+      </div>
+
+      {/* Par priorité */}
+      <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+        <div style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50', marginBottom:14}}>Par priorité</div>
+        {byPrio.map(p => <div key={p.key} style={{display:'flex', alignItems:'center', gap:10, marginBottom:10}}>
+          <div style={{flex:1}}>
+            <div style={{display:'flex', justifyContent:'space-between', marginBottom:3}}>
+              <span style={{fontSize:11, fontFamily:'DM Mono,monospace', fontWeight:700, background: p.bg, color: p.color, borderRadius:4, padding:'1px 7px'}}>{p.label}</span>
+              <span style={{fontSize:11, fontFamily:'DM Mono,monospace', color:'#AAA'}}>{p.count}</span>
+            </div>
+            <div style={{height:5, background:'#F0F0F0', borderRadius:5, overflow:'hidden'}}>
+              <div style={{height:'100%', width: active.length ? (p.count/active.length*100)+'%' : '0%', background: p.color, borderRadius:5, transition:'width 0.5s'}} />
+            </div>
+          </div>
+        </div>)}
+      </div>
+    </div>
+
+    {/* Activité 7 derniers jours */}
+    <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+      <div style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50', marginBottom:16}}>Activité — 7 derniers jours</div>
+      <div style={{display:'flex', alignItems:'flex-end', gap: isMobile ? 8 : 14, height:80}}>
+        {weekDays.map(d => <div key={d.date} style={{flex:1, display:'flex', flexDirection:'column', alignItems:'center', gap:4}}>
+          <div style={{width:'100%', display:'flex', flexDirection:'column', justifyContent:'flex-end', height:60, gap:2}}>
+            <div style={{width:'100%', height: (d.done/maxBar*50)+'px', background:'#27AE60', borderRadius:3, minHeight: d.done ? 3 : 0}} title={d.done+' complétées'} />
+            <div style={{width:'100%', height: ((d.created-d.done)/maxBar*50)+'px', background:'#102A63', borderRadius:3, minHeight: d.created > d.done ? 3 : 0}} title={d.created+' créées'} />
+          </div>
+          <span style={{fontSize:9, color:'#AAA', fontFamily:'DM Mono,monospace'}}>{d.label}</span>
+        </div>)}
+      </div>
+      <div style={{display:'flex', gap:16, marginTop:10}}>
+        <span style={{fontSize:10, fontFamily:'DM Mono,monospace', color:'#102A63', display:'flex', alignItems:'center', gap:4}}><span style={{width:10, height:10, background:'#102A63', borderRadius:2, display:'inline-block'}}></span>Créées</span>
+        <span style={{fontSize:10, fontFamily:'DM Mono,monospace', color:'#27AE60', display:'flex', alignItems:'center', gap:4}}><span style={{width:10, height:10, background:'#27AE60', borderRadius:2, display:'inline-block'}}></span>Complétées</span>
+      </div>
+    </div>
+
+    {/* Tâches à traiter maintenant */}
+    {(overdue.length > 0 || todayT.length > 0) && <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
+      <div style={{fontSize:14, fontWeight:700, fontFamily:'Lora,serif', color:'#2C3E50', marginBottom:12}}>À traiter maintenant</div>
+      {[...overdue, ...todayT.filter(t => !overdue.includes(t))].slice(0,6).map(t => {
+        const co = settings.categories.find(c => c.name === t.category);
+        return <div key={t.id} style={{display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F5F5F5'}}>
+          <span style={{fontSize:10, fontWeight:700, background: co?.bg || '#F0F0F0', color: co?.accent || '#888', borderRadius:4, padding:'2px 7px', fontFamily:'DM Mono,monospace', flexShrink:0}}>{t.category}</span>
+          <span style={{fontSize:13, fontFamily:'Lora,serif', color:'#333', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{t.title}</span>
+          <span style={{fontSize:11, fontFamily:'DM Mono,monospace', color: isOverdue(t.dueDate) ? '#C0392B' : '#E67E22', flexShrink:0}}>{isOverdue(t.dueDate) ? '⚠ Retard' : 'Aujourd\u2019hui'}</span>
+        </div>;
+      })}
+    </div>}
+
+  </div>;
 }
 
-/* ─── 9) MY DAY VIEW ─── */
 function MyDayView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
   const todayTasks = tasks.filter(t => !t.completed && (isToday(t.dueDate) || t.inMyDay));
   const isMobile = useIsMobile();
@@ -2411,11 +2461,65 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
   );
 }
 
+
+/* ─── KANBAN VIEW ─── */
+function KanbanView({ tasks, onEdit, settings }) {
+  const statuses = settings.statuses || [];
+  const cols = statuses.map(st => ({
+    ...st,
+    tasks: tasks.filter(t => !t.completed && (t.status || statuses[0]?.id) === st.id)
+  }));
+  const isMobile = useIsMobile();
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:16}}>
+      <div>
+        <div style={{fontSize:22, fontWeight:700, fontFamily:"Lora,serif", color:"#2C3E50"}}>Kanban</div>
+        <div style={{fontSize:12, color:"#AAA", fontFamily:"DM Mono,monospace"}}>{tasks.filter(t=>!t.completed).length} tâches actives</div>
+      </div>
+      <div style={{display:"flex", gap:12, overflowX:"auto", paddingBottom:8}}>
+        {cols.map(col => (
+          <div key={col.id} style={{minWidth:220, flex:"0 0 220px", background:"white", borderRadius:14, border:"1px solid #ECEAE5", overflow:"hidden"}}>
+            <div style={{padding:"10px 14px", background:col.bg, borderBottom:"1px solid #E8E8E8", display:"flex", justifyContent:"space-between", alignItems:"center"}}>
+              <span style={{fontSize:12, fontWeight:700, fontFamily:"DM Mono,monospace", color:col.color}}>{col.name.toUpperCase()}</span>
+              <span style={{fontSize:11, fontFamily:"DM Mono,monospace", color:col.color, background:"white", borderRadius:20, padding:"1px 8px", fontWeight:700}}>{col.tasks.length}</span>
+            </div>
+            <div style={{padding:10, display:"flex", flexDirection:"column", gap:8, minHeight:80}}>
+              {col.tasks.length === 0
+                ? <div style={{fontSize:11, color:"#CCC", fontFamily:"Lora,serif", fontStyle:"italic", textAlign:"center", padding:"16px 0"}}>Aucune tâche</div>
+                : col.tasks.map(t => {
+                    const cat = settings.categories.find(c => c.name === t.category);
+                    const prios = {urgente:"#C0392B", haute:"#E67E22", normale:"#7F8C8D", basse:"#27AE60"};
+                    return (
+                      <div key={t.id} onClick={() => onEdit(t)}
+                        style={{background:"#FAFAFA", borderRadius:10, padding:"10px 12px",
+                          borderLeft:`3px solid ${cat?.accent || "#102A63"}`, cursor:"pointer",
+                          boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}
+                        onMouseEnter={e => { e.currentTarget.style.background="#F0F4FF"; e.currentTarget.style.transform="translateY(-1px)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background="#FAFAFA"; e.currentTarget.style.transform="none"; }}>
+                        <div style={{fontSize:13, fontWeight:600, fontFamily:"Lora,serif", color:"#2C3E50", lineHeight:1.3, marginBottom:6}}>{t.title}</div>
+                        <div style={{display:"flex", alignItems:"center", gap:6, flexWrap:"wrap"}}>
+                          {cat && <span style={{fontSize:9, fontFamily:"DM Mono,monospace", background:cat.bg, color:cat.accent, borderRadius:4, padding:"1px 6px", fontWeight:700}}>{t.category}</span>}
+                          {t.dueDate && <span style={{fontSize:9, fontFamily:"DM Mono,monospace", color: isOverdue(t.dueDate) ? "#C0392B" : "#888"}}>{t.dueDate.split("-").reverse().join("/")}</span>}
+                          <span style={{fontSize:9, fontFamily:"DM Mono,monospace", color: prios[t.priority||"normale"], fontWeight:700, marginLeft:"auto"}}>{(t.priority||"normale").charAt(0).toUpperCase()}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ─── 1) SETTINGS VIEW ─── */
 const ALL_TABS = [
   { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
   { id: "myday",         label: "Ma journée",       icon: "☀" },
   { id: "tasks",         label: "Tâches",           icon: "☰" },
+  { id: "kanban",        label: "Kanban",       icon: "◧" },
   { id: "categorytasks", label: "Catégorie",   icon: "◫" },
   { id: "meetings",      label: "Réunions",         icon: "◷" },
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
@@ -4873,6 +4977,7 @@ function App() {
     { id: "dashboard",     label: "Tableau de bord", icon: "◈" },
     { id: "myday",         label: "Ma journée",       icon: "☀",  badge: myDayCount },
     { id: "tasks",         label: "Tâches",           icon: "☰",  badge: activeCount },
+    { id: "kanban",        label: "Kanban",       icon: "◧" },
     { id: "categorytasks", label: "Catégorie",   icon: "◫" },
     { id: "meetings",      label: "Réunions",         icon: "◷" },
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
@@ -4888,7 +4993,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "kanban";
+  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient";
 
   return (
     <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -4908,7 +5013,7 @@ function App() {
         </div>
         {/* Section : Principal */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Principal</div>
-        {visibleNav.filter(n => ["dashboard","myday","tasks","categorytasks"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["dashboard","myday","tasks","kanban","categorytasks"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "10px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0, color: n.iconColor || "inherit" }}>{n.icon}</span>
@@ -4947,7 +5052,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.202<br />01/05/26 à 21h36
+          v.0.236<br />02/05/26 à 18h36
         </div>
       </div>
 
@@ -4992,6 +5097,7 @@ function App() {
       ) : (
         <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
+          {view === "kanban"        && <KanbanView tasks={tasks} onEdit={openEdit} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
           {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
@@ -5122,37 +5228,4 @@ window.exportPaymentsCSV = function(payments) {
 };
 </script>
 </body>
-</html
-function KanbanView({ tasks, onEdit, onToggle, settings }) {
-  const isMobile = useIsMobile();
-  const cols = settings.statuses.map(st => ({ ...st, tasks: tasks.filter(t => (t.status || settings.statuses[0]?.id) === st.id) }));
-  return <div style={{display:"flex", flexDirection:"column", gap:16}}>
-    <div style={{fontSize:22, fontWeight:700, fontFamily:"Lora,serif", color:"#2C3E50"}}>Vue Kanban</div>
-    <div style={{fontSize:12, color:"#AAA", fontFamily:"DM Mono,monospace"}}>Les colonnes suivent vos statuts, avec les cartes glissées visuellement par statut.</div>
-    <div style={{display:"grid", gridTemplateColumns: isMobile ? "1fr" : `repeat(${Math.max(1, cols.length)}, minmax(220px, 1fr))`, gap:12, alignItems:"start"}}>
-      {cols.map(col => <div key={col.id} style={{background:"white", borderRadius:14, border:`1px solid ${col.bg || '#ECEAE5'}`, overflow:"hidden", minHeight:180}}>
-        <div style={{padding:"10px 12px", background:col.bg || '#F8F7F4', borderBottom:`1px solid ${col.accent || '#E0E0E0'}33`, display:"flex", justifyContent:"space-between", alignItems:"center"}}>
-          <span style={{fontSize:13, fontWeight:700, fontFamily:"Lora,serif", color:col.accent || '#555'}}>{col.name}</span>
-          <span style={{fontSize:10, fontFamily:"DM Mono,monospace", color:col.accent || '#888'}}>{col.tasks.length}</span>
-        </div>
-        <div style={{padding:10, display:"flex", flexDirection:"column", gap:8}}>
-          {col.tasks.length === 0 ? <div style={{fontSize:12, color:'#BBB', fontFamily:'Lora,serif', fontStyle:'italic', padding:'16px 4px'}}>Aucune tâche</div> : col.tasks.map(t => {
-            const cat = settings.categories.find(c => c.name === t.category);
-            return <div key={t.id} onClick={() => onEdit(t)} style={{borderLeft:`4px solid ${cat?.accent || '#102A63'}`, background:'#FAFAFA', borderRadius:10, padding:'10px 10px 9px', cursor:'pointer', boxShadow:'0 1px 3px rgba(0,0,0,0.05)'}}>
-              <div style={{display:'flex', justifyContent:'space-between', gap:8, alignItems:'flex-start'}}>
-                <div style={{fontSize:13, fontWeight:600, fontFamily:'Lora,serif', color:'#2C3E50', lineHeight:1.35, flex:1, overflow:'hidden', textOverflow:'ellipsis'}}>{t.title}</div>
-                <button onClick={(e) => { e.stopPropagation(); onToggle(t.id); }} style={{border:'none', background:'#fff', borderRadius:999, width:22, height:22, cursor:'pointer', flexShrink:0, boxShadow:'0 0 0 1px #E8E8E8 inset'}}>✓</button>
-              </div>
-              <div style={{display:'flex', gap:6, flexWrap:'wrap', marginTop:8}}>
-                <span style={{fontSize:9, fontFamily:'DM Mono,monospace', background:col.bg || '#F0F0F0', color:col.accent || '#888', borderRadius:4, padding:'2px 6px'}}>{col.name}</span>
-                <span style={{fontSize:9, fontFamily:'DM Mono,monospace', background:'#F5F5F5', color:'#777', borderRadius:4, padding:'2px 6px'}}>{t.priority || 'normale'}</span>
-              </div>
-            </div>
-          })}
-        </div>
-      </div>)}
-    </div>
-  </div>
-}
-
->
+</html>
