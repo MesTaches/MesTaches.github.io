@@ -1909,8 +1909,80 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
   const todayDate = new Date();
   const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
   const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
+
+  /* ── Custom drag (no HTML draggable attr, avoids browser-fired click) ── */
+  const isDragging   = useRef(false);
+  const dragTaskRef  = useRef(null);
+  const cellRefs     = useRef({});
+  const [ghost, setGhost]     = useState(null);   // {x,y,label}
+  const [hoverDay, setHoverDay] = useState(null);
+
+  const getDayAtPos = (x, y) => {
+    for (const [day, el] of Object.entries(cellRefs.current)) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
+        return Number(day);
+    }
+    return null;
+  };
+
+  const startDrag = (e, task, openDetail) => {
+    e.preventDefault();
+    e.stopPropagation();
+    let moved = false;
+    const ox = e.clientX, oy = e.clientY;
+
+    const onMove = mv => {
+      const dx = mv.clientX - ox, dy = mv.clientY - oy;
+      if (!moved && Math.hypot(dx, dy) > 5) {
+        moved = true;
+        isDragging.current = true;
+        setGhost({ x: mv.clientX + 12, y: mv.clientY + 12, label: task.title });
+      }
+      if (moved) {
+        setGhost(g => ({ ...g, x: mv.clientX + 12, y: mv.clientY + 12 }));
+        setHoverDay(getDayAtPos(mv.clientX, mv.clientY));
+      }
+    };
+
+    const onUp = up => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup",   onUp);
+      if (moved) {
+        // It was a drag — move the task
+        const day = getDayAtPos(up.clientX, up.clientY);
+        if (day) {
+          const newDue = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+          onEdit({ ...task, dueDate: newDue });
+        }
+      } else {
+        // It was a click — open detail
+        openDetail(task);
+      }
+      isDragging.current = false;
+      setGhost(null);
+      setHoverDay(null);
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup",   onUp);
+  };
+
   return (
-    <div>
+    <div style={{ userSelect: "none" }}>
+      {/* Ghost label follows cursor */}
+      {ghost && (
+        <div style={{ position: "fixed", left: ghost.x, top: ghost.y, zIndex: 9999, pointerEvents: "none",
+          background: "#102A63", color: "white", borderRadius: 6, padding: "4px 8px",
+          fontSize: 10, fontFamily: "'DM Mono',monospace", maxWidth: 200,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          opacity: 0.95, boxShadow: "0 4px 16px rgba(16,42,99,0.35)", cursor: "grabbing" }}>
+          {ghost.label}
+        </div>
+      )}
+
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Calendrier</div>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1920,6 +1992,8 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
           <button onClick={() => setCurDate(new Date())} style={{ ...S.btn("#102A63"), padding: "6px 14px", fontSize: 11 }}>Aujourd'hui</button>
         </div>
       </div>
+
+      {/* Grid */}
       <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", background: "#F8F7F4" }}>
           {DAYS.map(d => <div key={d} style={{ padding: "10px 0", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em" }}>{d}</div>)}
@@ -1927,21 +2001,38 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
         <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)" }}>
           {cells.map((d, i) => {
             if (!d) return <div key={`e${i}`} style={{ minHeight: 90, borderRight: "1px solid #F0F0F0", borderBottom: "1px solid #F0F0F0", background: "#FAFAFA" }} />;
-            const isCurrentDay = todayDate.getDate() === d && todayDate.getMonth() === month && todayDate.getFullYear() === year;
+            const isToday = todayDate.getDate() === d && todayDate.getMonth() === month && todayDate.getFullYear() === year;
             const dayTasks = tasksByDay[d] || [];
             const hasOverdue = dayTasks.some(t => !t.completed && isOverdue(t.dueDate));
+            const isHover = hoverDay === d;
             return (
-              <div key={d} onClick={() => setSelectedDay(selectedDay === d ? null : d)}
-                style={{ minHeight: 90, borderRight: "1px solid #F0F0F0", borderBottom: "1px solid #F0F0F0", padding: "8px 6px", cursor: "pointer", background: selectedDay === d ? "#F0F5FF" : isCurrentDay ? "#FFFBF0" : "white", transition: "background 0.15s" }}>
+              <div key={d}
+                ref={el => cellRefs.current[d] = el}
+                onClick={() => !isDragging.current && setSelectedDay(selectedDay === d ? null : d)}
+                style={{ minHeight: 90, borderRight: "1px solid #F0F0F0", borderBottom: "1px solid #F0F0F0",
+                  padding: "8px 6px", cursor: "pointer",
+                  background: selectedDay === d ? "#F0F5FF" : isToday ? "#FFFBF0" : "white",
+                  transition: "background 0.1s" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13, fontWeight: isCurrentDay ? 700 : 400, fontFamily: "'DM Mono',monospace", color: isCurrentDay ? "#E67E22" : "#555", background: isCurrentDay ? "#FEF3E2" : undefined, borderRadius: isCurrentDay ? "50%" : undefined, width: isCurrentDay ? 24 : undefined, height: isCurrentDay ? 24 : undefined, display: "flex", alignItems: "center", justifyContent: "center" }}>{d}</span>
+                  <span style={{ fontSize: 13, fontWeight: isToday ? 700 : 400, fontFamily: "'DM Mono',monospace",
+                    color: isToday ? "#E67E22" : "#555",
+                    background: isToday ? "#FEF3E2" : undefined, borderRadius: isToday ? "50%" : undefined,
+                    width: isToday ? 24 : undefined, height: isToday ? 24 : undefined,
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>{d}</span>
                   {hasOverdue && <span style={{ fontSize: 9, color: "#C0392B" }}>⚠</span>}
                 </div>
                 {dayTasks.slice(0, 3).map(t => {
                   const co = settings.categories.find(c => c.name === t.category);
                   return (
-                    <div key={t.id} onClick={e => { e.stopPropagation(); onEdit(t); }}
-                      style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", background: co?.bg || "#F0F0F0", color: co?.accent || "#888", borderRadius: 4, padding: "2px 5px", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: t.completed ? "line-through" : "none", opacity: t.completed ? 0.6 : 1 }}>
+                    <div key={t.id}
+                      onPointerDown={e => startDrag(e, t, onEdit)}
+                      style={{ fontSize: 10, fontFamily: "'DM Mono',monospace",
+                        background: co?.bg || "#F0F0F0", color: co?.accent || "#888",
+                        borderRadius: 4, padding: "2px 5px", marginBottom: 2,
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        textDecoration: t.completed ? "line-through" : "none",
+                        opacity: t.completed ? 0.6 : 1, cursor: "grab",
+                        touchAction: "none" }}>
                       {t.title}
                     </div>
                   );
@@ -1952,6 +2043,8 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
           })}
         </div>
       </div>
+
+      {/* Day detail */}
       {selectedDay && tasksByDay[selectedDay] && (
         <div style={{ marginTop: 16, background: "white", borderRadius: 14, padding: "20px 24px", border: "1px solid #ECEAE5" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -2332,6 +2425,67 @@ const ALL_TABS = [
   { id: "reporting",     label: "Reporting",        icon: "▤" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
 ];
+
+function DailySummary({ tasks, onClose }) {
+  const today = new Date().toISOString().split("T")[0];
+  const todayTasks = tasks.filter(t => !t.completed && t.dueDate === today);
+  const overdue = tasks.filter(t => !t.completed && t.dueDate && t.dueDate < today);
+  const urgent = tasks.filter(t => !t.completed && (t.priority === "urgente" || t.priority === "haute") && (!t.dueDate || t.dueDate >= today));
+  const doneToday = tasks.filter(t => t.completed && t.dueDate === today);
+  const dateLabel = new Date().toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long"});
+  const stats = [
+    {n: todayTasks.length, l: "A faire",    c: "#7EB8F7"},
+    {n: overdue.length,    l: "En retard",  c: "#F1948A"},
+    {n: urgent.length,     l: "Urgentes",   c: "#F0B27A"},
+    {n: doneToday.length,  l: "Completees", c: "#82E0AA"},
+  ];
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div style={{background:"white",borderRadius:16,width:"100%",maxWidth:520,boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}} onClick={e => e.stopPropagation()}>
+        <div style={{background:"#102A63",color:"white",padding:"18px 22px",borderRadius:"16px 16px 0 0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div>
+              <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",opacity:0.6,letterSpacing:"0.08em"}}>RESUME DU JOUR</div>
+              <div style={{fontSize:18,fontWeight:700,fontFamily:"'Lora',serif"}}>{dateLabel}</div>
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",color:"white",fontSize:22,cursor:"pointer",lineHeight:1}}>x</button>
+          </div>
+          <div style={{display:"flex",gap:8}}>
+            {stats.map(item => (
+              <div key={item.l} style={{flex:1,background:"rgba(255,255,255,0.1)",borderRadius:10,padding:"10px 6px",textAlign:"center"}}>
+                <div style={{fontSize:22,fontWeight:700,color:item.c}}>{item.n}</div>
+                <div style={{fontSize:10,opacity:0.7,fontFamily:"'DM Mono',monospace"}}>{item.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{padding:18,maxHeight:320,overflowY:"auto"}}>
+          {overdue.length > 0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#C0392B",fontFamily:"'DM Mono',monospace",marginBottom:6}}>EN RETARD ({overdue.length})</div>
+              {overdue.slice(0,5).map(t => (
+                <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",display:"flex",justifyContent:"space-between",fontFamily:"'Lora',serif"}}>
+                  <span>{t.title}</span>
+                  <span style={{color:"#C0392B",fontSize:10,fontFamily:"'DM Mono',monospace"}}>{t.dueDate}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'DM Mono',monospace",marginBottom:6}}>AUJOURD HUI ({todayTasks.length})</div>
+          {todayTasks.length === 0 && (
+            <div style={{color:"#AAA",fontSize:12,fontFamily:"'Lora',serif"}}>Aucune tache prevue.</div>
+          )}
+          {todayTasks.length > 0 && todayTasks.slice(0,8).map(t => (
+            <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:"'Lora',serif"}}>{t.title}</div>
+          ))}
+        </div>
+        <div style={{padding:"0 18px 18px",display:"flex",justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{border:"none",background:"#102A63",color:"white",borderRadius:8,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace"}}>Commencer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SettingsView({ settings, onSave }) {
   const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "" })));
@@ -4518,8 +4672,10 @@ function App() {
   const [toasts, setToasts] = useState([]);
   const [undoTask, setUndoTask] = useState(null); // 2) undo
   const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
+  const [showDailySummary, setShowDailySummary] = useState(() => { try { var k = "taskmanager_daily_summary_last"; var d = new Date().toISOString().split("T")[0]; return localStorage.getItem(k) !== d; } catch(e) { return true; } });
   const notifTimerRef = useRef(null);
   const isMobile = useIsMobile();
+  const closeDailySummary = () => { try { localStorage.setItem("taskmanager_daily_summary_last", new Date().toISOString().split("T")[0]); } catch(e) {} setShowDailySummary(false); };
 
   useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
 
@@ -4791,7 +4947,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.162<br />01/05/26 à 14h46
+          v.0.202<br />01/05/26 à 21h36
         </div>
       </div>
 
@@ -4803,6 +4959,7 @@ function App() {
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#102A63", flex: 1 }}>
             {(visibleNav.find(n => n.id === view) || {}).icon} {(visibleNav.find(n => n.id === view) || {}).label || ""}
           </div>
+          <button onClick={() => setShowDailySummary(true)} style={{border:"none",background:"none",fontSize:18,cursor:"pointer",color:"#888",padding:"4px 6px",flexShrink:0}}>☀️</button>
           <GlobalSearch tasks={tasks} settings={settings} onNavigate={setView} />
           <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
             + {isMobile ? "" : "Nouvelle tâche"}
@@ -4848,6 +5005,7 @@ function App() {
 
       </div>{/* fin main */}
 
+      {showDailySummary && <DailySummary tasks={tasks} onClose={closeDailySummary} />}
       {/* ── MODALE CORBEILLE ── */}
       {showTrash && (() => {
         const deleted = getDeletedTasks();
