@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.242<br/>03/05/26 à 17h18</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.243<br/>03/05/26 à 22h42</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -410,6 +410,9 @@ function CotationModal({ cotation, onSave, onClose }) {
         <div style={{ padding:"10px 24px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
           <button onClick={()=>onSave(d)} style={{ ...S.btn("#102A63"), fontSize:11, padding:"7px 14px" }}>✓ Enregistrer</button>
+        </div>
+        <div style={{ padding:"0 22px 16px" }}>
+          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
         </div>
       </div>
     </div>
@@ -1538,6 +1541,9 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           </div>
         </div>
 
+        <div style={{ padding: "0 24px 14px" }}>
+          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
+        </div>
         <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666") }}>Annuler</button>
           <button onClick={() => { if (d.title.trim()) { onSave(d); onClose(); } }} style={{ ...S.btn(catAccent), opacity: d.title.trim() ? 1 : 0.5 }}>
@@ -2288,6 +2294,7 @@ function MeetingsView({ onAddTask }) {
                 {tab === "notes" && <>
                   <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NOTES EN SÉANCE</div>
                   <textarea value={selected.notes || ""} onChange={e => { const m = { ...selected, notes: e.target.value }; setSelected(m); saveMeeting(m); }} rows={12} placeholder={"Prenez vos notes ici…\n\nAstuce : utilisez '-' pour les décisions et '→' pour les actions."} style={{ ...S.input, resize: "vertical", lineHeight: 1.7, fontSize: 13 }} />
+                  <AttachmentZone attachments={selected.attachments} onChange={v => { const m = { ...selected, attachments: v }; setSelected(m); saveMeeting(m); }} />
                   <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
                     <button onClick={() => onAddTask({ id: uid(), title: `Actions — ${selected.title}`, category: "Equipe", type: "Réunion", dueDate: "", priority: "normale", status: "todo", notes: `Réunion du ${selected.date}\n${selected.notes || ""}`, completed: false, reminder: "none", recurrence: "none", subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false })} style={{ ...S.btn("#F0F0F0", "#555"), fontSize: 11, padding: "6px 14px" }}>↗ Créer une tâche</button>
                   </div>
@@ -2918,6 +2925,76 @@ function exportSingleCotationPDF(cot) {
     +'<div class="ftr"><span>Cotation : '+(cot.clientName||'Client')+(cot.clientCode?' #'+cot.clientCode:'')+' — '+now+'</span><span>v.0.242</span></div>'
     +'</div>';
   buildPDFWindow(html, 'Cotation — '+(cot.clientName||'Client'));
+}
+
+
+/* ─── ATTACHMENT ZONE COMPONENT ─── */
+function AttachmentZone({ attachments, onChange }) {
+  const [dragOver, setDragOver] = React.useState(false);
+  const inputRef = React.useRef(null);
+  const FILE_ICONS = {
+    'application/pdf': '📄',
+    'image/': '🖼',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml': '📊',
+    'application/vnd.ms-excel': '📊',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml': '📝',
+    'application/msword': '📝',
+    'text/': '📃',
+    'application/zip': '🗜',
+    'application/vnd.openxmlformats-officedocument.presentationml': '📋',
+  };
+  function getIcon(type) { for (var k in FILE_ICONS) { if (type && type.startsWith(k)) return FILE_ICONS[k]; } return '📎'; }
+  function fmtSize(b) { if (!b) return ''; if (b < 1024) return b + ' o'; if (b < 1048576) return Math.round(b/1024) + ' Ko'; return (b/1048576).toFixed(1) + ' Mo'; }
+  function processFiles(files) {
+    var list = attachments ? [...attachments] : [];
+    var pending = Array.from(files); var done = 0;
+    if (!pending.length) return;
+    pending.forEach(function(file) {
+      if (file.size > 5*1024*1024) { alert('Fichier trop lourd (max 5 Mo) : ' + file.name); done++; if(done===pending.length) onChange([...list]); return; }
+      var r = new FileReader();
+      r.onload = function(e) { list.push({ id: Date.now()+Math.random(), name: file.name, size: file.size, type: file.type, dataUrl: e.target.result }); done++; if(done===pending.length) onChange([...list]); };
+      r.readAsDataURL(file);
+    });
+  }
+  function removeFile(id) { onChange((attachments||[]).filter(function(a){return a.id!==id;})); }
+  function downloadFile(att) { var a=document.createElement('a'); a.href=att.dataUrl; a.download=att.name; a.click(); }
+  var atts = attachments || [];
+  return (
+    <div style={{ marginTop:14 }}>
+      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:9, fontWeight:700, letterSpacing:'0.1em', color:'#888', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+        PIÈCES JOINTES {atts.length > 0 && <span style={{ background:'#EEF2FF', color:'#4F46E5', borderRadius:20, padding:'1px 7px', fontSize:9, fontWeight:700 }}>{atts.length}</span>}
+      </div>
+      <div
+        onDragOver={function(e){e.preventDefault();setDragOver(true);}}
+        onDragLeave={function(){setDragOver(false);}}
+        onDrop={function(e){e.preventDefault();setDragOver(false);processFiles(e.dataTransfer.files);}}
+        onClick={function(){inputRef.current&&inputRef.current.click();}}
+        style={{ border:'2px dashed '+(dragOver?'#4F46E5':'#C7D2FE'), borderRadius:10, background:dragOver?'#EEF2FF':'#FAFAFA', padding:'12px 16px', display:'flex', alignItems:'center', gap:10, cursor:'pointer', transition:'all 0.18s', marginBottom:atts.length?10:0 }}
+      >
+        <span style={{fontSize:20}}>📎</span>
+        <div style={{flex:1}}>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:700,color:dragOver?'#4F46E5':'#888'}}>{dragOver?'Déposer ici…':'Glisser un fichier ou cliquer pour parcourir'}</div>
+          <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:'#BBB',marginTop:2}}>PDF, Word, Excel, image… · Max 5 Mo</div>
+        </div>
+        <input ref={inputRef} type="file" multiple style={{display:'none'}} onChange={function(e){processFiles(e.target.files);e.target.value='';}} />
+      </div>
+      {atts.length > 0 && (
+        <div style={{display:'flex',flexDirection:'column',gap:6}}>
+          {atts.map(function(att){return(
+            <div key={att.id} style={{display:'flex',alignItems:'center',gap:8,background:'white',border:'1px solid #ECEAE5',borderRadius:8,padding:'7px 10px'}}>
+              <span style={{fontSize:16,flexShrink:0}}>{getIcon(att.type)}</span>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:10,fontWeight:700,color:'#2C3E50',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{att.name}</div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:9,color:'#AAA'}}>{fmtSize(att.size)}</div>
+              </div>
+              <button type="button" onClick={function(){downloadFile(att);}} title="Télécharger" style={{border:'1px solid #E0E0E0',background:'white',borderRadius:6,padding:'3px 7px',fontSize:11,cursor:'pointer',color:'#4F46E5',flexShrink:0}}>⬇</button>
+              <button type="button" onClick={function(){removeFile(att.id);}} title="Supprimer" style={{border:'none',background:'none',fontSize:16,cursor:'pointer',color:'#CCC',flexShrink:0,lineHeight:1}}>×</button>
+            </div>
+          );})}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─── 1) SETTINGS VIEW ─── */
@@ -3664,6 +3741,9 @@ function ReportModal({ report, onSave, onClose }) {
         <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
           <button onClick={() => { onSave(d); onClose(); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
         </div>
+        <div style={{ padding:"0 22px 16px" }}>
+          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
+        </div>
       </div>
     </div>
   );
@@ -3940,6 +4020,9 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
         <div style={{ padding: "12px 18px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "6px 14px", fontSize: 10 }}>Annuler</button>
           <button onClick={() => { if (d.supplier) { onSave(d); onClose(); } }} style={{ ...S.btn("#102A63"), padding: "6px 14px", fontSize: 10 }}>✓ Enregistrer</button>
+        </div>
+        <div style={{ padding:"0 22px 16px" }}>
+          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
         </div>
       </div>
     </div>
@@ -4565,6 +4648,9 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
         <div style={{ padding:"10px 22px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
           <button onClick={()=>{ if(!d.clientName.trim()) return; onSave(d); }} style={{ ...S.btn("#102A63"), fontSize:11, padding:"7px 14px" }}>✓ Enregistrer</button>
+        </div>
+        <div style={{ padding:"0 22px 16px" }}>
+          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
         </div>
       </div>
     </div>
@@ -5505,7 +5591,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.242<br />03/05/26 à 17h18
+          v.0.243<br />03/05/26 à 22h42
         </div>
       </div>
 
