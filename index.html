@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.240<br/>03/05/26 à 11h06</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.242<br/>03/05/26 à 17h18</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -374,7 +374,11 @@ function CotationModal({ cotation, onSave, onClose }) {
       <div className="tasks2-modal" style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
         <div style={{ padding:"18px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LA DEMANDE":"NOUVELLE DEMANDE"}</span>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            {d.id && <button onMouseDown={(e) => { e.preventDefault(); exportSingleCotationPDF(d); }} title="Exporter en PDF"
+              style={{ border:"1px solid #E0E0E0", background:"white", borderRadius:8, padding:"3px 8px", fontSize:14, cursor:"pointer", color:"#102A63" }}>🖨</button>}
+            <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          </div>
         </div>
         <div className="cotation-modal-form" style={{ padding:"18px 24px", display:"flex", flexDirection:"column", gap:13 }}>
           <div style={{ display:"flex", gap:12 }}>
@@ -1381,8 +1385,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
     };
     document.addEventListener("mousedown", handleClose);
     document.addEventListener("touchstart", handleClose);
-    document.addEventListener("click", handleClose);
-    return () => { document.removeEventListener("mousedown", handleClose); document.removeEventListener("touchstart", handleClose); document.removeEventListener("click", handleClose); };
+    return () => { document.removeEventListener("mousedown", handleClose); document.removeEventListener("touchstart", handleClose); };
   }, [showLabelInput]);
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
@@ -1416,6 +1419,8 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
             <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
             <div style={{ display: "flex", gap: 6 }}>
+              {!isNew && <button onMouseDown={(e) => { e.preventDefault(); exportSingleTaskPDF(d, settings); }} title="Exporter en PDF"
+                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: "#102A63" }}>🖨</button>}
               {/* 9) Add to My Day */}
               <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} title={d.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
                 style={{ border: `1px solid ${d.inMyDay ? "#E67E22" : "#E0E0E0"}`, background: d.inMyDay ? "#FEF9E7" : "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: d.inMyDay ? "#E67E22" : "#BDC3C7" }}>☀</button>
@@ -1473,7 +1478,7 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
                   </span>
                 );
               })}
-              <button type="button" onClick={() => setShowLabelInput(l => !l)}
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabelInput(l => !l); }}
                 style={{ border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "2px 8px", fontSize: 10, cursor: "pointer", color: "#4F46E5", fontFamily: "'DM Mono',monospace" }}>+ Étiquette</button>
             </div>
             {showLabelInput && (
@@ -2529,13 +2534,13 @@ function KanbanView({ tasks, onEdit, onToggle, onUpdate, settings }) {
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:16}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:8,position:'relative',zIndex:5}}>
         <div>
-          <div style={{fontSize:22,fontWeight:700,fontFamily:'Lora,serif',color:'#2C3E50'}}>Kanban</div>
-          <div style={{fontSize:12,color:'#AAA',fontFamily:'DM Mono,monospace'}}>{activeTasks.length} tâche{activeTasks.length!==1?'s':''} active{activeTasks.length!==1?'s':''}</div>
+          <div style={{fontSize:22,fontWeight:700,fontFamily:"'Lora',serif",color:'#2C3E50'}}>Kanban</div>
+          <div style={{fontSize:12,color:'#AAA',fontFamily:"'DM Mono',monospace"}}>{activeTasks.length} tâche{activeTasks.length!==1?'s':''} active{activeTasks.length!==1?'s':''}</div>
         </div>
-        <button onClick={() => setShowDone(d=>!d)} style={{border:'1px solid #27AE60',background:showDone?'#D1FAE5':'white',color:showDone?'#065F46':'#27AE60',borderRadius:20,padding:'5px 16px',fontSize:11,cursor:'pointer',fontFamily:'DM Mono,monospace',fontWeight:700}}>
-          {showDone?'▾ Masquer clôturées':'▸ Voir clôturées'} ({doneTasks.length})
+        <button onClick={() => setShowDone(d => !d)} style={{border:'1px solid #27AE60',background:showDone?'#D1FAE5':'white',color:showDone?'#065F46':'#27AE60',borderRadius:20,padding:'6px 18px',fontSize:12,cursor:'pointer',fontFamily:"'Lora',serif",fontWeight:600,position:'relative',zIndex:20,pointerEvents:'all'}}>
+          {showDone ? '▾ Masquer clôturées' : '▸ Voir clôturées'} ({doneTasks.length})
         </button>
       </div>
 
@@ -2581,29 +2586,29 @@ function buildPDFWindow(htmlContent, title) {
   const w = window.open('', '_blank');
   if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
   w.document.write(`<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8"/><title>${title}</title>
+<html lang="fr"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>${title}</title>
 <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Lora',serif;background:#fff;color:#2C3E50}
+body{font-family:'Lora',serif;background:#fff;color:#2C3E50;font-size:14px}
 @page{size:A4;margin:16mm 14mm 16mm 14mm}
 @media print{.np{display:none!important}.pb{page-break-before:always}}
-.root{max-width:780px;margin:0 auto;padding:28px 32px}
+.root{max-width:960px;margin:0 auto;padding:36px 48px}
 .hdr{display:flex;align-items:flex-end;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #102A63;margin-bottom:24px}
 .al{font-family:'DM Mono',monospace;font-size:9px;font-weight:700;color:#102A63;letter-spacing:0.14em;margin-bottom:5px;opacity:0.5}
-.ttl{font-family:'Lora',serif;font-size:24px;font-weight:700;color:#102A63;line-height:1.2}
+.ttl{font-family:'Lora',serif;font-size:28px;font-weight:700;color:#102A63;line-height:1.2}
 .sub{font-family:'DM Mono',monospace;font-size:10px;color:#888;margin-top:4px}
 .hr{text-align:right;font-family:'DM Mono',monospace;font-size:10px;color:#AAA;line-height:1.9}
 .hr strong{color:#2C3E50;font-size:11px}
 .stats{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap}
 .stat{background:#F8F7F4;border-radius:10px;padding:11px 16px;flex:1;min-width:90px;border:1px solid #ECEAE5}
-.sv{font-family:'DM Mono',monospace;font-size:20px;font-weight:700;color:#102A63}
+.sv{font-family:'DM Mono',monospace;font-size:22px;font-weight:700;color:#102A63}
 .sl{font-family:'DM Mono',monospace;font-size:8px;color:#AAA;letter-spacing:0.08em;margin-top:2px}
 .sec{margin-bottom:22px}
 .st{font-family:'DM Mono',monospace;font-size:9px;font-weight:700;letter-spacing:0.1em;padding-bottom:5px;border-bottom:1px solid #ECEAE5;margin-bottom:10px}
-table{width:100%;border-collapse:collapse;font-size:11px}
-th{font-family:'DM Mono',monospace;font-size:8px;font-weight:700;letter-spacing:0.07em;color:#888;padding:6px 8px;border-bottom:2px solid #ECEAE5;text-align:left;background:#FAFAFA}
-td{padding:7px 8px;border-bottom:1px solid #F5F5F5;vertical-align:top;font-family:'Lora',serif;font-size:11px;color:#2C3E50}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-family:'DM Mono',monospace;font-size:10px;font-weight:700;letter-spacing:0.07em;color:#888;padding:7px 10px;border-bottom:2px solid #ECEAE5;text-align:left;background:#FAFAFA}
+td{padding:9px 10px;border-bottom:1px solid #F5F5F5;vertical-align:top;font-family:'Lora',serif;font-size:13px;color:#2C3E50}
 tr.dn td{opacity:0.42;text-decoration:line-through}
 .b{display:inline-block;border-radius:20px;padding:2px 8px;font-family:'DM Mono',monospace;font-size:8px;font-weight:700;line-height:1.6;white-space:nowrap}
 .pu{background:#FDEDEC;color:#C0392B}.ph{background:#FEF9C3;color:#A16207}
@@ -2616,8 +2621,8 @@ tr.dn td{opacity:0.42;text-decoration:line-through}
 .cf strong{color:#2C3E50}
 .cn{margin-top:6px;padding-top:6px;border-top:1px solid #F5F5F5;font-size:10px;color:#666;line-height:1.6;font-style:italic}
 .ftr{margin-top:36px;padding-top:12px;border-top:1px solid #ECEAE5;display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:#CCC}
-.pbtn{position:fixed;bottom:22px;right:22px;background:#102A63;color:white;border:none;border-radius:24px;padding:11px 26px;font-size:13px;font-family:'DM Mono',monospace;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(16,42,99,0.28);letter-spacing:0.05em;z-index:999}
-.cbtn{position:fixed;bottom:22px;right:196px;background:#F0F0F0;color:#555;border:none;border-radius:24px;padding:11px 18px;font-size:13px;font-family:'DM Mono',monospace;cursor:pointer;z-index:999}
+.pbtn{position:fixed;bottom:30px;right:30px;background:#102A63;color:white;border:none;border-radius:28px;padding:16px 36px;font-size:16px;font-family:'DM Mono',monospace;font-weight:700;cursor:pointer;box-shadow:0 6px 28px rgba(16,42,99,0.32);letter-spacing:0.05em;z-index:999}
+.cbtn{position:fixed;bottom:30px;right:240px;background:#F0F0F0;color:#555;border:none;border-radius:28px;padding:16px 24px;font-size:16px;font-family:'DM Mono',monospace;cursor:pointer;z-index:999}
 </style></head><body>
 ${htmlContent}
 <div class="np" style="height:80px"></div>
@@ -2749,6 +2754,170 @@ function exportCotationPDF(cotations) {
     +ST.map(function(st){return tbl(groups[st.id]||[],st);}).join('')
     +'<div class="ftr"><span>Export Cotations — '+now+'</span><span>v.0.240</span></div></div>';
   buildPDFWindow(html,'Export Cotations');
+}
+
+
+function exportSingleTaskPDF(task, settings) {
+  var now = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  var cats = settings.categories||[];
+  var types = settings.types||[];
+  var statuses = settings.statuses||[];
+  var cat = cats.find(function(c){return c.name===task.category;})||{};
+  var typ = types.find(function(t){return t.name===task.type;})||{};
+  var st  = statuses.find(function(s){return s.id===task.status;})||statuses[0]||{};
+  var pmap={urgente:{cls:'pu',lbl:'Urgente'},haute:{cls:'ph',lbl:'Haute'},normale:{cls:'pn',lbl:'Normale'},basse:{cls:'pb',lbl:'Basse'}};
+  var pr  = pmap[task.priority]||pmap.normale;
+  function fd(d){if(!d)return'—';var p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
+  var today=new Date().toISOString().split('T')[0];
+  var isOverdue = task.dueDate && task.dueDate < today && !task.completed;
+  var subtasksDone = (task.subtasks||[]).filter(function(s){return s.completed;}).length;
+
+  var html = '<div class="root">'
+    +'<div class="hdr">'
+    +'<div>'
+    +'<div class="al">DÉTAIL DE LA TÂCHE</div>'
+    +'<div class="ttl">'+task.title+'</div>'
+    +'<div class="sub">Exporté le '+now+'</div>'
+    +'</div>'
+    +'<div class="hr">'
+    +(cat.name?'<div><span class="b" style="background:'+cat.bg+';color:'+cat.accent+'">'+cat.name+'</span></div>':'')
+    +'<div><span class="b '+pr.cls+'">'+pr.lbl+'</span></div>'
+    +(st.name?'<div><span class="b" style="background:'+st.bg+';color:'+st.color+'">'+st.name+'</span></div>':'')
+    +'</div>'
+    +'</div>'
+
+    +'<div class="stats">'
+    +'<div class="stat"><div class="sv" style="font-size:14px">'+(typ.icon||'')+'</div><div class="sl">'+(task.type||'—').toUpperCase()+'</div></div>'
+    +'<div class="stat"><div class="sv" style="font-size:14px;color:'+(isOverdue?'#C0392B':'#102A63')+'">'+fd(task.dueDate)+'</div><div class="sl">ÉCHÉANCE</div></div>'
+    +(task.subtasks&&task.subtasks.length?'<div class="stat"><div class="sv">'+subtasksDone+'/'+task.subtasks.length+'</div><div class="sl">SOUS-TÂCHES</div></div>':'')
+    +(task.totalTime?'<div class="stat"><div class="sv" style="font-size:14px">'+Math.floor(task.totalTime/3600)+'h'+String(Math.floor((task.totalTime%3600)/60)).padStart(2,'0')+'</div><div class="sl">TEMPS SUIVI</div></div>':'')
+    +(task.completed?'<div class="stat"><div class="sv" style="color:#27AE60;font-size:20px">✓</div><div class="sl">TERMINÉE</div></div>':'')
+    +'</div>'
+
+    // Description / Notes
+    +(task.notes?'<div class="sec"><div class="st">DESCRIPTION / NOTES</div><div style="font-size:13px;line-height:1.8;color:#444;white-space:pre-wrap;background:#FAFAFA;border-radius:8px;padding:14px 18px;border:1px solid #ECEAE5">'+task.notes+'</div></div>':'')
+
+    // Subtasks
+    +((task.subtasks||[]).length?'<div class="sec"><div class="st">SOUS-TÂCHES ('+subtasksDone+'/'+task.subtasks.length+')</div>'
+    +'<div style="display:flex;flex-direction:column;gap:6px">'
+    +(task.subtasks||[]).map(function(sub){
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:'+(sub.completed?'#F0FFF4':'#FAFAFA')+';border-radius:8px;border:1px solid '+(sub.completed?'#D1FAE5':'#ECEAE5')+'">'
+      +'<span style="font-size:16px;color:'+(sub.completed?'#27AE60':'#CCC')+'">'+(sub.completed?'✓':'○')+'</span>'
+      +'<span style="font-size:13px;color:'+(sub.completed?'#065F46':'#444')+';'+(sub.completed?'text-decoration:line-through;opacity:0.7':'')+'">'+sub.text+'</span>'
+      +'</div>';
+    }).join('')
+    +'</div></div>':'')
+
+    // Labels
+    +((task.labels||[]).length?'<div class="sec"><div class="st">ÉTIQUETTES</div><div style="display:flex;gap:8px;flex-wrap:wrap">'
+    +(task.labels||[]).map(function(l){return'<span class="b" style="background:#EEF2FF;color:#4F46E5;font-size:11px;padding:4px 12px">'+l+'</span>';}).join('')
+    +'</div></div>':'')
+
+    // Comments
+    +((task.comments||[]).length?'<div class="sec"><div class="st">COMMENTAIRES ('+task.comments.length+')</div>'
+    +(task.comments||[]).map(function(c){
+      return '<div style="padding:10px 14px;background:#FAFAFA;border-radius:8px;border-left:3px solid #102A63;margin-bottom:8px">'
+      +'<div style="font-size:10px;color:#AAA;font-family:\'DM Mono\',monospace;margin-bottom:4px">'+fd(c.date||'')+'</div>'
+      +'<div style="font-size:13px;color:#444;line-height:1.7">'+c.text+'</div>'
+      +'</div>';
+    }).join('')+'</div>':'')
+
+    +'<div class="ftr"><span>Tâche : '+task.title+' — '+now+'</span><span>v.0.242</span></div>'
+    +'</div>';
+  buildPDFWindow(html, 'Tâche — '+task.title);
+}
+
+function exportSingleSuiviPDF(client, notes, suiviTypes) {
+  var now = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  function fd(d){if(!d)return'—';var p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
+  var t = (suiviTypes||[]).find(function(t){return t.id===client.suiviType||t.name===client.suiviType;})||{};
+  var cn = (notes||[]).filter(function(n){return n.clientId===client.id;}).sort(function(a,b){return (b.date||'') > (a.date||'') ? 1 : -1;});
+
+  var html = '<div class="root">'
+    +'<div class="hdr">'
+    +'<div>'
+    +'<div class="al">SUIVI CLIENT</div>'
+    +'<div class="ttl">'+(client.clientName||'Client sans nom')+'</div>'
+    +(client.clientCode?'<div class="sub">Code client : #'+client.clientCode+'</div>':'')
+    +'<div class="sub">Exporté le '+now+'</div>'
+    +'</div>'
+    +'<div class="hr">'
+    +(t.name?'<div><span class="b" style="background:'+t.bg+';color:'+t.color+'">'+t.name+'</span></div>':'')
+    +'<div><span class="b" style="background:'+(client.closed?'#D1FAE5':'#EEF2FF')+';color:'+(client.closed?'#065F46':'#4F46E5')+'">'+(client.closed?'Clôturé':'Ouvert')+'</span></div>'
+    +'</div>'
+    +'</div>'
+
+    +'<div class="stats">'
+    +(client.followupDate?'<div class="stat"><div class="sv" style="font-size:14px;color:#4F46E5">'+fd(client.followupDate)+'</div><div class="sl">DATE SUIVI</div></div>':'')
+    +(client.reminderDate?'<div class="stat"><div class="sv" style="font-size:14px;color:#A16207">'+fd(client.reminderDate)+'</div><div class="sl">RAPPEL</div></div>':'')
+    +'<div class="stat"><div class="sv">'+cn.length+'</div><div class="sl">NOTES</div></div>'
+    +'</div>'
+
+    +(client.description?'<div class="sec"><div class="st">DESCRIPTION</div><div style="font-size:13px;line-height:1.8;color:#444;white-space:pre-wrap;background:#FAFAFA;border-radius:8px;padding:14px 18px;border:1px solid #ECEAE5">'+client.description+'</div></div>':'')
+
+    +(cn.length?'<div class="sec"><div class="st">NOTES ('+cn.length+')</div>'
+    +cn.map(function(n,i){
+      return '<div style="padding:12px 16px;background:#FAFAFA;border-radius:10px;border-left:3px solid #102A63;margin-bottom:10px;page-break-inside:avoid">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+      +'<span style="font-size:10px;color:#AAA;font-family:\'DM Mono\',monospace">NOTE #'+(i+1)+'</span>'
+      +'<span style="font-size:10px;color:#888;font-family:\'DM Mono\',monospace">'+fd(n.date||'')+'</span>'
+      +'</div>'
+      +'<div style="font-size:13px;color:#444;line-height:1.8;white-space:pre-wrap">'+n.text+'</div>'
+      +'</div>';
+    }).join('')+'</div>':'<div class="sec"><div class="st">NOTES</div><div style="font-size:12px;color:#AAA;font-style:italic;padding:12px">Aucune note pour ce client.</div></div>')
+
+    +'<div class="ftr"><span>Suivi : '+(client.clientName||'Client')+(client.clientCode?' #'+client.clientCode:'')+' — '+now+'</span><span>v.0.242</span></div>'
+    +'</div>';
+  buildPDFWindow(html, 'Suivi — '+(client.clientName||'Client'));
+}
+
+function exportSingleCotationPDF(cot) {
+  var now = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  function fd(d){if(!d)return'—';var p=d.split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
+  function fe(v){return v?Number(v).toLocaleString('fr-FR')+'€':'—';}
+  var ST={todo:{label:'À faire',bg:'#F0F0F0',color:'#666'},inprogress:{label:'En cours',bg:'#FEF9C3',color:'#A16207'},sent:{label:'Envoyée',bg:'#EEF2FF',color:'#4F46E5'},accepted:{label:'Acceptée',bg:'#D1FAE5',color:'#065F46'},refused:{label:'Refusée',bg:'#FDEDEC',color:'#C0392B'},cancelled:{label:'Annulée',bg:'#F0F0F0',color:'#AAA'}};
+  var PR={urgent:{cls:'pu',lbl:'Urgent'},high:{cls:'ph',lbl:'Haute'},normal:{cls:'pn',lbl:'Normal'},low:{cls:'pb',lbl:'Basse'}};
+  var st = ST[cot.status]||ST.todo;
+  var pr = PR[cot.priority]||PR.normal;
+  var taux = (parseFloat(cot.authorizedAmount)>0 && parseFloat(cot.obtainedAmount)>0) ? Math.round(parseFloat(cot.obtainedAmount)/parseFloat(cot.authorizedAmount)*100) : null;
+
+  var html = '<div class="root">'
+    +'<div class="hdr">'
+    +'<div>'
+    +'<div class="al">DÉTAIL COTATION</div>'
+    +'<div class="ttl">'+(cot.clientName||'Client sans nom')+'</div>'
+    +(cot.clientCode?'<div class="sub">Code : #'+cot.clientCode+'</div>':'')
+    +'<div class="sub">Exporté le '+now+'</div>'
+    +'</div>'
+    +'<div class="hr">'
+    +'<div><span class="b" style="background:'+st.bg+';color:'+st.color+'">'+st.label+'</span></div>'
+    +'<div><span class="b '+pr.cls+'">'+pr.lbl+'</span></div>'
+    +(cot.requestDate?'<div style="font-size:10px;color:#AAA">Demande : '+fd(cot.requestDate)+'</div>':'')
+    +'</div>'
+    +'</div>'
+
+    +'<div class="stats">'
+    +'<div class="stat"><div class="sv" style="color:#102A63">'+fe(cot.authorizedAmount)+'</div><div class="sl">AUTORISÉ</div></div>'
+    +'<div class="stat"><div class="sv" style="color:#27AE60">'+fe(cot.obtainedAmount)+'</div><div class="sl">OBTENU</div></div>'
+    +(taux!==null?'<div class="stat"><div class="sv" style="color:'+(taux>=80?'#27AE60':taux>=50?'#E67E22':'#C0392B')+'">'+taux+'%</div><div class="sl">TAUX OBTENTION</div></div>':'')
+    +(cot.closeDate?'<div class="stat"><div class="sv" style="font-size:14px">'+fd(cot.closeDate)+'</div><div class="sl">DATE CLÔTURE</div></div>':'')
+    +'</div>'
+
+    +'<div class="sec"><div class="st">INFORMATIONS</div>'
+    +'<table><tbody>'
+    +'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;width:160px;font-weight:700">CLIENT</td><td style="font-weight:600">'+(cot.clientName||'—')+'</td></tr>'
+    +(cot.clientCode?'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;font-weight:700">CODE</td><td style="font-family:\'DM Mono\',monospace">'+cot.clientCode+'</td></tr>':'')
+    +(cot.requester?'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;font-weight:700">DEMANDEUR</td><td>'+cot.requester+'</td></tr>':'')
+    +(cot.need?'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;font-weight:700">BESOIN</td><td>'+cot.need+'</td></tr>':'')
+    +(cot.requestDate?'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;font-weight:700">DATE DEMANDE</td><td style="font-family:\'DM Mono\',monospace">'+fd(cot.requestDate)+'</td></tr>':'')
+    +(cot.closeDate?'<tr><td style="font-family:\'DM Mono\',monospace;font-size:10px;color:#888;font-weight:700">DATE CLÔTURE</td><td style="font-family:\'DM Mono\',monospace">'+fd(cot.closeDate)+'</td></tr>':'')
+    +'</tbody></table></div>'
+
+    +(cot.notes?'<div class="sec"><div class="st">NOTES</div><div style="font-size:13px;line-height:1.8;color:#444;white-space:pre-wrap;background:#FAFAFA;border-radius:8px;padding:14px 18px;border:1px solid #ECEAE5">'+cot.notes+'</div></div>':'')
+
+    +'<div class="ftr"><span>Cotation : '+(cot.clientName||'Client')+(cot.clientCode?' #'+cot.clientCode:'')+' — '+now+'</span><span>v.0.242</span></div>'
+    +'</div>';
+  buildPDFWindow(html, 'Cotation — '+(cot.clientName||'Client'));
 }
 
 /* ─── 1) SETTINGS VIEW ─── */
@@ -4365,7 +4534,11 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
       <div style={{ background:"white", borderRadius:16, width:540, boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
         <div style={{ padding:"16px 22px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LE CLIENT":"NOUVEAU CLIENT"}</span>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            {d.id && <button onMouseDown={(e) => { e.preventDefault(); exportSingleSuiviPDF(d, window._suiviNotes||[], suiviTypes); }} title="Exporter en PDF"
+              style={{ border:"1px solid #E0E0E0", background:"white", borderRadius:8, padding:"3px 8px", fontSize:14, cursor:"pointer", color:"#102A63" }}>🖨</button>}
+            <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          </div>
         </div>
         <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:12 }}>
           <div style={{ display:"flex", gap:12 }}>
@@ -4621,7 +4794,11 @@ function Tasks2Modal({ item, onSave, onClose }) {
       <div style={{ background:"white", borderRadius:16, width:640, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 64px rgba(0,0,0,0.18)" }}>
         <div style={{ padding:"16px 24px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LA DEMANDE":"NOUVELLE DEMANDE"}</span>
-          <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+            {d.id && <button onMouseDown={(e) => { e.preventDefault(); exportSingleCotationPDF(d); }} title="Exporter en PDF"
+              style={{ border:"1px solid #E0E0E0", background:"white", borderRadius:8, padding:"3px 8px", fontSize:14, cursor:"pointer", color:"#102A63" }}>🖨</button>}
+            <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+          </div>
         </div>
         <div style={{ padding:"16px 24px", display:"flex", flexDirection:"column", gap:12 }}>
           <div style={{ display:"flex", gap:12 }}>
@@ -5328,7 +5505,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.236<br />02/05/26 à 18h36
+          v.0.242<br />03/05/26 à 17h18
         </div>
       </div>
 
