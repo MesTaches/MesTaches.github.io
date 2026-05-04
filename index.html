@@ -742,7 +742,7 @@ const S = {
 function Toast({ notifs, onDismiss }) {
   if (!notifs.length) return null;
   return (
-    <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, maxWidth: 340 }}>
+    <div style={{ position: "fixed", bottom: 92, right: 24, zIndex: 9999, display: "flex", flexDirection: "column", gap: 8, maxWidth: 340 }}>
       {notifs.map((n) => (
         <div key={n.id} style={{ background: "#2C3E50", color: "white", borderRadius: 12, padding: "12px 16px", boxShadow: "0 8px 24px rgba(0,0,0,0.2)", display: "flex", gap: 12, alignItems: "flex-start", animation: "slideIn 0.3s ease" }}>
           <span style={{ fontSize: 18 }}>🔔</span>
