@@ -1545,8 +1545,8 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
         </div>
 
         <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666") }}>Annuler</button>
-          <button onClick={() => { if (d.title.trim()) { onSave(d); onClose(); } }} style={{ ...S.btn(catAccent), opacity: d.title.trim() ? 1 : 0.5 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), fontFamily: 'Lora' }}>Annuler</button>
+          <button onClick={() => { if (d.title.trim()) { onSave(d); onClose(); } }} style={{ ...S.btn(catAccent), opacity: d.title.trim() ? 1 : 0.5, fontFamily: 'Lora' }} >
             {isNew ? "Créer la tâche" : "Enregistrer"}
           </button>
         </div>
@@ -1631,7 +1631,7 @@ function LabelCell({ task, settings }) {
 }
 
 /* ─── TASK CARD ─── */
-function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWidths, settings }) {
+function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin, colWidths, settings }) {
   const [hovered, setHovered] = useState(false);
   const [showComment, setShowComment] = useState(false);
   const catObj  = settings.categories.find(c => c.name === task.category);
@@ -1677,6 +1677,9 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, colWid
         {task.dueDate ? <span style={{ fontSize: 10, color: dc[ds], fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
         <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? "Voir / modifier la note" : "Ajouter une note"}
           style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
+        <button onClick={(e) => { e.stopPropagation(); if(onPin) onPin(task.id); }}
+          title={task.pinned ? "Désépingler" : "Épingler"}
+          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, padding: "0 2px", color: task.pinned ? "#E8A020" : (hovered ? "#AAAAAA" : "transparent"), transition: "color 0.1s", flexShrink: 0 }}>📌</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
       </div>
@@ -2265,7 +2268,7 @@ function MeetingsView({ onAddTask }) {
               <input value={newM.participants} onChange={e => setNewM({ ...newM, participants: e.target.value })} placeholder="Participants…" style={{ ...S.input, marginBottom: 10 }} />
               <textarea value={newM.agenda} onChange={e => setNewM({ ...newM, agenda: e.target.value })} rows={4} placeholder="Ordre du jour…" style={{ ...S.input, resize: "vertical", marginBottom: 10 }} />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <button onClick={() => setShowNew(false)} style={{ ...S.btn("#F0F0F0", "#666") }}>Annuler</button>
+                <button onClick={() => setShowNew(false)} style={{ ...S.btn("#F0F0F0", "#666"), fontFamily: 'Lora' }}>Annuler</button>
                 <button onClick={() => { saveMeeting({ ...newM, notes: "", docs: "" }); setShowNew(false); }} style={{ ...S.btn("#102A63") }}>Créer</button>
               </div>
             </div>
@@ -2460,7 +2463,7 @@ function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveCom
                     <span style={{ width: 36, flexShrink: 0 }} />
                   </div>
                   <div style={{ padding: "3px 0 4px" }}>
-                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : [...typeTasks].sort((a,b) => { if(a.completed!==b.completed)return a.completed?1:-1; const da=a.dueDate||"9999-99-99",db=b.dueDate||"9999-99-99"; if(da!==db)return da<db?-1:1; return ({urgente:0,haute:1,normale:2,basse:3}[a.priority]??2)-({urgente:0,haute:1,normale:2,basse:3}[b.priority]??2); })).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                    {(typeSort.col ? [...typeTasks].sort((a,b) => { let va=a[typeSort.col]||""; let vb=b[typeSort.col]||""; const cmp=va.toString().localeCompare(vb.toString(),"fr",{sensitivity:"base"}); return typeSort.dir==="asc"?cmp:-cmp; }) : [...typeTasks].sort((a,b) => { if(a.completed!==b.completed)return a.completed?1:-1; const da=a.dueDate||"9999-99-99",db=b.dueDate||"9999-99-99"; if(da!==db)return da<db?-1:1; return ({urgente:0,haute:1,normale:2,basse:3}[a.priority]??2)-({urgente:0,haute:1,normale:2,basse:3}[b.priority]??2); })).map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} onPin={onPin} colWidths={colWidths} settings={settings} />)}
                   </div>
                 </div>
               )}
@@ -4339,7 +4342,7 @@ function PaymentsView({ settings }) {
 /* ─── TASKS VIEW ─── */
 const DEFAULT_COL_WIDTHS = { title: 220, status: 72, category: 90, type: 72, created: 82, due: 82 };
 
-function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fullscreen, onToggleFullscreen, settings }) {
+function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, onPin, fullscreen, onToggleFullscreen, settings }) {
   const isMobile = useIsMobile();
   const [filterCat,    setFilterCat]    = useState("Toutes");
   const [filterType,   setFilterType]   = useState("Tous");
@@ -4392,12 +4395,16 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
     // 3) Par priorité haute → normale → basse
     return (PRIO_RANK[a.priority] ?? 1) - (PRIO_RANK[b.priority] ?? 1);
   };
-  const sortedList = sortCol ? [...displayList].sort((a, b) => {
+  const sortedList = (() => {
+    const base = sortCol ? [...displayList].sort((a, b) => {
+
     let va = a[sortCol] || ""; let vb = b[sortCol] || "";
     if (sortCol === "dueDate" || sortCol === "createdAt") { va = va || "9999"; vb = vb || "9999"; }
     const cmp = va.toString().localeCompare(vb.toString(), "fr", { sensitivity: "base" });
     return sortDir === "asc" ? cmp : -cmp;
   }) : [...displayList].sort(defaultSort);
+    return base.sort((a, b) => (!!b.pinned - !!a.pinned));
+  })()
 
   const groups = {};
   settings.categories.forEach(c => { const r = sortedList.filter(t => t.category === c.name); if (r.length) groups[c.name] = r; });
@@ -4556,7 +4563,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
           displayList.map(t => <MobileTaskCard key={t.id} task={t} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} onSaveComment={onSaveComment} settings={settings} />)
         ) : !grouped || filterCat !== "Toutes" ? (
           (() => {
-            if (sortCol) return sortedList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />);
+            if (sortCol) return sortedList.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} onPin={onPin} colWidths={colWidths} settings={settings} />);
             const todayStr = today();
             const in7 = new Date(); in7.setDate(in7.getDate() + 7);
             const in7Str = in7.toISOString().split("T")[0];
@@ -4582,7 +4589,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, fu
                   <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#BBB", fontFamily: "'DM Mono',monospace" }}>{cat.toUpperCase()} — {catTasks.length}</span>
                   <div style={{ flex: 1, height: 1, background: "#F0F0F0" }} />
                 </div>
-                {catTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={colWidths} settings={settings} />)}
+                {catTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i + 1} onDelete={onDelete} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} onPin={onPin} colWidths={colWidths} settings={settings} />)}
               </div>
             );
           })
@@ -5516,8 +5523,12 @@ function App() {
 
   const saveSettingsFn = s => { setSettings(s); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
 
-  const openNew = (arg = "") => { const pre = (arg && typeof arg === "object") ? arg : { dueDate: arg }; setModal({ id: uid(), title: "", category: "", type: "", dueDate: "", completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false, ...pre }); };
+  const openNew = (arg = "") => { const pre = (arg && typeof arg === "object") ? arg : { dueDate: arg }; setModal({ id: uid(), title: "", category: "", type: "", dueDate: "", completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], pinned: false, createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false, ...pre }); };
   const openEdit = t => setModal({ ...t });
+  const onPin = id => setTasks(prev => {
+    const next = prev.map(t => t.id === id ? { ...t, pinned: !t.pinned } : t);
+    return next;
+  });
 
   const activeCount  = tasks.filter(t => !t.completed).length;
   const overdueCount = tasks.filter(t => !t.completed && isOverdue(t.dueDate)).length;
@@ -5662,7 +5673,7 @@ function App() {
       {isFullWidthView ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
-            <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
+            <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
           )}
           {view === "categorytasks" && (
             <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
