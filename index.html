@@ -3262,10 +3262,25 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
               </div>
             )}
           </div>
+          {/* Périmètre concerné */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:6,letterSpacing:"0.06em" }}>PÉRIMÈTRE CONCERNÉ</div>
+            <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:6 }}>
+              {["Global","Onglet Tâches","Onglet Dev","Onglet Reporting","Onglet Réunions","Onglet Calendrier","Onglet Kanban","Paramètres","Firebase / Sync","Interface mobile"].map(p => (
+                <button key={p} type="button"
+                  onClick={() => setD({...d, scope: d.scope === p ? "" : p})}
+                  style={{ border:`1px solid ${d.scope===p?"#4F46E5":"#E0E0E0"}`, background:d.scope===p?"#EEF2FF":"white", color:d.scope===p?"#4F46E5":"#888", borderRadius:20, padding:"3px 10px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontWeight:d.scope===p?700:400, transition:"all 0.15s" }}>{p}</button>
+              ))}
+            </div>
+            <input value={["Global","Onglet Tâches","Onglet Dev","Onglet Reporting","Onglet Réunions","Onglet Calendrier","Onglet Kanban","Paramètres","Firebase / Sync","Interface mobile"].includes(d.scope) ? "" : (d.scope||"")}
+              onChange={e => setD({...d, scope: e.target.value})}
+              placeholder="Ou saisir un périmètre personnalisé…"
+              style={{ ...S.input, fontSize:12 }} />
+          </div>
+          {/* Description / Notes — RichTextArea complète */}
           <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DESCRIPTION / NOTES</div>
-            <textarea value={d.notes||""} onChange={e => setD({...d,notes:e.target.value})} placeholder="Description, contexte, specs…" rows={5}
-              style={{ ...S.input,resize:"vertical",lineHeight:1.6 }} />
+            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4,letterSpacing:"0.06em" }}>DESCRIPTION / NOTES</div>
+            <RichTextArea value={d.notes||""} onChange={v => setD({...d,notes:v})} placeholder="Description, contexte, specs, étapes de reproduction…" rows={6} />
           </div>
         </div>
         <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
@@ -3308,6 +3323,7 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings }) {
       <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>{statusObj.name}</span>
       <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
       <span style={{ fontSize:8,color:"#555",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>{typeObj?.icon||""} {task.type}</span>
+      {task.scope && <span style={{ fontSize:8,color:"#6B7280",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",maxWidth:100,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>}
       <div style={{ flex:"0 0 8px" }} />
       {task.dueDate && <span style={{ fontSize:8,color:"#95A5A6",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>⏱ {task.dueDate}</span>}
       <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
