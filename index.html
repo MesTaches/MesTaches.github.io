@@ -1655,7 +1655,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
         style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 6, borderLeft: `2px solid ${catAccent}`, marginBottom: 1, background: hovered ? "#F5F7FB" : task.completed ? "#FAFAFA" : "white", opacity: task.completed ? 0.45 : isBlocked ? 0.6 : 1, cursor: "pointer", transition: "background 0.1s", borderRadius: "0 3px 3px 0", height: 28, overflow: "hidden" }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
           style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
-        <span style={{ fontSize: 10, color: "#CCC", fontFamily: "'Lora',serif", flexShrink: 0, minWidth: 16, textAlign: "right" }}>{num}</span>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0, minWidth:18 }}><button onClick={(e)=>{ e.stopPropagation(); if(onPin) onPin(task.id); }} title={task.pinned?"Désépingler":"Épingler"} style={{ border:"none", background:"none", cursor:"pointer", fontSize:11, padding:0, lineHeight:1, color: task.pinned?"#E8A020":"transparent", transition:"color 0.15s" }} onMouseEnter={(e)=>{ if(!task.pinned) e.currentTarget.style.color="#BBBBBB"; }} onMouseLeave={(e)=>{ if(!task.pinned) e.currentTarget.style.color="transparent"; }}>📌</button><span style={{ fontSize:9, color:"#CCC" }}>{num}</span></div>
         <span title={`Priorité ${task.priority}`} style={{ fontSize: 10, color: prioColor, flexShrink: 0, fontWeight: 700, lineHeight: 1, minWidth: 12, textAlign: "center" }}>{prioIcon}</span>
         <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("toggleMyDay", { detail: { id: task.id } })); }}
           title={task.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
@@ -1677,9 +1677,6 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
         {task.dueDate ? <span style={{ fontSize: 10, color: dc[ds], fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
         <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? "Voir / modifier la note" : "Ajouter une note"}
           style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
-        <button onClick={(e) => { e.stopPropagation(); if(onPin) onPin(task.id); }}
-          title={task.pinned ? "Désépingler" : "Épingler"}
-          style={{ border: "none", background: "none", cursor: "pointer", fontSize: 13, padding: "0 2px", color: task.pinned ? "#E8A020" : (hovered ? "#AAAAAA" : "transparent"), transition: "color 0.1s", flexShrink: 0 }}>📌</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
       </div>
@@ -2334,7 +2331,7 @@ function MeetingsView({ onAddTask }) {
 /* ─── 7) CATEGORY TASKS VIEW ─── */
 const CAT_ORDER_KEY = "taskmanager_catorder_v1";
 
-function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, settings }) {
+function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, onPin, settings }) {
   const isMobile = useIsMobile();
   const [filterStatus, setFilterStatus] = useState("Actives");
   const [search, setSearch] = useState("");
@@ -5676,7 +5673,7 @@ function App() {
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
           )}
           {view === "categorytasks" && (
-            <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} settings={settings} />
+            <CategoryTasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} settings={settings} />
           )}
           {view === "suiviclient" && (
             <SuiviClientView settings={settings} />
