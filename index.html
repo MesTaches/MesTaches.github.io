@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.245<br/>04/05/26 à 09h12</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.264<br/>05/05/26 à 09h35</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -1651,11 +1651,22 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
 
   return (
     <>
-      <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => onEdit(task)}
+      <div style={{ display:"flex", alignItems:"stretch" }}>
+        <button onClick={(e)=>{ e.stopPropagation(); if(onPin) onPin(task.id); }}
+          title={task.pinned ? "Désépingler" : "Épingler"}
+          style={{ border:"none", background:task.pinned?"#FFF8E1":"transparent",
+            cursor:"pointer", fontSize:12, padding:"0 3px", flexShrink:0,
+            color:task.pinned?"#E8A020":"transparent", transition:"all 0.15s",
+            borderLeft:task.pinned?"3px solid #E8A020":"3px solid transparent",
+            display:"flex", alignItems:"center" }}
+          onMouseEnter={(e)=>{ if(!task.pinned){e.currentTarget.style.color="#BBBBBB";e.currentTarget.style.borderLeftColor="#BBBBBB";}}}
+          onMouseLeave={(e)=>{ if(!task.pinned){e.currentTarget.style.color="transparent";e.currentTarget.style.borderLeftColor="transparent";}}}
+        >📌</button>
+        <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => onEdit(task)}
         style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 6, borderLeft: `2px solid ${catAccent}`, marginBottom: 1, background: hovered ? "#F5F7FB" : task.completed ? "#FAFAFA" : "white", opacity: task.completed ? 0.45 : isBlocked ? 0.6 : 1, cursor: "pointer", transition: "background 0.1s", borderRadius: "0 3px 3px 0", height: 28, overflow: "hidden" }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
           style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", flexShrink:0, minWidth:18 }}><button onClick={(e)=>{ e.stopPropagation(); if(onPin) onPin(task.id); }} title={task.pinned?"Désépingler":"Épingler"} style={{ border:"none", background:"none", cursor:"pointer", fontSize:11, padding:0, lineHeight:1, color: task.pinned?"#E8A020":"transparent", transition:"color 0.15s" }} onMouseEnter={(e)=>{ if(!task.pinned) e.currentTarget.style.color="#BBBBBB"; }} onMouseLeave={(e)=>{ if(!task.pinned) e.currentTarget.style.color="transparent"; }}>📌</button><span style={{ fontSize:9, color:"#CCC" }}>{num}</span></div>
+        <span style={{ fontSize:10, color:"#CCC", flexShrink:0, minWidth:16, textAlign:"right" }}>{num}</span>
         <span title={`Priorité ${task.priority}`} style={{ fontSize: 10, color: prioColor, flexShrink: 0, fontWeight: 700, lineHeight: 1, minWidth: 12, textAlign: "center" }}>{prioIcon}</span>
         <button onClick={(e) => { e.stopPropagation(); window.dispatchEvent(new CustomEvent("toggleMyDay", { detail: { id: task.id } })); }}
           title={task.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
@@ -1679,6 +1690,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
           style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
+      </div>
       </div>
       {showComment && <CommentPopover task={task} catBg={catBg} catAccent={catAccent} onSave={(txt) => onSaveComment(task.id, txt)} onClose={() => setShowComment(false)} />}
     </>
@@ -5625,7 +5637,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.245<br />04/05/26 à 09h12
+          v.0.264<br />05/05/26 à 09h35
         </div>
       </div>
 
