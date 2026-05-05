@@ -70,7 +70,7 @@ const _fbApp = firebase.initializeApp({
 const _db = firebase.firestore();
 const _auth = firebase.auth();
 
-const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1"];
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1"];
 let _uid = null;
 let _debounce = {};
 let _reactMounted = false;
@@ -318,6 +318,56 @@ function useIsMobile() {
 /* ─── STORAGE KEYS ─── */
 const STORAGE_KEY = "taskmanager_v4";
 const COL_WIDTHS_KEY = "taskmanager_colwidths";
+
+/* ─── ONGLET DEV — storage indépendant ─── */
+const DEV_STORAGE_KEY   = "devtracker_tasks_v1";
+const DEV_SETTINGS_KEY  = "devtracker_settings_v1";
+const DEV_COL_WIDTHS_KEY= "devtracker_colwidths";
+
+const DEV_DEFAULT_SETTINGS = {
+  categories: [
+    { id: "feat",  name: "Fonctionnalité", bg: "#E8F4FD", accent: "#2980B9" },
+    { id: "bug",   name: "Bug",            bg: "#FDEDEC", accent: "#C0392B" },
+    { id: "ux",    name: "UX / Design",    bg: "#F4ECF7", accent: "#8E44AD" },
+    { id: "perf",  name: "Performance",    bg: "#E8F8F5", accent: "#27AE60" },
+    { id: "tech",  name: "Dette technique",bg: "#FEF9E7", accent: "#E67E22" },
+    { id: "doc",   name: "Documentation",  bg: "#F0F3FF", accent: "#4F46E5" },
+  ],
+  types: [
+    { id: "evol",  name: "Évolution",  icon: "✦" },
+    { id: "fix",   name: "Correctif",  icon: "⚙" },
+    { id: "refact",name: "Refacto",    icon: "↺" },
+    { id: "test",  name: "Test",       icon: "◎" },
+    { id: "infra", name: "Infra",      icon: "▤" },
+  ],
+  statuses: [
+    { id: "backlog",   name: "Backlog",      bg: "#F0F0F0", color: "#888888" },
+    { id: "todo",      name: "À faire",      bg: "#EEF2FF", color: "#4F46E5" },
+    { id: "inprog",    name: "En cours",     bg: "#DBEAFE", color: "#1D4ED8" },
+    { id: "review",    name: "En review",    bg: "#FEF9C3", color: "#A16207" },
+    { id: "done",      name: "Livré",        bg: "#D1FAE5", color: "#065F46" },
+    { id: "cancelled", name: "Annulé",       bg: "#F5E6DC", color: "#92400E" },
+  ],
+  labels: [
+    { id: "urgent", name: "Urgent",   color: "#C0392B", bg: "#FDEDEC" },
+    { id: "v1",     name: "v1.0",     color: "#1D4ED8", bg: "#DBEAFE" },
+    { id: "v2",     name: "v2.0",     color: "#065F46", bg: "#D1FAE5" },
+  ],
+};
+
+function loadDevSettings() {
+  try {
+    const s = localStorage.getItem(DEV_SETTINGS_KEY);
+    if (!s) return DEV_DEFAULT_SETTINGS;
+    const p = JSON.parse(s);
+    return {
+      categories: p.categories || DEV_DEFAULT_SETTINGS.categories,
+      types:      p.types      || DEV_DEFAULT_SETTINGS.types,
+      statuses:   p.statuses   || DEV_DEFAULT_SETTINGS.statuses,
+      labels:     p.labels     || DEV_DEFAULT_SETTINGS.labels,
+    };
+  } catch { return DEV_DEFAULT_SETTINGS; }
+}
 
 /* ─── COTATION (données) ─── */
 const COTATION_KEY         = "taskmanager_cotations";
@@ -3063,6 +3113,7 @@ const ALL_TABS = [
   { id: "cotation",      label: "Cotation",         icon: "◎" },
   { id: "reporting",     label: "Reporting",        icon: "▤" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
+  { id: "dev",           label: "Dev",              icon: "⌥" },
 ];
 
 function DailySummary({ tasks, onClose }) {
@@ -3122,6 +3173,353 @@ function DailySummary({ tasks, onClose }) {
           <button onClick={onClose} style={{border:"none",background:"#102A63",color:"white",borderRadius:8,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace"}}>Commencer</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   DEV VIEW — suivi des évolutions de l'application
+═══════════════════════════════════════════════ */
+
+function DevTaskModal({ task, devSettings, onSave, onClose }) {
+  const isNew = !task.title;
+  const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const [d, setD] = useState({ ...task, category: task.category||"", type: task.type||"", status: task.status||"backlog", labels: task.labels||[] });
+  const catObj   = devSettings.categories.find(c => c.name === d.category);
+  const catAccent = catObj?.accent || "#4F46E5";
+  const statusObj = devSettings.statuses.find(s => s.id === d.status) || devSettings.statuses[0];
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const labelBtnRef = useRef(null);
+  const labelPickerRef = useRef(null);
+  useEffect(() => {
+    if (!showLabelPicker) return;
+    const close = (e) => {
+      if (labelPickerRef.current?.contains(e.target)) return;
+      if (labelBtnRef.current?.contains(e.target)) return;
+      setShowLabelPicker(false);
+    };
+    const t = setTimeout(() => document.addEventListener("mousedown", close), 0);
+    return () => { clearTimeout(t); document.removeEventListener("mousedown", close); };
+  }, [showLabelPicker]);
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)" }}
+      onClick={e => e.target===e.currentTarget && onClose()}>
+      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.18)",borderTop:`4px solid ${catAccent}` }}>
+        <div style={{ padding:"20px 24px 0" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+            <h2 style={{ margin:0,fontSize:18,fontFamily:"'Lora',serif",color:"#2C3E50" }}>{isNew ? "Nouvelle évolution" : "Modifier"}</h2>
+            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:22,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+          </div>
+          <input value={d.title} onChange={e => setD({...d,title:e.target.value})} placeholder="Titre de l'évolution…" autoFocus style={{ ...S.input,fontSize:15,marginBottom:12 }} />
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <select value={d.category} onChange={e => setD({...d,category:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.category?"#2C3E50":"#999" }}>
+              <option value="">— Catégorie —</option>
+              {devSettings.categories.map(c => <option key={c.id} style={{color:"#2C3E50"}}>{c.name}</option>)}
+            </select>
+            <select value={d.type} onChange={e => setD({...d,type:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.type?"#2C3E50":"#999" }}>
+              <option value="">— Type —</option>
+              {devSettings.types.map(t => <option key={t.id} style={{color:"#2C3E50"}}>{t.name}</option>)}
+            </select>
+            <select value={d.priority||"normale"} onChange={e => setD({...d,priority:e.target.value})} style={{ ...S.input,cursor:"pointer" }}>
+              <option value="urgente">🔴 Urgente</option>
+              <option value="haute">🟠 Haute</option>
+              <option value="normale">🟡 Normale</option>
+              <option value="basse">🟢 Basse</option>
+            </select>
+            <select value={d.status} onChange={e => setD({...d,status:e.target.value})} style={{ ...S.input,cursor:"pointer",background:statusObj.bg,color:statusObj.color,fontWeight:600 }}>
+              {devSettings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10 }}>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>VERSION CIBLE</div>
+              <input value={d.version||""} onChange={e => setD({...d,version:e.target.value})} placeholder="ex: v2.5" style={{ ...S.input }} />
+            </div>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE CIBLE</div>
+              <input type="date" value={d.dueDate||""} onChange={e => setD({...d,dueDate:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
+            </div>
+          </div>
+          {/* Labels */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:4 }}>
+              {(d.labels||[]).map(lbl => {
+                const lObj = devSettings.labels.find(l => l.name===lbl) || { color:"#4F46E5",bg:"#EEF2FF" };
+                return <span key={lbl} style={{ fontSize:10,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"2px 8px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}30`,cursor:"pointer" }}
+                  onClick={() => setD({...d,labels:(d.labels||[]).filter(l=>l!==lbl)})}>🏷 {lbl} ×</span>;
+              })}
+              <button ref={labelBtnRef} type="button" onClick={() => setShowLabelPicker(p=>!p)}
+                style={{ border:"1px dashed #C7D2FE",background:"none",borderRadius:20,padding:"2px 8px",fontSize:10,cursor:"pointer",color:"#4F46E5",fontFamily:"'DM Mono',monospace" }}>+ Étiquette</button>
+            </div>
+            {showLabelPicker && (
+              <div ref={labelPickerRef} style={{ display:"flex",flexWrap:"wrap",gap:6,padding:8,background:"#F8F8F8",borderRadius:8,border:"1px solid #E8E8E8" }}>
+                {devSettings.labels.filter(l => !(d.labels||[]).includes(l.name)).map(l => (
+                  <span key={l.id} onClick={() => { setD({...d,labels:[...(d.labels||[]),l.name]}); setShowLabelPicker(false); }}
+                    style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
+                ))}
+                {devSettings.labels.filter(l => !(d.labels||[]).includes(l.name)).length===0 && <span style={{ fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Toutes les étiquettes sont déjà ajoutées</span>}
+              </div>
+            )}
+          </div>
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DESCRIPTION / NOTES</div>
+            <textarea value={d.notes||""} onChange={e => setD({...d,notes:e.target.value})} placeholder="Description, contexte, specs…" rows={5}
+              style={{ ...S.input,resize:"vertical",lineHeight:1.6 }} />
+          </div>
+        </div>
+        <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666") }}>Annuler</button>
+          <button onClick={() => { if(d.title.trim()){ onSave(d); onClose(); } }} style={{ ...S.btn(catAccent),opacity:d.title.trim()?1:0.5 }}>
+            {isNew ? "Créer" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings }) {
+  const [hovered, setHovered] = useState(false);
+  const catObj    = devSettings.categories.find(c => c.name===task.category);
+  const typeObj   = devSettings.types.find(t => t.name===task.type);
+  const statusObj = devSettings.statuses.find(s => s.id===task.status) || devSettings.statuses[0];
+  const catBg     = catObj?.bg||"#F0F0F0";
+  const catAccent = catObj?.accent||"#888";
+  const prioColors = { urgente:"#C0392B", haute:"#E67E22", normale:"#95A5A6", basse:"#27AE60" };
+  const prioIcons  = { urgente:"▲▲", haute:"▲", normale:"▬", basse:"▼" };
+  const prioColor  = prioColors[task.priority||"normale"]||"#95A5A6";
+  const prioIcon   = prioIcons[task.priority||"normale"]||"▬";
+  return (
+    <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={()=>onEdit(task)}
+      style={{ display:"flex",alignItems:"center",gap:7,paddingRight:6,borderLeft:`2px solid ${catAccent}`,marginBottom:1,
+        background:hovered?"#F5F7FB":task.completed?"#FAFAFA":"white",opacity:task.completed?0.45:1,
+        cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
+      <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
+        style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
+      <span style={{ fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
+      <span title={`Priorité ${task.priority}`} style={{ fontSize:10,color:prioColor,flexShrink:0,fontWeight:700,lineHeight:1,minWidth:12,textAlign:"center" }}>{prioIcon}</span>
+      <span style={{ fontSize:13,fontWeight:500,color:task.completed?"#AAA":"#2C3E50",textDecoration:task.completed?"line-through":"none",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:"1 1 200px",minWidth:0 }}>{task.title}</span>
+      {task.version && <span style={{ fontSize:8,fontFamily:"'DM Mono',monospace",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0 }}>{task.version}</span>}
+      {(task.labels||[]).slice(0,2).map(lbl => {
+        const lObj = devSettings.labels.find(l=>l.name===lbl)||{color:"#4F46E5",bg:"#EEF2FF"};
+        return <span key={lbl} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>🏷 {lbl}</span>;
+      })}
+      <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>{statusObj.name}</span>
+      <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
+      <span style={{ fontSize:8,color:"#555",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>{typeObj?.icon||""} {task.type}</span>
+      <div style={{ flex:"0 0 8px" }} />
+      {task.dueDate && <span style={{ fontSize:8,color:"#95A5A6",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>⏱ {task.dueDate}</span>}
+      <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
+        style={{ border:"none",background:"none",cursor:"pointer",color:hovered?"#E8A0A0":"transparent",fontSize:13,padding:"0 2px",transition:"color 0.1s",flexShrink:0,lineHeight:1 }}>×</button>
+    </div>
+  );
+}
+
+function DevSettingsPanel({ devSettings, onSave, onClose }) {
+  const [s, setS] = useState(JSON.parse(JSON.stringify(devSettings)));
+  const [tab, setTab] = useState("categories");
+  const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const Tab = ({ id, label }) => (
+    <button onClick={()=>setTab(id)} style={{ border:"none",background:"none",padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace",color:tab===id?"#4F46E5":"#888",borderBottom:`2px solid ${tab===id?"#4F46E5":"transparent"}`,fontWeight:tab===id?700:400 }}>{label}</button>
+  );
+  const Row = ({children}) => <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F5F5" }}>{children}</div>;
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:"white",borderRadius:14,width:"100%",maxWidth:580,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:"4px solid #4F46E5" }}>
+        <div style={{ padding:"16px 20px 0" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
+            <div style={{ fontSize:16,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>⚙ Paramètres Dev</div>
+            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+          </div>
+          <div style={{ borderBottom:"1px solid #F0F0F0",display:"flex",flexWrap:"wrap" }}>
+            <Tab id="categories" label="📁 Catégories" />
+            <Tab id="types"      label="🏷 Types" />
+            <Tab id="statuses"   label="🔵 Statuts" />
+            <Tab id="labels"     label="🏷 Étiquettes" />
+          </div>
+          <div style={{ padding:"16px 4px" }}>
+            {tab==="categories" && <>
+              {s.categories.map(c => (
+                <Row key={c.id}>
+                  <div style={{ width:22,height:22,borderRadius:5,background:c.bg,border:`2px solid ${c.accent}`,flexShrink:0 }} />
+                  <input value={c.name} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={c.bg} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Acc</span>
+                  <input type="color" value={c.accent} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,accent:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,categories:s.categories.filter(x=>x.id!==c.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,categories:[...s.categories,{id:uid_fn(),name:"Nouvelle",bg:"#F0F0F0",accent:"#888888"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+            </>}
+            {tab==="types" && <>
+              {s.types.map(t => (
+                <Row key={t.id}>
+                  <input value={t.icon} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,icon:e.target.value}:x)})} style={{ ...S.input,width:44,padding:"5px 8px",fontSize:16,textAlign:"center" }} />
+                  <input value={t.name} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <button onClick={()=>setS({...s,types:s.types.filter(x=>x.id!==t.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,types:[...s.types,{id:uid_fn(),name:"Nouveau",icon:"●"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+            </>}
+            {tab==="statuses" && <>
+              {s.statuses.map(st => (
+                <Row key={st.id}>
+                  <span style={{ fontSize:10,fontWeight:700,background:st.bg,color:st.color,borderRadius:4,padding:"2px 8px",fontFamily:"'DM Mono',monospace",minWidth:70,textAlign:"center" }}>{st.name}</span>
+                  <input value={st.name} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={st.bg} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
+                  <input type="color" value={st.color} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,statuses:s.statuses.filter(x=>x.id!==st.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,statuses:[...s.statuses,{id:uid_fn(),name:"Nouveau",bg:"#F0F0F0",color:"#888"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+            </>}
+            {tab==="labels" && <>
+              {s.labels.map(l => (
+                <Row key={l.id}>
+                  <span style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"2px 10px",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
+                  <input value={l.name} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
+                  <input type="color" value={l.color} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Fond</span>
+                  <input type="color" value={l.bg} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,labels:s.labels.filter(x=>x.id!==l.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,labels:[...s.labels,{id:uid_fn(),name:"Nouvelle",color:"#4F46E5",bg:"#EEF2FF"}]})} style={{ ...S.btn("#4F46E5"),marginTop:10,fontSize:11,padding:"6px 14px" }}>+ Nouvelle étiquette</button>
+            </>}
+          </div>
+        </div>
+        <div style={{ padding:"12px 20px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
+          <button onClick={()=>setS(JSON.parse(JSON.stringify(DEV_DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"6px 14px" }}>Réinitialiser</button>
+          <button onClick={()=>{ onSave(s); onClose(); }} style={{ ...S.btn("#4F46E5"),fontSize:11,padding:"6px 14px" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DevView() {
+  const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const today_fn = () => new Date().toISOString().split("T")[0];
+
+  const [devSettings, setDevSettings] = useState(() => loadDevSettings());
+  const [tasks, setTasks] = useState(() => { try { const s=localStorage.getItem(DEV_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [modal, setModal] = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [filterCat,    setFilterCat]    = useState("Toutes");
+  const [filterType,   setFilterType]   = useState("Tous");
+  const [filterStatus, setFilterStatus] = useState("Actives");
+  const [search, setSearch] = useState("");
+  const [colWidths, setColWidths] = useState(() => { try { const s=localStorage.getItem(DEV_COL_WIDTHS_KEY); return s?JSON.parse(s):{title:240,status:80,category:100,type:72}; } catch { return {title:240,status:80,category:100,type:72}; } });
+  const dragging = useRef(null);
+  const isMobile = useIsMobile();
+
+  useEffect(() => { try { localStorage.setItem(DEV_STORAGE_KEY,JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  const addTask  = t => setTasks(p=>[t,...p]);
+  const updTask  = t => setTasks(p=>p.map(x=>x.id===t.id?t:x));
+  const delTask  = id => { if(window.confirm("Supprimer cette évolution ?")) setTasks(p=>p.filter(x=>x.id!==id)); };
+  const togTask  = id => setTasks(p=>p.map(x=>x.id===id?{...x,completed:!x.completed,status:!x.completed?"done":x.status}:x));
+  const handleSave = t => { if(tasks.find(x=>x.id===t.id)) updTask(t); else addTask(t); };
+  const saveDevSettings = s => { setDevSettings(s); try { localStorage.setItem(DEV_SETTINGS_KEY,JSON.stringify(s)); } catch {} };
+  const openNew = () => setModal({ id:uid_fn(),title:"",category:"",type:"",status:"backlog",priority:"normale",notes:"",dueDate:"",version:"",labels:[],completed:false,createdAt:new Date().toISOString() });
+
+  const startResize = (col,e) => {
+    e.preventDefault();
+    const startX=e.clientX, startW=colWidths[col];
+    const onMove=ev=>{ const nw=Math.max(40,startW+ev.clientX-startX); setColWidths(p=>{const n={...p,[col]:nw};try{localStorage.setItem(DEV_COL_WIDTHS_KEY,JSON.stringify(n));}catch{}return n;}); };
+    const onUp=()=>{ window.removeEventListener("mousemove",onMove); window.removeEventListener("mouseup",onUp); };
+    window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+  };
+
+  const displayed = tasks.filter(t => {
+    if (filterCat!=="Toutes" && t.category!==filterCat) return false;
+    if (filterType!=="Tous" && t.type!==filterType) return false;
+    if (filterStatus==="Actives" && t.completed) return false;
+    if (filterStatus==="Complétées" && !t.completed) return false;
+    if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  // Stats
+  const total     = tasks.length;
+  const pct = n => total>0?Math.round((n/total)*100):0;
+  const statRows = devSettings.statuses.map(s => ({ ...s, count: tasks.filter(t=>t.status===s.id).length }));
+
+  const FBtn = ({label,active,onClick,color}) => (
+    <button onClick={onClick} style={{ border:`1px solid ${active?color||"#4F46E5":"#E0E0E0"}`,background:active?color||"#4F46E5":"white",color:active?"white":"#888",borderRadius:5,padding:"3px 9px",fontSize:10,cursor:"pointer",fontFamily:"'DM Mono',monospace",transition:"all 0.15s",whiteSpace:"nowrap" }}>{label}</button>
+  );
+  const ResizeHandle = ({col}) => (
+    <span onMouseDown={e=>startResize(col,e)} style={{ display:"inline-block",width:6,cursor:"col-resize",userSelect:"none",flexShrink:0,marginLeft:2,alignSelf:"stretch",borderRight:"2px solid transparent",transition:"border-color 0.15s" }}
+      onMouseEnter={e=>e.currentTarget.style.borderColor="#BDC3C7"} onMouseLeave={e=>e.currentTarget.style.borderColor="transparent"} />
+  );
+  const ColHdr = ({label,col}) => (
+    <div style={{ display:"flex",alignItems:"center",flexShrink:0,width:colWidths[col]||72 }}>
+      <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
+      <ResizeHandle col={col} />
+    </div>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"calc(100vh - 56px)" }}>
+      {/* Toolbar */}
+      <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"7px 12px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input,width:140,padding:"4px 8px",fontSize:11 }} />
+        <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+        {["Actives","Complétées","Toutes"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
+        {!isMobile && <>
+          <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+          {["Tous",...devSettings.types.map(t=>t.name)].map(o=><FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} />)}
+          <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+          {["Toutes",...devSettings.categories.map(c=>c.name)].map(c=>{ const co=devSettings.categories.find(x=>x.name===c); return <FBtn key={c} label={c} active={filterCat===c} onClick={()=>setFilterCat(c)} color={co?.accent} />; })}
+        </>}
+        <div style={{ flex:1 }} />
+        <button onClick={()=>setShowSettings(true)} title="Paramètres Dev" style={{ border:"1px solid #C7D2FE",background:"#EEF2FF",color:"#4F46E5",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
+        <button onClick={openNew} style={{ ...S.btn("#4F46E5"),padding:"4px 14px",fontSize:11 }}>+ Nouvelle</button>
+      </div>
+
+      {/* Column headers */}
+      <div style={{ display:"flex",alignItems:"center",gap:7,padding:"4px 12px 3px",borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
+        <div style={{ width:14,flexShrink:0,marginLeft:5 }} />
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:16 }}>#</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:12 }}>P</span>
+        <ColHdr label="ÉVOLUTION" col="title" />
+        <ColHdr label="STATUT"    col="status" />
+        <ColHdr label="CATÉGORIE" col="category" />
+        <ColHdr label="TYPE"      col="type" />
+        <div style={{ flex:1 }} />
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:60 }}>VERSION</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:80 }}>DATE CIBLE</span>
+        <span style={{ width:20,flexShrink:0 }} />
+      </div>
+
+      {/* List */}
+      <div style={{ flex:1,overflowY:"auto",padding:"4px 12px 8px" }}>
+        {displayed.length===0 ? (
+          <div style={{ textAlign:"center",padding:"50px 0",color:"#CCC" }}>
+            <div style={{ fontSize:32,marginBottom:10 }}>⌥</div>
+            <div style={{ fontFamily:"'Lora',serif",fontSize:14 }}>Aucune évolution trouvée</div>
+          </div>
+        ) : displayed.map((t,i) => <DevTaskCard key={t.id} task={t} num={i+1} onDelete={delTask} onEdit={m=>setModal({...m})} onToggle={togTask} devSettings={devSettings} />)}
+      </div>
+
+      {/* Stats footer */}
+      <div style={{ padding:"5px 12px",borderTop:"1px solid #F0F0F0",background:"white",flexShrink:0,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center" }}>
+        {statRows.map(s => (
+          <span key={s.id} style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:s.count>0?s.color:"#CCC",whiteSpace:"nowrap" }}>
+            <span style={{ fontWeight:700 }}>{s.name}</span> {s.count} <span style={{ opacity:0.6 }}>({pct(s.count)}%)</span>
+          </span>
+        ))}
+        <span style={{ flex:1,textAlign:"right",fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace" }}>{displayed.length} affiché{displayed.length!==1?"s":""} / {total} total</span>
+      </div>
+
+      {modal && <DevTaskModal task={modal} devSettings={devSettings} onSave={handleSave} onClose={()=>setModal(null)} />}
+      {showSettings && <DevSettingsPanel devSettings={devSettings} onSave={saveDevSettings} onClose={()=>setShowSettings(false)} />}
     </div>
   );
 }
@@ -5577,6 +5975,7 @@ function App() {
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "payments",      label: "Paiements",        icon: "⬡" },
+    { id: "dev",           label: "Dev",              icon: "⌥" },
     { id: "settings",      label: "Paramètres",       icon: "⚙" },
   ];
 
@@ -5654,9 +6053,20 @@ function App() {
             <span style={{ flex: 1 }}>{n.label}</span>
           </button>
         ))}
+        {/* Section : Outils */}
+        {visibleNav.some(n => n.id === "dev") && <>
+          <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Outils</div>
+          {visibleNav.filter(n => ["dev"].includes(n.id)).map(n => (
+            <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
+              style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #A78BFA" : "3px solid transparent", padding: "10px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
+              <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
+              <span style={{ flex: 1 }}>{n.label}</span>
+            </button>
+          ))}
+        </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.269<br />05/05/26 à 10h06
+          v.0.270<br />05/05/26
         </div>
       </div>
 
@@ -5682,12 +6092,15 @@ function App() {
           )}
           {view === "cotation" && (
             <button onClick={() => { try { exportCotationPDF(window._cotations||[]); } catch(e) { alert("Ouvrez d'abord la Cotation"); } }} style={{ border:"none", background:"none", cursor:"pointer", color:"#888", padding:"4px 6px", flexShrink:0, display:"flex", alignItems:"center", lineHeight:1 }} title="Exporter en PDF">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
             </button>
           )}
-          <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-            + {isMobile ? "" : "Nouvelle tâche"}
-          </button>
+          {/* Bouton + adapté selon la vue */}
+          {view !== "dev" && (
+            <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              + {isMobile ? "" : "Nouvelle tâche"}
+            </button>
+          )}
         </div>
 
       {overdueCount > 0 && (
@@ -5697,8 +6110,8 @@ function App() {
         </div>
       )}
 
-      {/* Full-width views (tasks, categorytasks) vs contained views */}
-      {isFullWidthView ? (
+      {/* Full-width views vs contained views */}
+      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev") ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -5711,6 +6124,9 @@ function App() {
           )}
           {view === "cotation" && (
             <Tasks2View fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} />
+          )}
+          {view === "dev" && (
+            <DevView />
           )}
         </div>
       ) : (
