@@ -70,7 +70,7 @@ const _fbApp = firebase.initializeApp({
 const _db = firebase.firestore();
 const _auth = firebase.auth();
 
-const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1"];
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1"];
 let _uid = null;
 let _debounce = {};
 let _reactMounted = false;
@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.271<br/>06/05/26</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.272<br/>06/05/26</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -323,6 +323,59 @@ const COL_WIDTHS_KEY = "taskmanager_colwidths";
 const DEV_STORAGE_KEY   = "devtracker_tasks_v1";
 const DEV_SETTINGS_KEY  = "devtracker_settings_v1";
 const DEV_COL_WIDTHS_KEY= "devtracker_colwidths";
+
+/* ─── ONGLET SUIVI CONTENTIEUX — storage indépendant ─── */
+const CONTENTIEUX_STORAGE_KEY  = "contentieux_dossiers_v1";
+const CONTENTIEUX_SETTINGS_KEY = "contentieux_settings_v1";
+
+const CONTENTIEUX_DEFAULT_SETTINGS = {
+  categories: [
+    { id: "credit",    name: "Crédit clients",   bg: "#E8F4FD", accent: "#2980B9" },
+    { id: "fourniss",  name: "Fournisseur",       bg: "#FEF9E7", accent: "#E67E22" },
+    { id: "bail",      name: "Bail / Loyer",      bg: "#F4ECF7", accent: "#8E44AD" },
+    { id: "social",    name: "Social",            bg: "#FDEDEC", accent: "#C0392B" },
+    { id: "fiscal",    name: "Fiscal",            bg: "#E8F8F5", accent: "#27AE60" },
+    { id: "assurance", name: "Assurance",         bg: "#F0F3FF", accent: "#4F46E5" },
+  ],
+  types: [
+    { id: "relance",   name: "Relance amiable",   icon: "✉" },
+    { id: "injonction",name: "Injonction de payer",icon: "⚖" },
+    { id: "assignation",name:"Assignation",        icon: "📋" },
+    { id: "jugement",  name: "Jugement",           icon: "🔨" },
+    { id: "execution", name: "Exécution",          icon: "⚡" },
+    { id: "prescription",name:"Prescription",      icon: "⏱" },
+  ],
+  labels: [
+    { id: "urgent",   name: "Urgent",      color: "#C0392B", bg: "#FDEDEC" },
+    { id: "avocat",   name: "Avocat",      color: "#4F46E5", bg: "#EEF2FF" },
+    { id: "huissier", name: "Huissier",    color: "#92400E", bg: "#FEF3C7" },
+    { id: "prescrit", name: "Prescrit",    color: "#065F46", bg: "#D1FAE5" },
+  ],
+  // Colonnes Kanban contentieux
+  statuses: [
+    { id: "identification", name: "Identification",    bg: "#F0F0F0", color: "#555555" },
+    { id: "amiable",        name: "Relance amiable",   bg: "#DBEAFE", color: "#1D4ED8" },
+    { id: "prerequis",      name: "Pré-contentieux",   bg: "#FEF9C3", color: "#A16207" },
+    { id: "procedure",      name: "Procédure en cours",bg: "#FEE2E2", color: "#B91C1C" },
+    { id: "jugement",       name: "Jugement rendu",    bg: "#F4ECF7", color: "#8E44AD" },
+    { id: "execution",      name: "En exécution",      bg: "#FEF3C7", color: "#92400E" },
+    { id: "clos",           name: "Clôturé / Recouvré",bg: "#D1FAE5", color: "#065F46" },
+  ],
+};
+
+function loadContentieuxSettings() {
+  try {
+    const s = localStorage.getItem(CONTENTIEUX_SETTINGS_KEY);
+    if (!s) return CONTENTIEUX_DEFAULT_SETTINGS;
+    const p = JSON.parse(s);
+    return {
+      categories: p.categories || CONTENTIEUX_DEFAULT_SETTINGS.categories,
+      types:      p.types      || CONTENTIEUX_DEFAULT_SETTINGS.types,
+      labels:     p.labels     || CONTENTIEUX_DEFAULT_SETTINGS.labels,
+      statuses:   p.statuses   || CONTENTIEUX_DEFAULT_SETTINGS.statuses,
+    };
+  } catch { return CONTENTIEUX_DEFAULT_SETTINGS; }
+}
 
 const DEV_DEFAULT_SETTINGS = {
   categories: [
@@ -3110,6 +3163,7 @@ const ALL_TABS = [
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "◔" },
   { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
+  { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
   { id: "cotation",      label: "Cotation",         icon: "◎" },
   { id: "reporting",     label: "Reporting",        icon: "▤" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
@@ -3290,6 +3344,404 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════
+   SUIVI CONTENTIEUX VIEW — Kanban dédié
+═══════════════════════════════════════════════ */
+
+function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
+  const isNew = !dossier.reference;
+  const [d, setD] = useState({
+    reference: "", clientName: "", montant: "", category: "", type: "",
+    status: "identification", priority: "normale", labels: [],
+    notes: "", avocat: "", dateOuverture: new Date().toISOString().split("T")[0],
+    dateEcheance: "", datePrescription: "", ...dossier,
+  });
+  const statusObj  = cSettings.statuses.find(s => s.id === d.status) || cSettings.statuses[0];
+  const catObj     = cSettings.categories.find(c => c.name === d.category);
+  const catAccent  = catObj?.accent || "#C0392B";
+  const [showLP, setShowLP] = useState(false);
+  const lpBtnRef = useRef(null), lpRef = useRef(null);
+  useEffect(() => {
+    if (!showLP) return;
+    const h = (e) => {
+      if (lpRef.current?.contains(e.target) || lpBtnRef.current?.contains(e.target)) return;
+      setShowLP(false);
+    };
+    setTimeout(() => document.addEventListener("mousedown", h), 0);
+    return () => document.removeEventListener("mousedown", h);
+  }, [showLP]);
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)" }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:`4px solid ${catAccent}` }}>
+        <div style={{ padding:"20px 24px 0" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
+            <h2 style={{ margin:0,fontSize:18,fontFamily:"'Lora',serif",color:"#2C3E50" }}>{isNew ? "Nouveau dossier" : `Dossier ${d.reference}`}</h2>
+            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:22,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+          </div>
+
+          {/* Ligne 1 : Référence + Client */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>RÉFÉRENCE DOSSIER</div>
+              <input value={d.reference} onChange={e=>setD({...d,reference:e.target.value})} placeholder="ex: CTX-2025-001" autoFocus style={{ ...S.input }} />
+            </div>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>NOM DU DÉBITEUR</div>
+              <input value={d.clientName} onChange={e=>setD({...d,clientName:e.target.value})} placeholder="Nom / Raison sociale" style={{ ...S.input }} />
+            </div>
+          </div>
+
+          {/* Ligne 2 : Montant + Avocat */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>MONTANT (€)</div>
+              <input type="number" value={d.montant} onChange={e=>setD({...d,montant:e.target.value})} placeholder="0.00" style={{ ...S.input }} />
+            </div>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>AVOCAT / HUISSIER</div>
+              <input value={d.avocat} onChange={e=>setD({...d,avocat:e.target.value})} placeholder="Me Dupont…" style={{ ...S.input }} />
+            </div>
+          </div>
+
+          {/* Ligne 3 : Catégorie + Type + Priorité + Statut */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <select value={d.category} onChange={e=>setD({...d,category:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.category?"#2C3E50":"#999" }}>
+              <option value="">— Catégorie —</option>
+              {cSettings.categories.map(c => <option key={c.id} style={{color:"#2C3E50"}}>{c.name}</option>)}
+            </select>
+            <select value={d.type} onChange={e=>setD({...d,type:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.type?"#2C3E50":"#999" }}>
+              <option value="">— Type de procédure —</option>
+              {cSettings.types.map(t => <option key={t.id} style={{color:"#2C3E50"}}>{t.name}</option>)}
+            </select>
+            <select value={d.priority} onChange={e=>setD({...d,priority:e.target.value})} style={{ ...S.input,cursor:"pointer" }}>
+              <option value="urgente">🔴 Urgente</option>
+              <option value="haute">🟠 Haute</option>
+              <option value="normale">🟡 Normale</option>
+              <option value="basse">🟢 Basse</option>
+            </select>
+            <select value={d.status} onChange={e=>setD({...d,status:e.target.value})} style={{ ...S.input,cursor:"pointer",background:statusObj.bg,color:statusObj.color,fontWeight:600 }}>
+              {cSettings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          {/* Dates */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8 }}>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE D'OUVERTURE</div>
+              <input type="date" value={d.dateOuverture} onChange={e=>setD({...d,dateOuverture:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
+            </div>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>PROCHAINE ÉCHÉANCE</div>
+              <input type="date" value={d.dateEcheance} onChange={e=>setD({...d,dateEcheance:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
+            </div>
+            <div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE DE PRESCRIPTION</div>
+              <input type="date" value={d.datePrescription} onChange={e=>setD({...d,datePrescription:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
+            </div>
+          </div>
+
+          {/* Étiquettes */}
+          <div style={{ marginBottom:10 }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:4 }}>
+              {(d.labels||[]).map((lbl,i) => {
+                const lObj = cSettings.labels.find(l=>l.name===lbl)||{color:"#4F46E5",bg:"#EEF2FF"};
+                return <span key={i} style={{ fontSize:10,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"2px 8px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}30`,display:"inline-flex",alignItems:"center",gap:3,cursor:"pointer" }}
+                  onClick={()=>setD({...d,labels:(d.labels||[]).filter((_,j)=>j!==i)})}>🏷 {lbl} ×</span>;
+              })}
+              <button ref={lpBtnRef} type="button" onClick={()=>setShowLP(p=>!p)}
+                style={{ border:"1px dashed #FCA5A5",background:"none",borderRadius:20,padding:"2px 8px",fontSize:10,cursor:"pointer",color:"#C0392B",fontFamily:"'DM Mono',monospace" }}>+ Étiquette</button>
+            </div>
+            {showLP && (
+              <div ref={lpRef} style={{ display:"flex",flexWrap:"wrap",gap:6,padding:8,background:"#F8F8F8",borderRadius:8,border:"1px solid #E8E8E8" }}>
+                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).map(l => (
+                  <span key={l.id} onClick={()=>{setD({...d,labels:[...(d.labels||[]),l.name]});setShowLP(false);}}
+                    style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
+                ))}
+                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).length===0 && <span style={{fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>Toutes les étiquettes sont ajoutées</span>}
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>NOTES / HISTORIQUE</div>
+            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Historique du dossier, actes, décisions…" rows={6} />
+          </div>
+        </div>
+        <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+          {!isNew && (
+            <span style={{ fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Ouvert le {d.dateOuverture || "—"}</span>
+          )}
+          <div style={{ display:"flex",gap:8,marginLeft:"auto" }}>
+            <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666") }}>Annuler</button>
+            <button onClick={()=>{ if(d.reference.trim()||d.clientName.trim()){ onSave(d); onClose(); } }}
+              style={{ ...S.btn("#C0392B"),opacity:(d.reference.trim()||d.clientName.trim())?1:0.5 }}>
+              {isNew ? "Créer le dossier" : "Enregistrer"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentieuxSettingsPanel({ cSettings, onSave, onClose }) {
+  const [s, setS] = useState(JSON.parse(JSON.stringify(cSettings)));
+  const [tab, setTab] = useState("statuses");
+  const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const Tab = ({id,label}) => (
+    <button onClick={()=>setTab(id)} style={{ border:"none",background:"none",padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace",color:tab===id?"#C0392B":"#888",borderBottom:`2px solid ${tab===id?"#C0392B":"transparent"}`,fontWeight:tab===id?700:400 }}>{label}</button>
+  );
+  const Row = ({children}) => <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F5F5" }}>{children}</div>;
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}
+      onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{ background:"white",borderRadius:14,width:"100%",maxWidth:600,maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:"4px solid #C0392B" }}>
+        <div style={{ padding:"16px 20px 0" }}>
+          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10 }}>
+            <div style={{ fontSize:16,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>⚙ Paramètres Contentieux</div>
+            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+          </div>
+          <div style={{ borderBottom:"1px solid #F0F0F0",display:"flex",flexWrap:"wrap" }}>
+            <Tab id="statuses"    label="📋 Colonnes Kanban" />
+            <Tab id="categories"  label="📁 Catégories" />
+            <Tab id="types"       label="⚖ Types" />
+            <Tab id="labels"      label="🏷 Étiquettes" />
+          </div>
+          <div style={{ padding:"16px 4px" }}>
+            {tab==="statuses" && <>
+              <div style={{ fontSize:11,color:"#888",fontFamily:"'DM Mono',monospace",marginBottom:12 }}>Les colonnes définissent les étapes du kanban contentieux.</div>
+              {s.statuses.map(st => (
+                <Row key={st.id}>
+                  <span style={{ fontSize:10,fontWeight:700,background:st.bg,color:st.color,borderRadius:4,padding:"2px 8px",fontFamily:"'DM Mono',monospace",minWidth:90,textAlign:"center" }}>{st.name}</span>
+                  <input value={st.name} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={st.bg} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
+                  <input type="color" value={st.color} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,statuses:s.statuses.filter(x=>x.id!==st.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,statuses:[...s.statuses,{id:uid_fn(),name:"Nouveau",bg:"#F0F0F0",color:"#888"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter une colonne</button>
+            </>}
+            {tab==="categories" && <>
+              {s.categories.map(c => (
+                <Row key={c.id}>
+                  <div style={{ width:22,height:22,borderRadius:5,background:c.bg,border:`2px solid ${c.accent}`,flexShrink:0 }} />
+                  <input value={c.name} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
+                  <input type="color" value={c.bg} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Acc</span>
+                  <input type="color" value={c.accent} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,accent:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,categories:s.categories.filter(x=>x.id!==c.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,categories:[...s.categories,{id:uid_fn(),name:"Nouvelle",bg:"#F0F0F0",accent:"#C0392B"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+            </>}
+            {tab==="types" && <>
+              {s.types.map(t => (
+                <Row key={t.id}>
+                  <input value={t.icon} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,icon:e.target.value}:x)})} style={{ ...S.input,width:44,padding:"5px 8px",fontSize:16,textAlign:"center" }} />
+                  <input value={t.name} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <button onClick={()=>setS({...s,types:s.types.filter(x=>x.id!==t.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,types:[...s.types,{id:uid_fn(),name:"Nouveau",icon:"⚖"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+            </>}
+            {tab==="labels" && <>
+              {s.labels.map(l => (
+                <Row key={l.id}>
+                  <span style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"2px 10px",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
+                  <input value={l.name} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
+                  <input type="color" value={l.color} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Fond</span>
+                  <input type="color" value={l.bg} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
+                  <button onClick={()=>setS({...s,labels:s.labels.filter(x=>x.id!==l.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </Row>
+              ))}
+              <button onClick={()=>setS({...s,labels:[...s.labels,{id:uid_fn(),name:"Nouvelle",color:"#C0392B",bg:"#FDEDEC"}]})} style={{ ...S.btn("#C0392B"),marginTop:10,fontSize:11,padding:"6px 14px" }}>+ Nouvelle étiquette</button>
+            </>}
+          </div>
+        </div>
+        <div style={{ padding:"12px 20px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
+          <button onClick={()=>setS(JSON.parse(JSON.stringify(CONTENTIEUX_DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"6px 14px" }}>Réinitialiser</button>
+          <button onClick={()=>{ onSave(s); onClose(); }} style={{ ...S.btn("#C0392B"),fontSize:11,padding:"6px 14px" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContentieuxView() {
+  const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const [cSettings, setCSettings] = useState(() => loadContentieuxSettings());
+  const [dossiers, setDossiers]   = useState(() => { try { const s=localStorage.getItem(CONTENTIEUX_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [modal,      setModal]      = useState(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [dragId,   setDragId]   = useState(null);
+  const [dragOver, setDragOver] = useState(null);
+  const [showClos, setShowClos] = useState(false);
+  const [filterCat, setFilterCat] = useState("Toutes");
+  const [search, setSearch]       = useState("");
+
+  useEffect(() => { try { localStorage.setItem(CONTENTIEUX_STORAGE_KEY, JSON.stringify(dossiers)); } catch {} }, [dossiers]);
+
+  const saveCSettings = s => { setCSettings(s); try { localStorage.setItem(CONTENTIEUX_SETTINGS_KEY, JSON.stringify(s)); } catch {} };
+  const addDossier    = d => setDossiers(p => [d,...p]);
+  const updDossier    = d => setDossiers(p => p.map(x => x.id===d.id?d:x));
+  const delDossier    = id => { if(window.confirm("Supprimer ce dossier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
+  const handleSave    = d => { if(dossiers.find(x=>x.id===d.id)) updDossier(d); else addDossier(d); };
+  const openNew       = () => setModal({ id:uid_fn(),reference:"",clientName:"",montant:"",category:"",type:"",status:"identification",priority:"normale",labels:[],notes:"",avocat:"",dateOuverture:new Date().toISOString().split("T")[0],dateEcheance:"",datePrescription:"" });
+
+  const handleDrop = colId => {
+    if (!dragId) return;
+    const d = dossiers.find(x => x.id===dragId);
+    if (d && d.status!==colId) updDossier({...d, status:colId});
+    setDragId(null); setDragOver(null);
+  };
+
+  const fmtE = v => v ? Number(v).toLocaleString("fr-FR",{minimumFractionDigits:2})+" €" : "—";
+  const fmtD = v => v ? v.split("-").reverse().join("/") : "—";
+  const isOverdueD = v => v && new Date(v) < new Date(new Date().toDateString());
+
+  const activeDossiers = dossiers.filter(d => d.status !== "clos");
+  const closDossiers   = dossiers.filter(d => d.status === "clos");
+
+  // filtrage
+  const filtered = d => {
+    if (filterCat !== "Toutes" && d.category !== filterCat) return false;
+    if (search && !d.clientName?.toLowerCase().includes(search.toLowerCase()) && !d.reference?.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  };
+
+  const cols = cSettings.statuses.filter(s => s.id !== "clos").map(st => ({
+    ...st,
+    items: activeDossiers.filter(d => d.status===st.id && filtered(d))
+  }));
+
+  // Totaux par colonne
+  const totalMontant = dossiers.filter(d => d.status!=="clos").reduce((acc,d)=>acc+(parseFloat(d.montant)||0),0);
+
+  const prioColors = { urgente:"#C0392B",haute:"#E67E22",normale:"#95A5A6",basse:"#27AE60" };
+  const prioIcons  = { urgente:"⊛ P1",haute:"▲ P2",normale:"▬ P3",basse:"▼ P4" };
+
+  /* ── Kanban Card ── */
+  const KCard = ({ item }) => {
+    const cat = cSettings.categories.find(c => c.name===item.category);
+    const typeObj = cSettings.types.find(t => t.name===item.type);
+    const overdue = isOverdueD(item.dateEcheance);
+    return (
+      <div draggable
+        onDragStart={()=>setDragId(item.id)}
+        onDragEnd={()=>{setDragId(null);setDragOver(null);}}
+        style={{ background:dragId===item.id?"#FEF2F2":"white",borderRadius:10,padding:"10px 12px",
+          borderLeft:`3px solid ${cat?.accent||"#C0392B"}`,cursor:"grab",
+          boxShadow:"0 1px 4px rgba(0,0,0,0.06)",opacity:dragId===item.id?0.45:1,transition:"all 0.15s",
+          border:`1px solid ${overdue&&!item.clos?"#FCA5A5":"#ECEAE5"}`,borderLeftWidth:3,borderLeftColor:cat?.accent||"#C0392B" }}
+        onMouseEnter={e=>{if(dragId!==item.id){e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.1)";}}}
+        onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.06)";}}>
+        {/* Header */}
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:6 }}>
+          <div>
+            <div style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:"#AAA",marginBottom:2 }}>{item.reference||"—"}</div>
+            <div onClick={()=>setModal({...item})} style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50",lineHeight:1.3,cursor:"pointer" }}>{item.clientName||"Sans nom"}</div>
+          </div>
+          <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0 }}>
+            <span style={{ fontSize:9,color:prioColors[item.priority||"normale"],fontWeight:700,fontFamily:"'DM Mono',monospace" }}>{prioIcons[item.priority||"normale"]}</span>
+            <button onClick={e=>{e.stopPropagation();delDossier(item.id);}} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:12,padding:0,lineHeight:1 }}>×</button>
+          </div>
+        </div>
+        {/* Montant */}
+        {item.montant && <div style={{ fontSize:13,fontWeight:700,color:"#C0392B",fontFamily:"'DM Mono',monospace",marginBottom:6 }}>{fmtE(item.montant)}</div>}
+        {/* Badges */}
+        <div style={{ display:"flex",gap:4,flexWrap:"wrap",marginBottom:item.dateEcheance||item.avocat?6:0 }}>
+          {cat && <span style={{ fontSize:8,background:cat.bg,color:cat.accent,borderRadius:4,padding:"1px 6px",fontFamily:"'DM Mono',monospace",fontWeight:700 }}>{cat.name}</span>}
+          {typeObj && <span style={{ fontSize:8,background:"#F5F5F5",color:"#555",borderRadius:4,padding:"1px 6px",fontFamily:"'DM Mono',monospace" }}>{typeObj.icon} {typeObj.name}</span>}
+          {(item.labels||[]).map((lbl,i)=>{ const lObj=cSettings.labels.find(l=>l.name===lbl)||{color:"#C0392B",bg:"#FDEDEC"}; return <span key={i} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"1px 6px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}20` }}>🏷 {lbl}</span>; })}
+        </div>
+        {/* Footer dates */}
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:9,fontFamily:"'DM Mono',monospace",color:"#AAA" }}>
+          {item.dateEcheance && <span style={{ color:overdue?"#C0392B":"#AAA",fontWeight:overdue?700:400 }}>{overdue?"⚠ ":""}{fmtD(item.dateEcheance)}</span>}
+          {item.avocat && <span style={{ color:"#4F46E5",fontSize:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:90 }}>⚖ {item.avocat}</span>}
+        </div>
+        {item.datePrescription && <div style={{ marginTop:3,fontSize:8,fontFamily:"'DM Mono',monospace",color:"#E67E22" }}>⏱ Prescription : {fmtD(item.datePrescription)}</div>}
+      </div>
+    );
+  };
+
+  const FBtn = ({label,active,onClick,color}) => (
+    <button onClick={onClick} style={{ border:`1px solid ${active?color||"#C0392B":"#E0E0E0"}`,background:active?color||"#C0392B":"white",color:active?"white":"#888",borderRadius:5,padding:"3px 9px",fontSize:10,cursor:"pointer",fontFamily:"'DM Mono',monospace",transition:"all 0.15s",whiteSpace:"nowrap" }}>{label}</button>
+  );
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",height:"calc(100vh - 56px)",overflow:"hidden" }}>
+      {/* Toolbar */}
+      <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 16px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0 }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Débiteur, référence…" style={{ ...S.input,width:180,padding:"4px 8px",fontSize:11 }} />
+        <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+        {["Toutes",...cSettings.categories.map(c=>c.name)].map(c=>{ const co=cSettings.categories.find(x=>x.name===c); return <FBtn key={c} label={c} active={filterCat===c} onClick={()=>setFilterCat(c)} color={co?.accent} />; })}
+        <div style={{ flex:1 }} />
+        {/* Stats globales */}
+        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#C0392B",fontWeight:700 }}>
+          {activeDossiers.length} dossier{activeDossiers.length!==1?"s":""} actif{activeDossiers.length!==1?"s":""}
+        </span>
+        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888" }}>|</span>
+        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#C0392B",fontWeight:700 }}>
+          {totalMontant.toLocaleString("fr-FR",{minimumFractionDigits:2})} €
+        </span>
+        <button onClick={()=>setShowSettings(true)} style={{ border:"1px solid #FCA5A5",background:"#FEF2F2",color:"#C0392B",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
+        <button onClick={openNew} style={{ ...S.btn("#C0392B"),padding:"5px 14px",fontSize:11 }}>+ Nouveau dossier</button>
+      </div>
+
+      {/* Kanban */}
+      <div style={{ flex:1,overflowX:"auto",overflowY:"hidden",padding:"12px 16px",display:"flex",gap:12,alignItems:"flex-start" }}>
+        {cols.map(col => (
+          <div key={col.id}
+            onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
+            onDragLeave={()=>setDragOver(null)}
+            onDrop={()=>handleDrop(col.id)}
+            style={{ minWidth:240,flex:"0 0 240px",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 160px)" }}>
+            {/* Col header */}
+            <div style={{ padding:"10px 14px",background:col.bg,borderRadius:"10px 10px 0 0",border:`1px solid ${dragOver===col.id?"#C0392B":"#E8E8E8"}`,borderBottom:"none",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+              <span style={{ fontSize:11,fontWeight:700,fontFamily:"'DM Mono',monospace",color:col.color }}>{col.name.toUpperCase()}</span>
+              <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+                {col.items.length>0 && <span style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:col.color,fontWeight:700 }}>
+                  {col.items.reduce((a,d)=>a+(parseFloat(d.montant)||0),0).toLocaleString("fr-FR",{minimumFractionDigits:0})}€
+                </span>}
+                <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:col.color,background:"white",borderRadius:20,padding:"1px 8px",fontWeight:700 }}>{col.items.length}</span>
+              </div>
+            </div>
+            {/* Col body */}
+            <div style={{ flex:1,overflowY:"auto",background:dragOver===col.id?"#FFF5F5":"#F8F8F6",border:`1px solid ${dragOver===col.id?"#C0392B":"#E8E8E8"}`,borderTop:"none",borderRadius:"0 0 10px 10px",padding:8,display:"flex",flexDirection:"column",gap:8,minHeight:80 }}>
+              {col.items.length===0
+                ? <div style={{ fontSize:11,color:"#CCC",fontFamily:"'Lora',serif",fontStyle:"italic",textAlign:"center",padding:"16px 0" }}>Aucun dossier</div>
+                : col.items.map(d => <KCard key={d.id} item={d} />)}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Section clôturés */}
+      <div style={{ flexShrink:0,padding:"0 16px 12px",background:"transparent" }}>
+        <button onClick={()=>setShowClos(p=>!p)} style={{ border:"1px solid #D1FAE5",background:showClos?"#D1FAE5":"white",color:"#065F46",borderRadius:20,padding:"5px 16px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontWeight:600 }}>
+          {showClos?"▾ Masquer clôturés":"▸ Voir clôturés"} ({closDossiers.length})
+        </button>
+        {showClos && closDossiers.length>0 && (
+          <div style={{ display:"flex",gap:10,overflowX:"auto",padding:"10px 0 4px",alignItems:"flex-start" }}>
+            {closDossiers.filter(filtered).map(d => <div key={d.id} style={{ minWidth:220,flex:"0 0 220px" }}><KCard item={d} /></div>)}
+          </div>
+        )}
+      </div>
+
+      {modal && <ContentieuxDossierModal dossier={modal} cSettings={cSettings} onSave={handleSave} onClose={()=>setModal(null)} />}
+      {showSettings && <ContentieuxSettingsPanel cSettings={cSettings} onSave={saveCSettings} onClose={()=>setShowSettings(false)} />}
     </div>
   );
 }
@@ -6072,6 +6524,7 @@ function App() {
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
     { id: "notifications", label: "Rappels",          icon: "◔",  badge: remCount, iconColor: "white" },
     { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
+    { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "payments",      label: "Paiements",        icon: "⬡" },
@@ -6136,7 +6589,7 @@ function App() {
         ))}
         {/* Section : Finance & Suivi */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Finance & Suivi</div>
-        {visibleNav.filter(n => ["suiviclient","cotation","reporting","payments"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["suiviclient","contentieux","cotation","reporting","payments"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "10px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
@@ -6166,7 +6619,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.271<br />06/05/26
+          v.0.272<br />06/05/26
         </div>
       </div>
 
@@ -6211,7 +6664,7 @@ function App() {
       )}
 
       {/* Full-width views vs contained views */}
-      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev") ? (
+      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux") ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -6227,6 +6680,9 @@ function App() {
           )}
           {view === "dev" && (
             <DevView />
+          )}
+          {view === "contentieux" && (
+            <ContentieuxView />
           )}
         </div>
       ) : (
