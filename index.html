@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.268<br/>05/05/26 à 09h55</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.269<br/>05/05/26 à 10h06</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -1591,6 +1591,7 @@ function LabelCell({ task, settings }) {
   const [showMenu, setShowMenu] = useState(false);
   const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
   const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
   const openMenu = () => {
     if (btnRef.current) {
       const r = btnRef.current.getBoundingClientRect();
@@ -1598,6 +1599,16 @@ function LabelCell({ task, settings }) {
     }
     setShowMenu(m => !m);
   };
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target)) {
+        setShowMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
   const available = (settings.labels||[]).filter(l => !(task.labels||[]).includes(l.name));
   const dispatch = (labels) => window.dispatchEvent(new CustomEvent("addLabel", { detail: { id: task.id, labels } }));
   return (
@@ -1615,7 +1626,7 @@ function LabelCell({ task, settings }) {
       <button ref={btnRef} onClick={openMenu}
         style={{ fontSize: 9, border: "1px dashed #C7D2FE", background: "none", borderRadius: 20, padding: "1px 5px", cursor: "pointer", color: "#4F46E5", fontFamily: "'Lora',serif", flexShrink: 0 }}>+</button>
       {showMenu && available.length > 0 && (
-        <div style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 9999, background: "white", border: "1px solid #E8E8E8", borderRadius: 8, padding: "6px", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div ref={menuRef} style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 9999, background: "white", border: "1px solid #E8E8E8", borderRadius: 8, padding: "6px", boxShadow: "0 4px 16px rgba(0,0,0,0.12)", display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           {available.map(l => (
             <button key={l.id} onClick={() => { dispatch([...(task.labels||[]), l.name]); setShowMenu(false); }}
               style={{ background: l.bg, color: l.color, border: `1px solid ${l.color}30`, borderRadius: 20, padding: "3px 10px", fontSize: 10, cursor: "pointer", fontFamily: "'Lora',serif", textAlign: "left" }}>
@@ -4547,7 +4558,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
       {!isMobile && (
         <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 100px 3px", borderBottom: "1px solid #ECEAE5", background: "#F8F8F6", flexShrink: 0, userSelect: "none" }}>
           <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
-          <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
+          <span style={{ flexShrink: 0, minWidth: 20 }}></span><span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 16 }}>#</span>
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", minWidth: 12 }}>P</span>
           <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", width: 16, flexShrink: 0, textAlign: "center" }}>☀</span>
           <ColHeader label="TÂCHE" col="title" />
@@ -5348,6 +5359,7 @@ function App() {
   };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
+  const dismissedRef = useRef(new Set());
   const [undoTask, setUndoTask] = useState(null); // 2) undo
   const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
   const [showDailySummary, setShowDailySummary] = useState(() => { try { var k = "taskmanager_daily_summary_last"; var d = new Date().toISOString().split("T")[0]; return localStorage.getItem(k) !== d; } catch(e) { return true; } });
@@ -5442,7 +5454,8 @@ function App() {
         if (t.reminder === "2d") return diff >= 0 && diff <= 2880;
         return false;
       });
-      if (fired.length > 0) setToasts(prev => { const ids = prev.map(x => x.id); return [...prev, ...fired.filter(t => !ids.includes(t.id))].slice(-3); });
+      const newFired = fired.filter(t => !dismissedRef.current.has(t.id));
+      if (newFired.length > 0) setToasts(prev => { const ids = prev.map(x => x.id); return [...prev, ...newFired.filter(t => !ids.includes(t.id))].slice(-3); });
     };
     check(); notifTimerRef.current = setInterval(check, 60000);
     return () => clearInterval(notifTimerRef.current);
@@ -5643,7 +5656,7 @@ function App() {
         ))}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.268<br />05/05/26 à 09h55
+          v.0.269<br />05/05/26 à 10h06
         </div>
       </div>
 
@@ -5778,7 +5791,7 @@ function App() {
       })()}
 
       {modal && <TaskModal task={modal} onSave={handleSave} onClose={() => setModal(null)} onAddTask={addTask} settings={settings} />}
-      <Toast notifs={toasts} onDismiss={id => setToasts(p => p.filter(x => x.id !== id))} />
+      <Toast notifs={toasts} onDismiss={id => { dismissedRef.current.add(id); setToasts(p => p.filter(x => x.id !== id)); }} />
       {undoTask && <UndoBanner task={undoTask} onUndo={undoDelete} onDismiss={() => setUndoTask(null)} />}
     </div>
   );
