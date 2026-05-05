@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.274<br/>06/05/26</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.275<br/>05/05/26 à 22h11</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -4037,19 +4037,19 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
         cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
       <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
         style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
-      <span style={{ fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
+      <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
       <span title={`Priorité ${task.priority}`} style={{ fontSize:10,color:prioColor,flexShrink:0,fontWeight:700,lineHeight:1,minWidth:12,textAlign:"center" }}>{prioIcon}</span>
       {/* Titre */}
       <span style={{ fontSize:13,fontWeight:500,color:task.completed?"#AAA":"#2C3E50",textDecoration:task.completed?"line-through":"none",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:cw.title,flexShrink:0 }}>{task.title}</span>
       {/* Statut */}
-      <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
+      <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
       {/* Catégorie */}
-      <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
+      <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
       {/* Type */}
-      <span style={{ fontSize:8,color:"#555",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
+      <span style={{ fontSize:8,color:"#555",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
       {/* 1) Périmètre — colonne fixe */}
       {task.scope
-        ? <span style={{ fontSize:8,color:"#6B7280",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
+        ? <span style={{ fontSize:10,color:"#6B7280",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
         : <span style={{ width:cw.scope||90,flexShrink:0 }} />}
       {/* 1) Étiquettes — colonne avec bouton + */}
       <div style={{ width:cw.labels||80,flexShrink:0,overflow:"visible" }}>
@@ -4059,11 +4059,11 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
       <div style={{ flex:1 }} />
       {/* Version */}
       {task.version
-        ? <span style={{ fontSize:8,fontFamily:"'DM Mono',monospace",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
+        ? <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
         : <span style={{ minWidth:60,flexShrink:0 }} />}
       {/* Date cible */}
       {task.dueDate
-        ? <span style={{ fontSize:8,color:"#95A5A6",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
+        ? <span style={{ fontSize:10,color:"#95A5A6",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
         : <span style={{ minWidth:80,flexShrink:0 }} />}
       <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
         style={{ border:"none",background:"none",cursor:"pointer",color:hovered?"#E8A0A0":"transparent",fontSize:13,padding:"0 2px",transition:"color 0.1s",flexShrink:0,lineHeight:1,width:20 }}>×</button>
@@ -4164,6 +4164,11 @@ function DevView() {
 
   const [devSettings, setDevSettings] = useState(() => loadDevSettings());
   const [tasks, setTasks] = useState(() => { try { const s=localStorage.getItem(DEV_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [undoDevTask, setUndoDevTask]   = React.useState(null);
+  const undoDevTimerRef                 = React.useRef(null);
+  const [showDevTrash, setShowDevTrash] = React.useState(false);
+  const [devTrash, setDevTrash]         = React.useState(() => { try { const s=localStorage.getItem("dev_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const saveDevTrash = (t) => { try { localStorage.setItem("dev_trash_v1", JSON.stringify(t)); } catch {} };
   const [modal, setModal] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [filterCat,    setFilterCat]    = useState("Toutes");
@@ -4188,7 +4193,31 @@ function DevView() {
 
   const addTask  = t => setTasks(p=>[t,...p]);
   const updTask  = t => setTasks(p=>p.map(x=>x.id===t.id?t:x));
-  const delTask  = id => { if(window.confirm("Supprimer cette évolution ?")) setTasks(p=>p.filter(x=>x.id!==id)); };
+  const delTask = (id) => {
+    const r = tasks.find(x => x.id === id);
+    if (!r) return;
+    setTasks(p => p.filter(x => x.id !== id));
+    const trashed = { ...r, deletedAt: new Date().toISOString() };
+    setDevTrash(p => { const n = [...p, trashed]; saveDevTrash(n); return n; });
+    if (undoDevTimerRef.current) clearTimeout(undoDevTimerRef.current);
+    setUndoDevTask(r);
+    undoDevTimerRef.current = setTimeout(() => setUndoDevTask(null), 10000);
+  };
+  const undoDelDev = () => {
+    if (!undoDevTask) return;
+    clearTimeout(undoDevTimerRef.current);
+    setTasks(p => [...p, undoDevTask]);
+    setDevTrash(p => { const n = p.filter(x => x.id !== undoDevTask.id); saveDevTrash(n); return n; });
+    setUndoDevTask(null);
+  };
+  const restoreDevFromTrash = (id) => {
+    const r = devTrash.find(x => x.id === id);
+    if (!r) return;
+    const { deletedAt, ...restored } = r;
+    setTasks(p => [...p, restored]);
+    setDevTrash(p => { const n = p.filter(x => x.id !== id); saveDevTrash(n); return n; });
+  };
+  const purgeDevTrash = (id) => setDevTrash(p => { const n = p.filter(x => x.id !== id); saveDevTrash(n); return n; });
   const togTask  = id => setTasks(p=>p.map(x=>x.id===id?{...x,completed:!x.completed,status:!x.completed?"done":x.status}:x));
   const handleSave = t => { if(tasks.find(x=>x.id===t.id)) updTask(t); else addTask(t); };
   const saveDevSettings = s => { setDevSettings(s); try { localStorage.setItem(DEV_SETTINGS_KEY,JSON.stringify(s)); } catch {} };
@@ -4225,7 +4254,7 @@ function DevView() {
   );
   const ColHdr = ({label,col}) => (
     <div style={{ display:"flex",alignItems:"center",flexShrink:0,width:colWidths[col]||72 }}>
-      <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
+      <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
       <ResizeHandle col={col} />
     </div>
   );
@@ -4245,6 +4274,7 @@ function DevView() {
         </>}
         <div style={{ flex:1 }} />
         <button onClick={()=>setShowSettings(true)} title="Paramètres Dev" style={{ border:"1px solid #C7D2FE",background:"#EEF2FF",color:"#4F46E5",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
+        <button onClick={()=>setShowDevTrash(true)} title="Corbeille Dev" style={{ border:"1px solid #E0E0E0",background:"white",color:"#888",borderRadius:6,padding:"4px 10px",fontSize:13,cursor:"pointer" }}>🗑</button>
         <button onClick={openNew} style={{ ...S.btn("#4F46E5"),padding:"4px 14px",fontSize:11 }}>+ Nouvelle</button>
       </div>
 
@@ -4285,6 +4315,44 @@ function DevView() {
         <span style={{ flex:1,textAlign:"right",fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace" }}>{displayed.length} affiché{displayed.length!==1?"s":""} / {total} total</span>
       </div>
 
+      {/* Undo Banner Dev */}
+      {undoDevTask && (
+        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9998,background:"#2C3E50",color:"white",borderRadius:12,padding:"12px 20px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:16,fontFamily:"'Lora',serif",fontSize:12,animation:"slideUp 0.3s ease" }}>
+          <span>🗑 <strong>"{(undoDevTask.name||undoDevTask.title||"Évolution").slice(0,30)}"</strong> supprimée</span>
+          <button onClick={undoDelDev} style={{ background:"#27AE60",border:"none",borderRadius:6,color:"white",padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>↩ Annuler</button>
+          <button onClick={()=>setUndoDevTask(null)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:0 }}>×</button>
+        </div>
+      )}
+      {/* Corbeille Dev */}
+      {showDevTrash && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={e=>{if(e.target===e.currentTarget)setShowDevTrash(false);}}>
+          <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:600,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",padding:"24px 28px" }}>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
+              <div style={{ fontSize:17,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>🗑 Corbeille — 30 derniers jours</div>
+              <button onClick={()=>setShowDevTrash(false)} style={{ border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+            </div>
+            {(() => {
+              const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
+              const recent = devTrash.filter(x => new Date(x.deletedAt) >= cutoff).sort((a,b)=>new Date(b.deletedAt)-new Date(a.deletedAt));
+              if (!recent.length) return <div style={{ textAlign:"center",padding:"40px 0",color:"#CCC",fontFamily:"'Lora',serif",fontSize:14 }}>Aucun élément dans la corbeille</div>;
+              return recent.map(r => (
+                <div key={r.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F5F5" }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13,fontFamily:"'Lora',serif",color:"#2C3E50",fontWeight:600 }}>{r.name||r.title||"Sans titre"}</div>
+                    <div style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:"#AAA",marginTop:2 }}>
+                      Supprimé le {new Date(r.deletedAt).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"})}
+                      {r.category ? ` · ${r.category}` : ""}
+                      {r.type ? ` · ${r.type}` : ""}
+                    </div>
+                  </div>
+                  <button onClick={()=>restoreDevFromTrash(r.id)} style={{ border:"1px solid #27AE60",background:"#F0FFF4",color:"#27AE60",borderRadius:6,padding:"4px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,flexShrink:0 }}>↩ Restaurer</button>
+                  <button onClick={()=>purgeDevTrash(r.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:16,padding:"0 4px" }}>🗑</button>
+                </div>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
       {modal && <DevTaskModal task={modal} devSettings={devSettings} onSave={handleSave} onClose={()=>setModal(null)} />}
       {showSettings && <DevSettingsPanel devSettings={devSettings} onSave={saveDevSettings} onClose={()=>setShowSettings(false)} />}
     </div>
