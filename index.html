@@ -3492,13 +3492,24 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
 }
 
 function ContentieuxSettingsPanel({ cSettings, onSave, onClose }) {
-  const [s, setS] = useState(JSON.parse(JSON.stringify(cSettings)));
+  const [s, setS]   = useState(() => JSON.parse(JSON.stringify(cSettings)));
   const [tab, setTab] = useState("statuses");
-  const uid_fn = () => Math.random().toString(36).substr(2,9);
-  const Tab = ({id,label}) => (
-    <button onClick={()=>setTab(id)} style={{ border:"none",background:"none",padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace",color:tab===id?"#C0392B":"#888",borderBottom:`2px solid ${tab===id?"#C0392B":"transparent"}`,fontWeight:tab===id?700:400 }}>{label}</button>
-  );
-  const Row = ({children}) => <div style={{ display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F5F5" }}>{children}</div>;
+  const newId = () => Math.random().toString(36).substr(2,9);
+
+  const updStatus = (id, field, val) => setS(p => ({...p, statuses:  p.statuses.map(x  => x.id===id ? {...x,[field]:val} : x)}));
+  const delStatus = (id)             => setS(p => ({...p, statuses:  p.statuses.filter(x => x.id!==id)}));
+  const updCat    = (id, field, val) => setS(p => ({...p, categories:p.categories.map(x => x.id===id ? {...x,[field]:val} : x)}));
+  const delCat    = (id)             => setS(p => ({...p, categories:p.categories.filter(x => x.id!==id)}));
+  const updType   = (id, field, val) => setS(p => ({...p, types:     p.types.map(x     => x.id===id ? {...x,[field]:val} : x)}));
+  const delType   = (id)             => setS(p => ({...p, types:     p.types.filter(x  => x.id!==id)}));
+  const updLabel  = (id, field, val) => setS(p => ({...p, labels:    p.labels.map(x    => x.id===id ? {...x,[field]:val} : x)}));
+  const delLabel  = (id)             => setS(p => ({...p, labels:    p.labels.filter(x => x.id!==id)}));
+
+  const tabBtnStyle = (id) => ({ border:"none",background:"none",padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"'DM Mono',monospace",color:tab===id?"#C0392B":"#888",borderBottom:`2px solid ${tab===id?"#C0392B":"transparent"}`,fontWeight:tab===id?700:400 });
+  const rowStyle    = { display:"flex",alignItems:"center",gap:8,padding:"8px 0",borderBottom:"1px solid #F5F5F5" };
+  const colorInput  = { width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 };
+  const lbl9        = { fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" };
+
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}
       onClick={e=>e.target===e.currentTarget&&onClose()}>
@@ -3508,66 +3519,78 @@ function ContentieuxSettingsPanel({ cSettings, onSave, onClose }) {
             <div style={{ fontSize:16,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>⚙ Paramètres Contentieux</div>
             <button onClick={onClose} style={{ border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7" }}>×</button>
           </div>
+
+          {/* Tabs */}
           <div style={{ borderBottom:"1px solid #F0F0F0",display:"flex",flexWrap:"wrap" }}>
-            <Tab id="statuses"    label="📋 Colonnes Kanban" />
-            <Tab id="categories"  label="📁 Catégories" />
-            <Tab id="types"       label="⚖ Types" />
-            <Tab id="labels"      label="🏷 Étiquettes" />
+            <button onClick={()=>setTab("statuses")}   style={tabBtnStyle("statuses")}  >📋 Colonnes Kanban</button>
+            <button onClick={()=>setTab("categories")} style={tabBtnStyle("categories")}>📁 Catégories</button>
+            <button onClick={()=>setTab("types")}      style={tabBtnStyle("types")}     >⚖ Types</button>
+            <button onClick={()=>setTab("labels")}     style={tabBtnStyle("labels")}    >🏷 Étiquettes</button>
           </div>
+
           <div style={{ padding:"16px 4px" }}>
+
+            {/* ── Colonnes Kanban ── */}
             {tab==="statuses" && <>
               <div style={{ fontSize:11,color:"#888",fontFamily:"'DM Mono',monospace",marginBottom:12 }}>Les colonnes définissent les étapes du kanban contentieux.</div>
               {s.statuses.map(st => (
-                <Row key={st.id}>
-                  <span style={{ fontSize:10,fontWeight:700,background:st.bg,color:st.color,borderRadius:4,padding:"2px 8px",fontFamily:"'DM Mono',monospace",minWidth:90,textAlign:"center" }}>{st.name}</span>
-                  <input value={st.name} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
-                  <input type="color" value={st.bg} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
-                  <input type="color" value={st.color} onChange={e=>setS({...s,statuses:s.statuses.map(x=>x.id===st.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <button onClick={()=>setS({...s,statuses:s.statuses.filter(x=>x.id!==st.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
-                </Row>
+                <div key={st.id} style={rowStyle}>
+                  <span style={{ fontSize:10,fontWeight:700,background:st.bg,color:st.color,borderRadius:4,padding:"2px 8px",fontFamily:"'DM Mono',monospace",minWidth:90,textAlign:"center",flexShrink:0 }}>{st.name}</span>
+                  <input value={st.name} onChange={e=>updStatus(st.id,"name",e.target.value)} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={lbl9}>BG</span>
+                  <input type="color" value={st.bg}    onChange={e=>updStatus(st.id,"bg",   e.target.value)} style={colorInput} />
+                  <span style={lbl9}>Txt</span>
+                  <input type="color" value={st.color} onChange={e=>updStatus(st.id,"color",e.target.value)} style={colorInput} />
+                  <button onClick={()=>delStatus(st.id)} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </div>
               ))}
-              <button onClick={()=>setS({...s,statuses:[...s.statuses,{id:uid_fn(),name:"Nouveau",bg:"#F0F0F0",color:"#888"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter une colonne</button>
+              <button onClick={()=>setS(p=>({...p,statuses:[...p.statuses,{id:newId(),name:"Nouveau",bg:"#F0F0F0",color:"#888"}]}))} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter une colonne</button>
             </>}
+
+            {/* ── Catégories ── */}
             {tab==="categories" && <>
               {s.categories.map(c => (
-                <Row key={c.id}>
+                <div key={c.id} style={rowStyle}>
                   <div style={{ width:22,height:22,borderRadius:5,background:c.bg,border:`2px solid ${c.accent}`,flexShrink:0 }} />
-                  <input value={c.name} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>BG</span>
-                  <input type="color" value={c.bg} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Acc</span>
-                  <input type="color" value={c.accent} onChange={e=>setS({...s,categories:s.categories.map(x=>x.id===c.id?{...x,accent:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <button onClick={()=>setS({...s,categories:s.categories.filter(x=>x.id!==c.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
-                </Row>
+                  <input value={c.name} onChange={e=>updCat(c.id,"name",e.target.value)} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={lbl9}>BG</span>
+                  <input type="color" value={c.bg}     onChange={e=>updCat(c.id,"bg",    e.target.value)} style={colorInput} />
+                  <span style={lbl9}>Acc</span>
+                  <input type="color" value={c.accent} onChange={e=>updCat(c.id,"accent",e.target.value)} style={colorInput} />
+                  <button onClick={()=>delCat(c.id)} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </div>
               ))}
-              <button onClick={()=>setS({...s,categories:[...s.categories,{id:uid_fn(),name:"Nouvelle",bg:"#F0F0F0",accent:"#C0392B"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+              <button onClick={()=>setS(p=>({...p,categories:[...p.categories,{id:newId(),name:"Nouvelle",bg:"#F0F0F0",accent:"#C0392B"}]}))} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
             </>}
+
+            {/* ── Types ── */}
             {tab==="types" && <>
               {s.types.map(t => (
-                <Row key={t.id}>
-                  <input value={t.icon} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,icon:e.target.value}:x)})} style={{ ...S.input,width:44,padding:"5px 8px",fontSize:16,textAlign:"center" }} />
-                  <input value={t.name} onChange={e=>setS({...s,types:s.types.map(x=>x.id===t.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
-                  <button onClick={()=>setS({...s,types:s.types.filter(x=>x.id!==t.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
-                </Row>
+                <div key={t.id} style={rowStyle}>
+                  <input value={t.icon} onChange={e=>updType(t.id,"icon",e.target.value)} style={{ ...S.input,width:44,padding:"5px 8px",fontSize:16,textAlign:"center" }} />
+                  <input value={t.name} onChange={e=>updType(t.id,"name",e.target.value)} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <button onClick={()=>delType(t.id)} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </div>
               ))}
-              <button onClick={()=>setS({...s,types:[...s.types,{id:uid_fn(),name:"Nouveau",icon:"⚖"}]})} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
+              <button onClick={()=>setS(p=>({...p,types:[...p.types,{id:newId(),name:"Nouveau",icon:"⚖"}]}))} style={{ ...S.ghost,marginTop:10 }}>+ Ajouter</button>
             </>}
+
+            {/* ── Étiquettes ── */}
             {tab==="labels" && <>
               {s.labels.map(l => (
-                <Row key={l.id}>
-                  <span style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"2px 10px",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
-                  <input value={l.name} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,name:e.target.value}:x)})} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Txt</span>
-                  <input type="color" value={l.color} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,color:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Fond</span>
-                  <input type="color" value={l.bg} onChange={e=>setS({...s,labels:s.labels.map(x=>x.id===l.id?{...x,bg:e.target.value}:x)})} style={{ width:28,height:28,border:"1px solid #E0E0E0",borderRadius:4,cursor:"pointer",padding:2 }} />
-                  <button onClick={()=>setS({...s,labels:s.labels.filter(x=>x.id!==l.id)})} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
-                </Row>
+                <div key={l.id} style={rowStyle}>
+                  <span style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"2px 10px",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30`,flexShrink:0 }}>🏷 {l.name}</span>
+                  <input value={l.name} onChange={e=>updLabel(l.id,"name", e.target.value)} style={{ ...S.input,flex:1,padding:"5px 8px",fontSize:12 }} />
+                  <span style={lbl9}>Txt</span>
+                  <input type="color" value={l.color} onChange={e=>updLabel(l.id,"color",e.target.value)} style={colorInput} />
+                  <span style={lbl9}>Fond</span>
+                  <input type="color" value={l.bg}    onChange={e=>updLabel(l.id,"bg",   e.target.value)} style={colorInput} />
+                  <button onClick={()=>delLabel(l.id)} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:16 }}>×</button>
+                </div>
               ))}
-              <button onClick={()=>setS({...s,labels:[...s.labels,{id:uid_fn(),name:"Nouvelle",color:"#C0392B",bg:"#FDEDEC"}]})} style={{ ...S.btn("#C0392B"),marginTop:10,fontSize:11,padding:"6px 14px" }}>+ Nouvelle étiquette</button>
+              <button onClick={()=>setS(p=>({...p,labels:[...p.labels,{id:newId(),name:"Nouvelle",color:"#C0392B",bg:"#FDEDEC"}]}))} style={{ ...S.btn("#C0392B"),marginTop:10,fontSize:11,padding:"6px 14px" }}>+ Nouvelle étiquette</button>
             </>}
+
           </div>
         </div>
         <div style={{ padding:"12px 20px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
