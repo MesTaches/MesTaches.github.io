@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.272<br/>06/05/26</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.273<br/>06/05/26</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -3353,136 +3353,276 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
 ═══════════════════════════════════════════════ */
 
 function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
-  const isNew = !dossier.reference;
+  const isNew = !dossier.reference && !dossier.clientName;
   const [d, setD] = useState({
-    reference: "", clientName: "", montant: "", category: "", type: "",
-    status: "identification", priority: "normale", labels: [],
-    notes: "", avocat: "", dateOuverture: new Date().toISOString().split("T")[0],
-    dateEcheance: "", datePrescription: "", ...dossier,
+    reference:"", clientName:"", montant:"", category:"", type:"",
+    status:"identification", priority:"normale", labels:[],
+    suiviStatus:"a_engager",   // 4) statut du suivi
+    notes:"", avocat:"",
+    dateOuverture: new Date().toISOString().split("T")[0],
+    dateEcheance:"", dateCloture:"",   // 5) datePrescription → dateCloture
+    procedureCollective:"",             // 7) type procédure collective
+    dateDeclarationCreance:"",          // 7) date déclaration de créance
+    subtasks:[], attachments:[],        // 2) sous-tâches  3) pièces jointes
+    ...dossier,
   });
-  const statusObj  = cSettings.statuses.find(s => s.id === d.status) || cSettings.statuses[0];
-  const catObj     = cSettings.categories.find(c => c.name === d.category);
-  const catAccent  = catObj?.accent || "#C0392B";
+
+  // 1) Fermeture correcte : mousedown dans la fenêtre empêche la fermeture au mouseup en dehors
+  const [mouseDownInside, setMouseDownInside] = useState(false);
+  const handleOverlayMouseDown = e => { if (e.target === e.currentTarget) setMouseDownInside(false); };
+  const handlePanelMouseDown   = () => setMouseDownInside(true);
+  const handleOverlayMouseUp   = e => { if (e.target === e.currentTarget && !mouseDownInside) onClose(); setMouseDownInside(false); };
+
+  const statusObj = cSettings.statuses.find(s => s.id === d.status) || cSettings.statuses[0];
+  const catObj    = cSettings.categories.find(c => c.name === d.category);
+  const catAccent = catObj?.accent || "#C0392B";
+  const newId     = () => Math.random().toString(36).substr(2,9);
+
   const [showLP, setShowLP] = useState(false);
   const lpBtnRef = useRef(null), lpRef = useRef(null);
   useEffect(() => {
     if (!showLP) return;
-    const h = (e) => {
-      if (lpRef.current?.contains(e.target) || lpBtnRef.current?.contains(e.target)) return;
-      setShowLP(false);
-    };
+    const h = e => { if (lpRef.current?.contains(e.target) || lpBtnRef.current?.contains(e.target)) return; setShowLP(false); };
     setTimeout(() => document.addEventListener("mousedown", h), 0);
     return () => document.removeEventListener("mousedown", h);
   }, [showLP]);
 
+  // 3) Pièces jointes
+  const fileInputRef = useRef(null);
+  const handleFiles = files => {
+    const newAtts = Array.from(files).map(f => ({ id: newId(), name: f.name, size: f.size, type: f.type, dataUrl: null, _file: f }));
+    const readers = newAtts.map(att => new Promise(res => {
+      const r = new FileReader();
+      r.onload = ev => res({ ...att, dataUrl: ev.target.result });
+      r.readAsDataURL(att._file);
+    }));
+    Promise.all(readers).then(atts => setD(p => ({ ...p, attachments: [...(p.attachments||[]), ...atts.map(a => ({ id: a.id, name: a.name, size: a.size, type: a.type, dataUrl: a.dataUrl }))] })));
+  };
+  const [draggingFile, setDraggingFile] = useState(false);
+
+  // 6) Format montant
+  const fmtMontantDisplay = v => {
+    if (!v && v !== 0) return "";
+    const n = parseFloat(String(v).replace(/\s/g,"").replace(",","."));
+    if (isNaN(n)) return v;
+    return n.toLocaleString("fr-FR", { minimumFractionDigits:2, maximumFractionDigits:2 });
+  };
+  const [montantRaw, setMontantRaw] = useState(d.montant || "");
+  const [montantFocused, setMontantFocused] = useState(false);
+
+  // Statuts sous-tâches
+  const subStatuses = [
+    { id:"todo",      name:"À faire",    color:"#888",    bg:"#F0F0F0" },
+    { id:"inprogress",name:"En cours",   color:"#1D4ED8", bg:"#DBEAFE" },
+    { id:"waiting",   name:"En attente", color:"#A16207", bg:"#FEF9C3" },
+    { id:"blocked",   name:"Bloqué",     color:"#B91C1C", bg:"#FEE2E2" },
+    { id:"done",      name:"Fait",       color:"#065F46", bg:"#D1FAE5" },
+    { id:"cancelled", name:"Annulé",     color:"#92400E", bg:"#F5E6DC" },
+  ];
+
+  // Statuts suivi dossier
+  const suiviStatuses = [
+    { id:"a_engager",  name:"À engager"         },
+    { id:"preparation",name:"En préparation"    },
+    { id:"en_cours",   name:"En cours (transmis)"},
+    { id:"attente",    name:"En attente"         },
+    { id:"suspendu",   name:"Suspendu / Bloqué"  },
+    { id:"cloture",    name:"Clôturé"            },
+  ];
+
+  const lblStyle = { fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:4, letterSpacing:"0.04em" };
+
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)" }}
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:600,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:`4px solid ${catAccent}` }}>
+    <div
+      style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)" }}
+      onMouseDown={handleOverlayMouseDown}
+      onMouseUp={handleOverlayMouseUp}>
+      <div
+        onMouseDown={handlePanelMouseDown}
+        style={{ background:"white",borderRadius:16,width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:`4px solid ${catAccent}` }}>
         <div style={{ padding:"20px 24px 0" }}>
           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-            <h2 style={{ margin:0,fontSize:18,fontFamily:"'Lora',serif",color:"#2C3E50" }}>{isNew ? "Nouveau dossier" : `Dossier ${d.reference}`}</h2>
+            <h2 style={{ margin:0,fontSize:18,fontFamily:"'Lora',serif",color:"#2C3E50" }}>{isNew ? "Nouveau dossier" : `Dossier ${d.reference||d.clientName}`}</h2>
             <button onClick={onClose} style={{ border:"none",background:"none",fontSize:22,cursor:"pointer",color:"#BDC3C7" }}>×</button>
           </div>
 
-          {/* Ligne 1 : Référence + Client */}
+          {/* Référence + Client */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>RÉFÉRENCE DOSSIER</div>
-              <input value={d.reference} onChange={e=>setD({...d,reference:e.target.value})} placeholder="ex: CTX-2025-001" autoFocus style={{ ...S.input }} />
-            </div>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>NOM DU DÉBITEUR</div>
-              <input value={d.clientName} onChange={e=>setD({...d,clientName:e.target.value})} placeholder="Nom / Raison sociale" style={{ ...S.input }} />
+            <div><div style={lblStyle}>RÉFÉRENCE DOSSIER</div>
+              <input value={d.reference} onChange={e=>setD({...d,reference:e.target.value})} placeholder="ex: CTX-2025-001" autoFocus style={{ ...S.input }} /></div>
+            <div><div style={lblStyle}>NOM DU DÉBITEUR</div>
+              <input value={d.clientName} onChange={e=>setD({...d,clientName:e.target.value})} placeholder="Nom / Raison sociale" style={{ ...S.input }} /></div>
+          </div>
+
+          {/* Catégorie + Type de procédure */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <div><div style={lblStyle}>CATÉGORIE</div>
+              <select value={d.category} onChange={e=>setD({...d,category:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.category?"#2C3E50":"#999" }}>
+                <option value="">— Catégorie —</option>
+                {cSettings.categories.map(c=><option key={c.id} style={{color:"#2C3E50"}}>{c.name}</option>)}
+              </select></div>
+            <div><div style={lblStyle}>TYPE DE PROCÉDURE</div>
+              <select value={d.type} onChange={e=>setD({...d,type:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.type?"#2C3E50":"#999" }}>
+                <option value="">— Type —</option>
+                {cSettings.types.map(t=><option key={t.id} style={{color:"#2C3E50"}}>{t.name}</option>)}
+              </select></div>
+          </div>
+
+          {/* Priorité + Colonne Kanban */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
+            <div><div style={lblStyle}>PRIORITÉ</div>
+              <select value={d.priority} onChange={e=>setD({...d,priority:e.target.value})} style={{ ...S.input,cursor:"pointer" }}>
+                <option value="urgente">🔴 Urgente</option>
+                <option value="haute">🟠 Haute</option>
+                <option value="normale">🟡 Normale</option>
+                <option value="basse">🟢 Basse</option>
+              </select></div>
+            <div><div style={lblStyle}>COLONNE KANBAN</div>
+              <select value={d.status} onChange={e=>setD({...d,status:e.target.value})} style={{ ...S.input,cursor:"pointer",background:statusObj.bg,color:statusObj.color,fontWeight:600 }}>
+                {cSettings.statuses.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+              </select></div>
+          </div>
+
+          {/* 4) Statut du suivi */}
+          <div style={{ marginBottom:8 }}>
+            <div style={lblStyle}>STATUT DU SUIVI</div>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {suiviStatuses.map(ss=>(
+                <button key={ss.id} type="button" onClick={()=>setD({...d,suiviStatus:ss.id})}
+                  style={{ border:`1px solid ${d.suiviStatus===ss.id?"#C0392B":"#E0E0E0"}`,background:d.suiviStatus===ss.id?"#C0392B":"white",color:d.suiviStatus===ss.id?"white":"#666",borderRadius:20,padding:"4px 12px",fontSize:10,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontWeight:d.suiviStatus===ss.id?700:400,transition:"all 0.15s" }}>{ss.name}</button>
+              ))}
             </div>
           </div>
 
-          {/* Ligne 2 : Montant + Avocat */}
+          {/* 6) Montant + Avocat — déplacés ici, format décimal */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>MONTANT (€)</div>
-              <input type="number" value={d.montant} onChange={e=>setD({...d,montant:e.target.value})} placeholder="0.00" style={{ ...S.input }} />
-            </div>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>AVOCAT / HUISSIER</div>
-              <input value={d.avocat} onChange={e=>setD({...d,avocat:e.target.value})} placeholder="Me Dupont…" style={{ ...S.input }} />
-            </div>
+            <div><div style={lblStyle}>MONTANT (€)</div>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={montantFocused ? montantRaw : (montantRaw ? fmtMontantDisplay(montantRaw) : "")}
+                onFocus={()=>setMontantFocused(true)}
+                onBlur={()=>{ setMontantFocused(false); setD({...d,montant:montantRaw}); }}
+                onChange={e=>{ const v=e.target.value.replace(/[^\d.,]/g,""); setMontantRaw(v); }}
+                placeholder="0,00"
+                style={{ ...S.input, textAlign:"right" }} /></div>
+            <div><div style={lblStyle}>AVOCAT / HUISSIER</div>
+              <input value={d.avocat} onChange={e=>setD({...d,avocat:e.target.value})} placeholder="Me Dupont…" style={{ ...S.input }} /></div>
           </div>
 
-          {/* Ligne 3 : Catégorie + Type + Priorité + Statut */}
+          {/* 7) Procédure collective + Date déclaration de créance */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
-            <select value={d.category} onChange={e=>setD({...d,category:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.category?"#2C3E50":"#999" }}>
-              <option value="">— Catégorie —</option>
-              {cSettings.categories.map(c => <option key={c.id} style={{color:"#2C3E50"}}>{c.name}</option>)}
-            </select>
-            <select value={d.type} onChange={e=>setD({...d,type:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.type?"#2C3E50":"#999" }}>
-              <option value="">— Type de procédure —</option>
-              {cSettings.types.map(t => <option key={t.id} style={{color:"#2C3E50"}}>{t.name}</option>)}
-            </select>
-            <select value={d.priority} onChange={e=>setD({...d,priority:e.target.value})} style={{ ...S.input,cursor:"pointer" }}>
-              <option value="urgente">🔴 Urgente</option>
-              <option value="haute">🟠 Haute</option>
-              <option value="normale">🟡 Normale</option>
-              <option value="basse">🟢 Basse</option>
-            </select>
-            <select value={d.status} onChange={e=>setD({...d,status:e.target.value})} style={{ ...S.input,cursor:"pointer",background:statusObj.bg,color:statusObj.color,fontWeight:600 }}>
-              {cSettings.statuses.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <div><div style={lblStyle}>PROCÉDURE COLLECTIVE</div>
+              <select value={d.procedureCollective||""} onChange={e=>setD({...d,procedureCollective:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.procedureCollective?"#2C3E50":"#999" }}>
+                <option value="">— Aucune —</option>
+                <option value="sauvegarde">Sauvegarde</option>
+                <option value="redressement">Redressement judiciaire</option>
+                <option value="liquidation">Liquidation judiciaire</option>
+              </select></div>
+            <div><div style={lblStyle}>DATE DÉCLARATION DE CRÉANCE</div>
+              <input type="date" value={d.dateDeclarationCreance||""} onChange={e=>setD({...d,dateDeclarationCreance:e.target.value})} style={{ ...S.input,cursor:"pointer" }} /></div>
           </div>
 
-          {/* Dates */}
+          {/* Dates : ouverture + échéance + 5) clôture */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8 }}>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE D'OUVERTURE</div>
-              <input type="date" value={d.dateOuverture} onChange={e=>setD({...d,dateOuverture:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>PROCHAINE ÉCHÉANCE</div>
-              <input type="date" value={d.dateEcheance} onChange={e=>setD({...d,dateEcheance:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
-            </div>
-            <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE DE PRESCRIPTION</div>
-              <input type="date" value={d.datePrescription} onChange={e=>setD({...d,datePrescription:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
-            </div>
+            <div><div style={lblStyle}>DATE D'OUVERTURE</div>
+              <input type="date" value={d.dateOuverture} onChange={e=>setD({...d,dateOuverture:e.target.value})} style={{ ...S.input,cursor:"pointer" }} /></div>
+            <div><div style={lblStyle}>PROCHAINE ÉCHÉANCE</div>
+              <input type="date" value={d.dateEcheance} onChange={e=>setD({...d,dateEcheance:e.target.value})} style={{ ...S.input,cursor:"pointer" }} /></div>
+            <div><div style={lblStyle}>DATE DE CLÔTURE</div>
+              <input type="date" value={d.dateCloture||""} onChange={e=>setD({...d,dateCloture:e.target.value})} style={{ ...S.input,cursor:"pointer" }} /></div>
           </div>
 
           {/* Étiquettes */}
           <div style={{ marginBottom:10 }}>
             <div style={{ display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:4 }}>
-              {(d.labels||[]).map((lbl,i) => {
-                const lObj = cSettings.labels.find(l=>l.name===lbl)||{color:"#4F46E5",bg:"#EEF2FF"};
-                return <span key={i} style={{ fontSize:10,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"2px 8px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}30`,display:"inline-flex",alignItems:"center",gap:3,cursor:"pointer" }}
-                  onClick={()=>setD({...d,labels:(d.labels||[]).filter((_,j)=>j!==i)})}>🏷 {lbl} ×</span>;
-              })}
+              {(d.labels||[]).map((lbl,i)=>{ const lObj=cSettings.labels.find(l=>l.name===lbl)||{color:"#C0392B",bg:"#FDEDEC"}; return (
+                <span key={i} style={{ fontSize:10,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"2px 8px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}30`,display:"inline-flex",alignItems:"center",gap:3,cursor:"pointer" }}
+                  onClick={()=>setD({...d,labels:(d.labels||[]).filter((_,j)=>j!==i)})}>🏷 {lbl} ×</span>
+              );})}
               <button ref={lpBtnRef} type="button" onClick={()=>setShowLP(p=>!p)}
                 style={{ border:"1px dashed #FCA5A5",background:"none",borderRadius:20,padding:"2px 8px",fontSize:10,cursor:"pointer",color:"#C0392B",fontFamily:"'DM Mono',monospace" }}>+ Étiquette</button>
             </div>
             {showLP && (
               <div ref={lpRef} style={{ display:"flex",flexWrap:"wrap",gap:6,padding:8,background:"#F8F8F8",borderRadius:8,border:"1px solid #E8E8E8" }}>
-                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).map(l => (
+                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).map(l=>(
                   <span key={l.id} onClick={()=>{setD({...d,labels:[...(d.labels||[]),l.name]});setShowLP(false);}}
                     style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:"'DM Mono',monospace",border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
                 ))}
-                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).length===0 && <span style={{fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>Toutes les étiquettes sont ajoutées</span>}
+                {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).length===0 && <span style={{fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>Toutes ajoutées</span>}
               </div>
             )}
           </div>
 
+          {/* 2) Sous-tâches */}
+          <div style={{ marginBottom:12 }}>
+            <div style={lblStyle}>SOUS-TÂCHES</div>
+            {(d.subtasks||[]).map((st,i)=>{
+              const stStatus = subStatuses.find(s=>s.id===(st.status||"todo"))||subStatuses[0];
+              return (
+                <div key={st.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
+                  <button onClick={()=>{ const ns=[...(d.subtasks||[])]; ns[i]={...ns[i],status:ns[i].status==="done"?"todo":"done"}; setD({...d,subtasks:ns}); }}
+                    style={{ width:16,height:16,borderRadius:"50%",border:`1.5px solid ${st.status==="done"?"#27AE60":"#CCC"}`,background:st.status==="done"?"#27AE60":"white",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{st.status==="done"?"✓":""}</button>
+                  <input value={st.title||""} onChange={e=>{ const ns=[...(d.subtasks||[])]; ns[i]={...ns[i],title:e.target.value}; setD({...d,subtasks:ns}); }}
+                    placeholder="Sous-tâche…" style={{ flex:1,border:"none",outline:"none",fontSize:12,color:st.status==="done"?"#AAA":"#333",textDecoration:st.status==="done"?"line-through":"none",background:"transparent",fontFamily:"'Lora',serif" }} />
+                  <select value={st.status||"todo"} onChange={e=>{ const ns=[...(d.subtasks||[])]; ns[i]={...ns[i],status:e.target.value}; setD({...d,subtasks:ns}); }}
+                    style={{ fontSize:9,fontFamily:"'DM Mono',monospace",border:`1px solid ${stStatus.bg}`,borderRadius:4,padding:"1px 4px",background:stStatus.bg,color:stStatus.color,cursor:"pointer",fontWeight:600 }}>
+                    {subStatuses.map(ss=><option key={ss.id} value={ss.id}>{ss.name}</option>)}
+                  </select>
+                  <button onClick={()=>setD({...d,subtasks:(d.subtasks||[]).filter((_,j)=>j!==i)})}
+                    style={{ border:"none",background:"none",cursor:"pointer",color:"#DDD",fontSize:14,padding:0,lineHeight:1 }}>×</button>
+                </div>
+              );
+            })}
+            <button onClick={()=>setD({...d,subtasks:[...(d.subtasks||[]),{id:newId(),title:"",status:"todo"}]})}
+              style={{ ...S.ghost,marginTop:6,fontSize:11 }}>+ Ajouter une sous-tâche</button>
+          </div>
+
           {/* Notes */}
           <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>NOTES / HISTORIQUE</div>
-            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Historique du dossier, actes, décisions…" rows={6} />
+            <div style={lblStyle}>NOTES / HISTORIQUE</div>
+            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Historique du dossier, actes, décisions…" rows={5} />
+          </div>
+
+          {/* 3) Pièces jointes */}
+          <div style={{ marginBottom:12 }}>
+            <div style={lblStyle}>PIÈCES JOINTES</div>
+            {/* Zone drop */}
+            <div
+              onDragOver={e=>{e.preventDefault();setDraggingFile(true);}}
+              onDragLeave={()=>setDraggingFile(false)}
+              onDrop={e=>{e.preventDefault();setDraggingFile(false);handleFiles(e.dataTransfer.files);}}
+              onClick={()=>fileInputRef.current?.click()}
+              style={{ border:`2px dashed ${draggingFile?"#C0392B":"#E0E0E0"}`,borderRadius:8,padding:"14px",textAlign:"center",cursor:"pointer",background:draggingFile?"#FEF2F2":"#FAFAFA",marginBottom:8,transition:"all 0.15s" }}>
+              <div style={{ fontSize:12,color:draggingFile?"#C0392B":"#AAA",fontFamily:"'Lora',serif" }}>📎 Glissez vos fichiers ici ou <u>cliquez pour parcourir</u></div>
+              <input ref={fileInputRef} type="file" multiple style={{ display:"none" }} onChange={e=>handleFiles(e.target.files)} />
+            </div>
+            {/* Liste des pièces */}
+            {(d.attachments||[]).length>0 && (
+              <div style={{ display:"flex",flexDirection:"column",gap:4 }}>
+                {(d.attachments||[]).map((att,i)=>(
+                  <div key={att.id} style={{ display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:"#F8F8F8",borderRadius:6,border:"1px solid #E8E8E8" }}>
+                    <span style={{ fontSize:14,flexShrink:0 }}>📄</span>
+                    <input value={att.name} onChange={e=>{ const na=[...(d.attachments||[])]; na[i]={...na[i],name:e.target.value}; setD({...d,attachments:na}); }}
+                      style={{ flex:1,border:"none",outline:"none",fontSize:12,background:"transparent",fontFamily:"'Lora',serif",color:"#2C3E50" }} />
+                    <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{att.size?Math.round(att.size/1024)+"Ko":""}</span>
+                    {att.dataUrl && <a href={att.dataUrl} download={att.name} style={{ fontSize:10,color:"#4F46E5",fontFamily:"'DM Mono',monospace",textDecoration:"none",flexShrink:0 }}>↓</a>}
+                    <button onClick={()=>setD({...d,attachments:(d.attachments||[]).filter((_,j)=>j!==i)})}
+                      style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:14,padding:0,lineHeight:1,flexShrink:0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
+
         <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          {!isNew && (
-            <span style={{ fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Ouvert le {d.dateOuverture || "—"}</span>
-          )}
+          {!isNew && <span style={{ fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>Ouvert le {d.dateOuverture||"—"}</span>}
           <div style={{ display:"flex",gap:8,marginLeft:"auto" }}>
             <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666") }}>Annuler</button>
-            <button onClick={()=>{ if(d.reference.trim()||d.clientName.trim()){ onSave(d); onClose(); } }}
+            <button onClick={()=>{ if(d.reference.trim()||d.clientName.trim()){ onSave({...d,montant:montantRaw}); onClose(); } }}
               style={{ ...S.btn("#C0392B"),opacity:(d.reference.trim()||d.clientName.trim())?1:0.5 }}>
-              {isNew ? "Créer le dossier" : "Enregistrer"}
+              {isNew?"Créer le dossier":"Enregistrer"}
             </button>
           </div>
         </div>
@@ -3673,28 +3813,28 @@ function ContentieuxView() {
         {/* Header */}
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:6 }}>
           <div>
-            <div style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:"#AAA",marginBottom:2 }}>{item.reference||"—"}</div>
+            <div style={{ fontSize:9,fontFamily:"'Lora',serif",color:"#AAA",marginBottom:2 }}>{item.reference||"—"}</div>
             <div onClick={()=>setModal({...item})} style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50",lineHeight:1.3,cursor:"pointer" }}>{item.clientName||"Sans nom"}</div>
           </div>
           <div style={{ display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0 }}>
-            <span style={{ fontSize:9,color:prioColors[item.priority||"normale"],fontWeight:700,fontFamily:"'DM Mono',monospace" }}>{prioIcons[item.priority||"normale"]}</span>
+            <span style={{ fontSize:9,color:prioColors[item.priority||"normale"],fontWeight:700,fontFamily:"'Lora',serif" }}>{prioIcons[item.priority||"normale"]}</span>
             <button onClick={e=>{e.stopPropagation();delDossier(item.id);}} style={{ border:"none",background:"none",cursor:"pointer",color:"#E8A0A0",fontSize:12,padding:0,lineHeight:1 }}>×</button>
           </div>
         </div>
         {/* Montant */}
-        {item.montant && <div style={{ fontSize:13,fontWeight:700,color:"#C0392B",fontFamily:"'DM Mono',monospace",marginBottom:6 }}>{fmtE(item.montant)}</div>}
+        {item.montant && <div style={{ fontSize:13,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif",marginBottom:6 }}>{fmtE(item.montant)}</div>}
         {/* Badges */}
         <div style={{ display:"flex",gap:4,flexWrap:"wrap",marginBottom:item.dateEcheance||item.avocat?6:0 }}>
-          {cat && <span style={{ fontSize:8,background:cat.bg,color:cat.accent,borderRadius:4,padding:"1px 6px",fontFamily:"'DM Mono',monospace",fontWeight:700 }}>{cat.name}</span>}
-          {typeObj && <span style={{ fontSize:8,background:"#F5F5F5",color:"#555",borderRadius:4,padding:"1px 6px",fontFamily:"'DM Mono',monospace" }}>{typeObj.icon} {typeObj.name}</span>}
-          {(item.labels||[]).map((lbl,i)=>{ const lObj=cSettings.labels.find(l=>l.name===lbl)||{color:"#C0392B",bg:"#FDEDEC"}; return <span key={i} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"1px 6px",fontFamily:"'DM Mono',monospace",border:`1px solid ${lObj.color}20` }}>🏷 {lbl}</span>; })}
+          {cat && <span style={{ fontSize:8,background:cat.bg,color:cat.accent,borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>{cat.name}</span>}
+          {typeObj && <span style={{ fontSize:8,background:"#F5F5F5",color:"#555",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif" }}>{typeObj.icon} {typeObj.name}</span>}
+          {(item.labels||[]).map((lbl,i)=>{ const lObj=cSettings.labels.find(l=>l.name===lbl)||{color:"#C0392B",bg:"#FDEDEC"}; return <span key={i} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"1px 6px",fontFamily:"'Lora',serif",border:`1px solid ${lObj.color}20` }}>🏷 {lbl}</span>; })}
         </div>
         {/* Footer dates */}
-        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:9,fontFamily:"'DM Mono',monospace",color:"#AAA" }}>
+        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:9,fontFamily:"'Lora',serif",color:"#AAA" }}>
           {item.dateEcheance && <span style={{ color:overdue?"#C0392B":"#AAA",fontWeight:overdue?700:400 }}>{overdue?"⚠ ":""}{fmtD(item.dateEcheance)}</span>}
           {item.avocat && <span style={{ color:"#4F46E5",fontSize:8,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:90 }}>⚖ {item.avocat}</span>}
         </div>
-        {item.datePrescription && <div style={{ marginTop:3,fontSize:8,fontFamily:"'DM Mono',monospace",color:"#E67E22" }}>⏱ Prescription : {fmtD(item.datePrescription)}</div>}
+        {item.dateCloture && <div style={{ marginTop:3,fontSize:8,fontFamily:"'Lora',serif",color:"#27AE60" }}>✓ Clôture : {fmtD(item.dateCloture)}</div>}
       </div>
     );
   };
@@ -3712,11 +3852,11 @@ function ContentieuxView() {
         {["Toutes",...cSettings.categories.map(c=>c.name)].map(c=>{ const co=cSettings.categories.find(x=>x.name===c); return <FBtn key={c} label={c} active={filterCat===c} onClick={()=>setFilterCat(c)} color={co?.accent} />; })}
         <div style={{ flex:1 }} />
         {/* Stats globales */}
-        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#C0392B",fontWeight:700 }}>
+        <span style={{ fontSize:12,fontFamily:"'Lora',serif",color:"#C0392B",fontWeight:700 }}>
           {activeDossiers.length} dossier{activeDossiers.length!==1?"s":""} actif{activeDossiers.length!==1?"s":""}
         </span>
-        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888" }}>|</span>
-        <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#C0392B",fontWeight:700 }}>
+        <span style={{ fontSize:12,fontFamily:"'Lora',serif",color:"#888" }}>|</span>
+        <span style={{ fontSize:12,fontFamily:"'Lora',serif",color:"#C0392B",fontWeight:700 }}>
           {totalMontant.toLocaleString("fr-FR",{minimumFractionDigits:2})} €
         </span>
         <button onClick={()=>setShowSettings(true)} style={{ border:"1px solid #FCA5A5",background:"#FEF2F2",color:"#C0392B",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
@@ -6642,7 +6782,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.272<br />06/05/26
+          v.0.273<br />06/05/26
         </div>
       </div>
 
