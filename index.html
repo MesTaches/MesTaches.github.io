@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.269<br/>05/05/26 à 10h06</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.271<br/>06/05/26</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -3294,6 +3294,64 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
   );
 }
 
+/* ─── DEV LABEL CELL ─── */
+function DevLabelCell({ task, devSettings }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const [menuPos, setMenuPos] = useState({ top: 0, left: 0 });
+  const btnRef = React.useRef(null);
+  const menuRef = React.useRef(null);
+  const openMenu = (e) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: r.bottom + 4, left: r.left });
+    }
+    setShowMenu(m => !m);
+  };
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target) && btnRef.current && !btnRef.current.contains(e.target))
+        setShowMenu(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showMenu]);
+  const available = (devSettings.labels||[]).filter(l => !(task.labels||[]).includes(l.name));
+  const dispatch = (labels) => window.dispatchEvent(new CustomEvent("devAddLabel", { detail: { id: task.id, labels } }));
+  return (
+    <div style={{ display:"flex",gap:3,alignItems:"center",flexShrink:0,flexWrap:"nowrap",overflow:"visible",position:"relative" }} onClick={e=>e.stopPropagation()}>
+      {(task.labels||[]).map((lbl,i) => {
+        const lObj=(devSettings.labels||[]).find(l=>l.name===lbl)||{color:"#4F46E5",bg:"#EEF2FF"};
+        return (
+          <span key={i} style={{ fontSize:9,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"1px 6px",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",border:`1px solid ${lObj.color}30`,display:"inline-flex",alignItems:"center",gap:2 }}>
+            🏷 {lbl}
+            <button onClick={e=>{e.stopPropagation();dispatch((task.labels||[]).filter((_,j)=>j!==i));}}
+              style={{ border:"none",background:"none",cursor:"pointer",color:lObj.color,fontSize:10,padding:0,lineHeight:1 }}>×</button>
+          </span>
+        );
+      })}
+      <button ref={btnRef} onClick={openMenu}
+        style={{ fontSize:9,border:"1px dashed #C7D2FE",background:"none",borderRadius:20,padding:"1px 5px",cursor:"pointer",color:"#4F46E5",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>+</button>
+      {showMenu && available.length > 0 && (
+        <div ref={menuRef} style={{ position:"fixed",top:menuPos.top,left:menuPos.left,zIndex:9999,background:"white",border:"1px solid #E8E8E8",borderRadius:8,padding:6,boxShadow:"0 4px 16px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",gap:4,minWidth:140 }}>
+          {available.map(l => (
+            <button key={l.id} onClick={e=>{e.stopPropagation();dispatch([...(task.labels||[]),l.name]);setShowMenu(false);}}
+              style={{ background:l.bg,color:l.color,border:`1px solid ${l.color}30`,borderRadius:20,padding:"3px 10px",fontSize:10,cursor:"pointer",fontFamily:"'DM Mono',monospace",textAlign:"left" }}>
+              🏷 {l.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {showMenu && available.length === 0 && (
+        <div style={{ position:"fixed",top:menuPos.top,left:menuPos.left,zIndex:9999,background:"white",border:"1px solid #E8E8E8",borderRadius:8,padding:"8px 12px",boxShadow:"0 4px 16px rgba(0,0,0,0.12)",fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>
+          Toutes les étiquettes sont ajoutées
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWidths }) {
   const [hovered, setHovered] = useState(false);
   const catObj    = devSettings.categories.find(c => c.name===task.category);
@@ -3301,49 +3359,45 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
   const statusObj = devSettings.statuses.find(s => s.id===task.status) || devSettings.statuses[0];
   const catBg     = catObj?.bg||"#F0F0F0";
   const catAccent = catObj?.accent||"#888";
-  const prioColors = { urgente:"#C0392B", haute:"#E67E22", normale:"#95A5A6", basse:"#27AE60" };
-  const prioIcons  = { urgente:"▲▲", haute:"▲", normale:"▬", basse:"▼" };
-  const prioColor  = prioColors[task.priority||"normale"]||"#95A5A6";
-  const prioIcon   = prioIcons[task.priority||"normale"]||"▬";
-  const cw = colWidths || { title:240, status:80, category:100, type:72 };
+  // 2) Mêmes icônes et couleurs que l'onglet Tâches
+  const prioColor = PRIORITY_COLORS[task.priority||"normale"] || "#95A5A6";
+  const prioIcon  = PRIORITY_ICONS[task.priority||"normale"]  || "▬";
+  const cw = colWidths || { title:240, status:80, category:100, type:72, scope:90, labels:80 };
   return (
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={()=>onEdit(task)}
       style={{ display:"flex",alignItems:"center",gap:7,paddingRight:6,borderLeft:`2px solid ${catAccent}`,marginBottom:1,
         background:hovered?"#F5F7FB":task.completed?"#FAFAFA":"white",opacity:task.completed?0.45:1,
         cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
-      {/* Checkbox */}
       <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
         style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
-      {/* # */}
       <span style={{ fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
-      {/* Priorité */}
       <span title={`Priorité ${task.priority}`} style={{ fontSize:10,color:prioColor,flexShrink:0,fontWeight:700,lineHeight:1,minWidth:12,textAlign:"center" }}>{prioIcon}</span>
-      {/* Titre — largeur fixe = colWidths.title */}
+      {/* Titre */}
       <span style={{ fontSize:13,fontWeight:500,color:task.completed?"#AAA":"#2C3E50",textDecoration:task.completed?"line-through":"none",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:cw.title,flexShrink:0 }}>{task.title}</span>
-      {/* Statut — largeur fixe = colWidths.status */}
+      {/* Statut */}
       <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
-      {/* Catégorie — largeur fixe = colWidths.category */}
+      {/* Catégorie */}
       <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
-      {/* Type — largeur fixe = colWidths.type */}
+      {/* Type */}
       <span style={{ fontSize:8,color:"#555",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
-      {/* Espaceur flexible */}
+      {/* 1) Périmètre — colonne fixe */}
+      {task.scope
+        ? <span style={{ fontSize:8,color:"#6B7280",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
+        : <span style={{ width:cw.scope||90,flexShrink:0 }} />}
+      {/* 1) Étiquettes — colonne avec bouton + */}
+      <div style={{ width:cw.labels||80,flexShrink:0,overflow:"visible" }}>
+        <DevLabelCell task={task} devSettings={devSettings} />
+      </div>
+      {/* Espaceur */}
       <div style={{ flex:1 }} />
-      {/* Périmètre */}
-      {task.scope && <span style={{ fontSize:8,color:"#6B7280",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",maxWidth:90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>}
-      {/* Étiquettes */}
-      {(task.labels||[]).slice(0,2).map(lbl => {
-        const lObj = devSettings.labels.find(l=>l.name===lbl)||{color:"#4F46E5",bg:"#EEF2FF"};
-        return <span key={lbl} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap" }}>🏷 {lbl}</span>;
-      })}
-      {/* Version — aligné avec en-tête VERSION (minWidth:60) */}
+      {/* Version */}
       {task.version
         ? <span style={{ fontSize:8,fontFamily:"'DM Mono',monospace",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
         : <span style={{ minWidth:60,flexShrink:0 }} />}
-      {/* Date cible — alignée avec en-tête DATE CIBLE (minWidth:80) */}
+      {/* Date cible */}
       {task.dueDate
         ? <span style={{ fontSize:8,color:"#95A5A6",fontFamily:"'DM Mono',monospace",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
         : <span style={{ minWidth:80,flexShrink:0 }} />}
-      {/* Supprimer */}
       <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
         style={{ border:"none",background:"none",cursor:"pointer",color:hovered?"#E8A0A0":"transparent",fontSize:13,padding:"0 2px",transition:"color 0.1s",flexShrink:0,lineHeight:1,width:20 }}>×</button>
     </div>
@@ -3449,11 +3503,21 @@ function DevView() {
   const [filterType,   setFilterType]   = useState("Tous");
   const [filterStatus, setFilterStatus] = useState("Actives");
   const [search, setSearch] = useState("");
-  const [colWidths, setColWidths] = useState(() => { try { const s=localStorage.getItem(DEV_COL_WIDTHS_KEY); return s?JSON.parse(s):{title:240,status:80,category:100,type:72}; } catch { return {title:240,status:80,category:100,type:72}; } });
+  const [colWidths, setColWidths] = useState(() => { try { const s=localStorage.getItem(DEV_COL_WIDTHS_KEY); return s?JSON.parse(s):{title:220,status:75,category:100,type:70,scope:90,labels:80}; } catch { return {title:220,status:75,category:100,type:70,scope:90,labels:80}; } });
   const dragging = useRef(null);
   const isMobile = useIsMobile();
 
   useEffect(() => { try { localStorage.setItem(DEV_STORAGE_KEY,JSON.stringify(tasks)); } catch {} }, [tasks]);
+
+  // Listener pour les étiquettes inline (DevLabelCell)
+  useEffect(() => {
+    const handler = (e) => {
+      const { id, labels } = e.detail;
+      setTasks(p => p.map(t => t.id === id ? { ...t, labels } : t));
+    };
+    window.addEventListener("devAddLabel", handler);
+    return () => window.removeEventListener("devAddLabel", handler);
+  }, []);
 
   const addTask  = t => setTasks(p=>[t,...p]);
   const updTask  = t => setTasks(p=>p.map(x=>x.id===t.id?t:x));
@@ -3522,10 +3586,12 @@ function DevView() {
         <div style={{ width:14,flexShrink:0,marginLeft:5 }} />
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:16 }}>#</span>
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:12 }}>P</span>
-        <ColHdr label="ÉVOLUTION" col="title" />
-        <ColHdr label="STATUT"    col="status" />
-        <ColHdr label="CATÉGORIE" col="category" />
-        <ColHdr label="TYPE"      col="type" />
+        <ColHdr label="ÉVOLUTION"  col="title" />
+        <ColHdr label="STATUT"     col="status" />
+        <ColHdr label="CATÉGORIE"  col="category" />
+        <ColHdr label="TYPE"       col="type" />
+        <ColHdr label="PÉRIMÈTRE"  col="scope" />
+        <ColHdr label="ÉTIQUETTES" col="labels" />
         <div style={{ flex:1 }} />
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:60,textAlign:"right" }}>VERSION</span>
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
@@ -6100,7 +6166,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.270<br />05/05/26
+          v.0.271<br />06/05/26
         </div>
       </div>
 
