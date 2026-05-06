@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.281<br/>06/05/26 à 14:17</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.282<br/>06/05/26 à 15:04</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -1753,26 +1753,36 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           </select>
 
           {/* Notes */}
-          <div style={{ background:"#FAFAFA", borderRadius:10, border:"1px solid #ECEAE5", padding:"12px 14px", marginBottom:10 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.08em" }}>📝 NOTES / HISTORIQUE</div>
-              <button onClick={() => setShowAI(true)} style={{ border:"1px solid #C7D2FE", background:"#EEF2FF", borderRadius:6, padding:"2px 8px", fontSize:10, cursor:"pointer", fontFamily:"'DM Mono',monospace", color:"#4F46E5" }}>🤖 IA</button>
+          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:7 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.07em" }}>NOTES</div>
+              <button onClick={() => setShowAI(true)} style={{ background:"none", border:"1px solid #E0E0E0", borderRadius:6, padding:"2px 8px", fontSize:10, cursor:"pointer", fontFamily:"'Lora',serif", color:"#888", display:"flex", alignItems:"center", gap:4 }}>🤖 IA</button>
             </div>
             <RichTextArea value={d.notes} onChange={(v) => setD({ ...d, notes: v })} placeholder="Notes optionnelles…" rows={5} />
           </div>
 
           {/* Sous-tâches */}
-          <div style={{ background:"#FAFAFA", borderRadius:10, border:"1px solid #ECEAE5", padding:"12px 14px", marginBottom:10 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.08em", marginBottom:8 }}>
-              ☑ SOUS-TÂCHES {d.subtasks.length > 0 && <span style={{ background:"#E8F8F5", color:"#27AE60", borderRadius:20, padding:"1px 7px", fontSize:9, fontWeight:700, marginLeft:4 }}>{d.subtasks.filter(s=>s.completed).length}/{d.subtasks.length}</span>}
+          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.07em" }}>SOUS-TÂCHES</div>
+              {d.subtasks.length > 0 && (
+                <span style={{ fontSize:10, color:"#27AE60", fontFamily:"'Lora',serif", fontWeight:600 }}>
+                  {d.subtasks.filter(s=>s.completed).length}/{d.subtasks.length}
+                </span>
+              )}
             </div>
             {d.subtasks.map((s) => <SubtaskRow key={s.id} sub={s} onChange={updSub} onDelete={() => delSub(s.id)} onOpenDetail={setSubDetail} />)}
-            <button onClick={addSub} style={{ marginTop:8, background:"none", border:"1px dashed #D0D0D0", borderRadius:8, padding:"5px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", color:"#AAA", width:"100%" }}>+ Ajouter une sous-tâche</button>
+            <button onClick={addSub} style={{ marginTop:8, background:"none", border:"none", padding:"4px 0", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", color:"#BBBBBB", display:"flex", alignItems:"center", gap:5 }}>
+              <span style={{ fontSize:16, lineHeight:1 }}>+</span> Ajouter une sous-tâche
+            </button>
           </div>
 
           {/* Pièces jointes */}
-          <div style={{ background:"#FAFAFA", borderRadius:10, border:"1px solid #ECEAE5", padding:"12px 14px", marginBottom:4 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.08em", marginBottom:8 }}>📎 PIÈCES JOINTES</div>
+          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, paddingBottom:4 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.07em", marginBottom:8 }}>
+              PIÈCES JOINTES
+              {(d.attachments||[]).length > 0 && <span style={{ marginLeft:6, fontSize:10, color:"#888", fontWeight:400 }}>({d.attachments.length})</span>}
+            </div>
             <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
           </div>
         </div>
@@ -7304,7 +7314,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.281<br />06/05/26 à 14:17
+          v.0.282<br />06/05/26 à 15:04
         </div>
       </div>
 
