@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.279<br/>06/05/26 à 16h47</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.280<br/>06/05/26 à 17h19</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -832,12 +832,17 @@ function loadSettings() {
     const s = localStorage.getItem(SETTINGS_KEY);
     if (!s) { const b = localStorage.getItem(SETTINGS_KEY + "_backup"); if (b) { try { const p = JSON.parse(b); return { categories: p.categories || DEFAULT_SETTINGS.categories, types: p.types || DEFAULT_SETTINGS.types, statuses: p.statuses || DEFAULT_SETTINGS.statuses, hiddenTabs: (p.hiddenTabs || []).filter(id => id !== "kanban"), labels: p.labels || DEFAULT_SETTINGS.labels, groqKey: (p.groqKey || "").trim(), showAiDebug: p.showAiDebug || false }; } catch {} } return DEFAULT_SETTINGS; }
     const parsed = JSON.parse(s);
+    const mergedLabels = DEFAULT_SETTINGS.labels.map(def => {
+      const existing = (parsed.labels||[]).find(l => l.id === def.id);
+      return existing || def;
+    });
+    const extraLabels = (parsed.labels||[]).filter(l => !DEFAULT_SETTINGS.labels.find(d => d.id === l.id));
     return {
       categories: parsed.categories || DEFAULT_SETTINGS.categories,
       types: parsed.types || DEFAULT_SETTINGS.types,
       statuses: parsed.statuses || DEFAULT_SETTINGS.statuses,
       hiddenTabs: (parsed.hiddenTabs || []).filter(id => id !== "kanban"),
-      labels: parsed.labels || DEFAULT_SETTINGS.labels,
+      labels: [...mergedLabels, ...extraLabels],
       groqKey: (parsed.groqKey || "").trim(),
       suiviTypes: parsed.suiviTypes || DEFAULT_SETTINGS.suiviTypes,
     };
