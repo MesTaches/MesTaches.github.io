@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.274<br/>06/05/26</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.275<br/>06/05/26 à 12:21</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -765,6 +765,20 @@ const PAYMENTS_KEY = "taskmanager_payments";
 const REPORTS_KEY  = "taskmanager_reports";
 const MEETING_STORAGE = "taskmanager_meetings_v1";
 const SETTINGS_KEY = "taskmanager_settings_v1";
+const USER_PROFILES_KEY = "taskmanager_userprofiles_v1";
+
+const PROFILE_ROLES = [
+  { id: "owner",  name: "Propriétaire",  color: "#C0392B", bg: "#FDEDEC", icon: "👑", desc: "Accès complet, gestion des profils et paramètres" },
+  { id: "admin",  name: "Administrateur",color: "#2980B9", bg: "#EBF5FB", icon: "🛡",  desc: "Accès complet sauf gestion des profils" },
+  { id: "user",   name: "Utilisateur",   color: "#27AE60", bg: "#E8F8F5", icon: "👤",  desc: "Accès en lecture et saisie, pas de suppression" },
+];
+
+function loadUserProfiles() {
+  try { const s = localStorage.getItem(USER_PROFILES_KEY); return s ? JSON.parse(s) : [
+    { id: "default", name: "Moi", role: "owner", email: "", createdAt: new Date().toISOString() }
+  ]; } catch { return []; }
+}
+function saveUserProfiles(p) { try { localStorage.setItem(USER_PROFILES_KEY, JSON.stringify(p)); } catch {} }
 
 /* ─── DEFAULT SETTINGS (1: configurable categories, types, statuses) ─── */
 const DEFAULT_SETTINGS = {
@@ -1539,7 +1553,10 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
 
   // 5) send by mail
   const sendMail = () => {
-    const body = encodeURIComponent(`Tâche : ${d.title}\nCatégorie : ${d.category || "-"}\nType : ${d.type || "-"}\nPriorité : ${d.priority}\nÉchéance : ${fmtDate(d.dueDate)}\n\nNotes :\n${d.notes ? d.notes.replace(/<[^>]+>/g, "") : "-"}`);
+    const subtasksText = (d.subtasks||[]).length > 0
+      ? "\n\nSous-tâches :\n" + d.subtasks.map((s,i) => `  ${i+1}. [${s.completed?"✓":"○"}] ${s.title}`).join("\n")
+      : "";
+    const body = encodeURIComponent(`Tâche : ${d.title}\nCatégorie : ${d.category || "-"}\nType : ${d.type || "-"}\nPriorité : ${d.priority}\nStatut : ${(settings.statuses.find(s=>s.id===d.status)||{}).name||d.status}\nÉchéance : ${fmtDate(d.dueDate)}${subtasksText}\n\nNotes :\n${d.notes ? d.notes.replace(/<[^>]+>/g, "") : "-"}`);
     window.location.href = `mailto:?subject=${encodeURIComponent(d.title)}&body=${body}`;
   };
 
@@ -4444,6 +4461,11 @@ function SettingsView({ settings, onSave }) {
   };
 
   const Row = ({ children }) => <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid #F5F5F5" }}>{children}</div>;
+  const [profiles, setProfiles] = useState(() => loadUserProfiles());
+  const [newProfile, setNewProfile] = useState({ name: "", role: "user", email: "" });
+  const addProfile  = () => { if (!newProfile.name.trim()) return; const p = [...profiles, { ...newProfile, id: uid(), createdAt: new Date().toISOString() }]; setProfiles(p); saveUserProfiles(p); setNewProfile({ name: "", role: "user", email: "" }); };
+  const delProfile  = (id) => { if (profiles.find(p=>p.id===id)?.role==="owner") return; const p = profiles.filter(x=>x.id!==id); setProfiles(p); saveUserProfiles(p); };
+  const updProfile  = (id, field, val) => { const p = profiles.map(x=>x.id===id?{...x,[field]:val}:x); setProfiles(p); saveUserProfiles(p); };
 
   return (
     <div>
@@ -4460,6 +4482,7 @@ function SettingsView({ settings, onSave }) {
           <Tab id="demands" label="📨 Demandes" />
           <Tab id="payments" label="💳 Paiements" />
           <Tab id="tabs" label="👁 Onglets" />
+          <Tab id="profiles" label="👥 Profils" />
         </div>
         <div style={{ padding: "20px 24px" }}>
           {tab === "general" && <>
@@ -4573,6 +4596,77 @@ function SettingsView({ settings, onSave }) {
             <button onClick={() => setS({...s, tabOrder:ALL_TABS.map(t=>t.id), tabLabels:{}, tabIcons:{}})}
               style={{ ...S.ghost, marginTop:12, fontSize:10, color:"#999" }}>↺ Réinitialiser l'ordre, noms et icônes</button>
           </>}
+
+          {tab === "profiles" && (
+            <div>
+              <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>
+                Gérez les utilisateurs et leurs droits d'accès à l'application.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+                {profiles.map(p => {
+                  const role = PROFILE_ROLES.find(r => r.id === p.role) || PROFILE_ROLES[2];
+                  return (
+                    <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#FAFAFA", borderRadius: 10, border: "1px solid #ECEAE5" }}>
+                      <span style={{ fontSize: 18, flexShrink: 0 }}>{role.icon}</span>
+                      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+                        <input value={p.name} onChange={e => updProfile(p.id, "name", e.target.value)}
+                          style={{ ...S.input, padding: "4px 8px", fontSize: 12 }} />
+                        <input value={p.email||""} onChange={e => updProfile(p.id, "email", e.target.value)}
+                          placeholder="Email (facultatif)"
+                          style={{ ...S.input, padding: "3px 8px", fontSize: 11, color: "#888" }} />
+                      </div>
+                      <select value={p.role} onChange={e => updProfile(p.id, "role", e.target.value)}
+                        disabled={p.role === "owner"}
+                        style={{ ...S.input, padding: "5px 8px", fontSize: 11, cursor: p.role==="owner"?"not-allowed":"pointer", background: role.bg, color: role.color, fontWeight: 700, border: `1px solid ${role.color}30`, flexShrink: 0 }}>
+                        {PROFILE_ROLES.map(r => <option key={r.id} value={r.id}>{r.icon} {r.name}</option>)}
+                      </select>
+                      <span style={{ fontSize: 9, background: role.bg, color: role.color, borderRadius: 20, padding: "2px 8px", fontFamily: "'Lora',serif", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
+                        {role.desc.split(",")[0]}
+                      </span>
+                      {p.role !== "owner" && (
+                        <button onClick={() => delProfile(p.id)}
+                          style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 18, padding: 0, flexShrink: 0 }}>×</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ background: "#F8F9FB", borderRadius: 10, border: "1px dashed #D0D0D0", padding: "14px" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 10, letterSpacing: "0.06em" }}>+ NOUVEAU PROFIL</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr auto", gap: 8, alignItems: "flex-end" }}>
+                  <div>
+                    <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>NOM</div>
+                    <input value={newProfile.name} onChange={e => setNewProfile(p=>({...p,name:e.target.value}))}
+                      placeholder="Prénom Nom" style={{ ...S.input, padding: "6px 8px", fontSize: 12 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>EMAIL</div>
+                    <input value={newProfile.email||""} onChange={e => setNewProfile(p=>({...p,email:e.target.value}))}
+                      placeholder="email@..." style={{ ...S.input, padding: "6px 8px", fontSize: 12 }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>RÔLE</div>
+                    <select value={newProfile.role} onChange={e => setNewProfile(p=>({...p,role:e.target.value}))}
+                      style={{ ...S.input, padding: "6px 8px", fontSize: 11, cursor: "pointer" }}>
+                      {PROFILE_ROLES.filter(r => r.id !== "owner").map(r => <option key={r.id} value={r.id}>{r.icon} {r.name}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={addProfile} disabled={!newProfile.name.trim()}
+                    style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 11, opacity: newProfile.name.trim() ? 1 : 0.5 }}>
+                    Ajouter
+                  </button>
+                </div>
+                <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 4 }}>
+                  {PROFILE_ROLES.map(r => (
+                    <div key={r.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 10, fontFamily: "'Lora',serif", color: "#888" }}>
+                      <span style={{ background: r.bg, color: r.color, borderRadius: 20, padding: "1px 8px", fontWeight: 700, fontSize: 9, flexShrink: 0 }}>{r.icon} {r.name}</span>
+                      <span>{r.desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           {tab === "labels" && <>
             {(s.labels||[]).map(l => (
@@ -5263,12 +5357,22 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
       {/* Bloc 2 : Reportings */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>📊 Mes Reportings</div>
-          <button onClick={() => setShowTrashRpt(p => !p)}
-            style={{ border: `1px solid ${showTrashRpt ? "#E67E22" : "#E0E0E0"}`, background: showTrashRpt ? "#FEF9E7" : "white", color: showTrashRpt ? "#E67E22" : "#888", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 5 }}>
-            🗑 Corbeille {activeTrashRpt.length > 0 && <span style={{ background: "#E67E22", color: "white", borderRadius: 10, fontSize: 9, padding: "1px 5px" }}>{activeTrashRpt.length}</span>}
-          </button>
-          <button onClick={() => setReportModal({})} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>+ Nouveau reporting</button>
+          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" style={{ verticalAlign:"middle", marginRight:6 }} fill="none">
+              <rect x="2" y="2" width="9" height="11" rx="1.5" fill="#F2C94C"/>
+              <rect x="13" y="2" width="9" height="6" rx="1.5" fill="#F2994A"/>
+              <rect x="2" y="15" width="9" height="7" rx="1.5" fill="#EB5757"/>
+              <rect x="13" y="10" width="9" height="12" rx="1.5" fill="#2F80ED"/>
+            </svg>
+            Mes Reportings
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => setShowTrashRpt(p => !p)}
+              style={{ border: `1px solid ${showTrashRpt ? "#E67E22" : "#E0E0E0"}`, background: showTrashRpt ? "#FEF9E7" : "white", color: showTrashRpt ? "#E67E22" : "#888", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 5 }}>
+              🗑 Corbeille {activeTrashRpt.length > 0 && <span style={{ background: "#E67E22", color: "white", borderRadius: 10, fontSize: 9, padding: "1px 5px" }}>{activeTrashRpt.length}</span>}
+            </button>
+            <button onClick={() => setReportModal({})} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>+ Nouveau reporting</button>
+          </div>
         </div>
         {reports.length === 0 ? (
           <div style={{ background: "white", borderRadius: 14, border: "1px dashed #E0E0E0", padding: "40px", textAlign: "center", color: "#CCC" }}>
@@ -6109,7 +6213,21 @@ function SuiviClientView({ settings }) {
   const emitReminderSync = (items) => { try { window.dispatchEvent(new CustomEvent("suiviReminderUpdated", { detail: items.filter(x => x.reminderDate) })); } catch {} };
 
   const saveClients = (list) => { setClients(list); saveSuiviClients(list); emitReminderSync(list); };
-  const handleSave = (d) => { let newClient; const list = d.id ? clients.map(c=>c.id===d.id?d:c) : (newClient={...d,id:Date.now().toString()}, [...clients, newClient]); saveClients(list); setModal(null); if(newClient) setSelected(newClient); };
+  const handleSave = (d) => {
+    if (d.clientCode && d.clientCode.trim()) {
+      const dup = clients.find(c => c.id !== d.id && c.clientCode && c.clientCode.trim().toLowerCase() === d.clientCode.trim().toLowerCase());
+      if (dup) { setSuiviDupAlert({ code: d.clientCode, existingId: dup.id, pendingSave: d }); return; }
+    }
+    let newClient;
+    const list = d.id ? clients.map(c=>c.id===d.id?{...d,isDuplicate:false}:c) : (newClient={...d,id:Date.now().toString(),isDuplicate:false}, [...clients, newClient]);
+    saveClients(list); setModal(null); if(newClient) setSelected(newClient);
+  };
+  const confirmSuiviDupSave = () => {
+    const d = suiviDupAlert.pendingSave;
+    let newClient;
+    const list = d.id ? clients.map(c=>c.id===d.id?{...d,isDuplicate:true}:c) : (newClient={...d,id:Date.now().toString(),isDuplicate:true}, [...clients, newClient]);
+    saveClients(list); setModal(null); setSuiviDupAlert(null); if(newClient) setSelected(newClient);
+  };
   const handleDelete = (id) => { const found = clients.find(c=>c.id===id); if(!found) return; const next = clients.filter(c=>c.id!==id); saveClients(next); if(selected?.id===id) setSelected(null); setDeletedClient(found); if(deleteTimer) clearTimeout(deleteTimer); setDeleteTimer(setTimeout(()=>setDeletedClient(null), 10000)); };
   const undoDelete = () => { if(!deletedClient) return; const next = [...clients, deletedClient].sort((a,b)=>Number(a.id)-Number(b.id)); saveClients(next); setDeletedClient(null); };
   const saveNote = (id, html) => { const n={...notes,[id]:html}; setNotes(n); saveSuiviNotes(n); };
@@ -6172,7 +6290,7 @@ function SuiviClientView({ settings }) {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"calc(100vh - 56px)", position:"relative" }}>
-      <button onClick={()=>setQuickOpen(true)} style={{ position:"fixed", right:20, bottom:20, zIndex:4500, background:"#102A63", color:"white", border:"none", borderRadius:999, padding:"10px 14px", boxShadow:"0 8px 24px rgba(0,0,0,0.2)", fontFamily:"'DM Mono',monospace", fontSize:10, cursor:"pointer" }}>＋ Capture rapide</button>
+
       <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flexShrink:0, width:"100%", boxSizing:"border-box" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...S.input, width:140, minWidth:140, maxWidth:140, fontSize:10, padding:"6px 12px", boxSizing:"border-box", flexShrink:0 }} />
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", flex:1 }}>
@@ -7036,7 +7154,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.274<br />06/05/26
+          v.0.275<br />06/05/26 à 12:21
         </div>
       </div>
 
