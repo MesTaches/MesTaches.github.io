@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.276<br/>06/05/26 à 14h54</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.277<br/>06/05/26 à 15h28</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -3284,7 +3284,10 @@ function DailySummary({ tasks, onClose }) {
 function DevTaskModal({ task, devSettings, onSave, onClose }) {
   const isNew = !task.title;
   const uid_fn = () => Math.random().toString(36).substr(2,9);
-  const [d, setD] = useState({ ...task, category: task.category||"", type: task.type||"", status: task.status||"backlog", labels: task.labels||[] });
+  const [d, setD] = useState({ ...task, category: task.category||"", type: task.type||"", status: task.status||"backlog", labels: task.labels||[], subtasks: task.subtasks||[] });
+  const addDevSub = () => setD(prev => ({...prev, subtasks: [...(prev.subtasks||[]), {id: Date.now()+Math.random(), text:"", status:"todo", completed:false}]}));
+  const updDevSub = (sub) => setD(prev => ({...prev, subtasks: prev.subtasks.map(x => x.id===sub.id ? sub : x)}));
+  const delDevSub = (id) => setD(prev => ({...prev, subtasks: prev.subtasks.filter(x => x.id!==id)}));
   const catObj   = devSettings.categories.find(c => c.name === d.category);
   const catAccent = catObj?.accent || "#4F46E5";
   const statusObj = devSettings.statuses.find(s => s.id === d.status) || devSettings.statuses[0];
@@ -3381,6 +3384,28 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
           <div style={{ marginBottom:12 }}>
             <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em",letterSpacing:"0.06em" }}>DESCRIPTION / NOTES</div>
             <RichTextArea value={d.notes||""} onChange={v => setD({...d,notes:v})} placeholder="Description, contexte, specs, étapes de reproduction…" rows={6} />
+          </div>
+          {/* Sous-tâches Dev */}
+          <div style={{ marginBottom:12 }}>
+            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em" }}>SOUS-TÂCHES</div>
+            {(d.subtasks||[]).map(sub => {
+              const ss = subStatuses.find(x=>x.id===sub.status)||subStatuses[0];
+              return (
+                <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
+                  <button onClick={()=>updDevSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})}
+                    style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:`2px solid ${sub.completed?"#27AE60":"#CCC"}`,background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
+                  <input value={sub.text} onChange={e=>updDevSub({...sub,text:e.target.value})}
+                    placeholder="Sous-tâche…"
+                    style={{ flex:1,border:"none",outline:"none",fontSize:12,fontFamily:"'Lora',serif",color:sub.completed?"#AAA":"#2C3E50",textDecoration:sub.completed?"line-through":"none",background:"transparent" }} />
+                  <select value={sub.status} onChange={e=>updDevSub({...sub,status:e.target.value,completed:e.target.value==="done"})}
+                    style={{ fontSize:10,fontFamily:"'Lora',serif",border:`1px solid ${ss.color}40`,borderRadius:20,padding:"1px 6px",background:ss.bg,color:ss.color,cursor:"pointer",flexShrink:0 }}>
+                    {subStatuses.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
+                  </select>
+                  <button onClick={()=>delDevSub(sub.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0 }}>🗑</button>
+                </div>
+              );
+            })}
+            <button onClick={addDevSub} style={{ fontSize:11,fontFamily:"'Lora',serif",color:"#4F46E5",background:"none",border:"1px dashed #C7D2FE",borderRadius:6,padding:"3px 10px",cursor:"pointer",marginTop:6 }}>+ Ajouter une sous-tâche</button>
           </div>
         </div>
         <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
@@ -4102,19 +4127,19 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
         cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
       <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
         style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
-      <span style={{ fontSize:9,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
+      <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
       <span title={`Priorité ${task.priority}`} style={{ fontSize:10,color:prioColor,flexShrink:0,fontWeight:700,lineHeight:1,minWidth:12,textAlign:"center" }}>{prioIcon}</span>
       {/* Titre */}
       <span style={{ fontSize:13,fontWeight:500,color:task.completed?"#AAA":"#2C3E50",textDecoration:task.completed?"line-through":"none",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:cw.title,flexShrink:0 }}>{task.title}</span>
       {/* Statut */}
-      <span style={{ fontSize:9,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
+      <span style={{ fontSize:10,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
       {/* Catégorie */}
-      <span style={{ fontSize:9,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
+      <span style={{ fontSize:10,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
       {/* Type */}
       <span style={{ fontSize:10,color:"#555",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
       {/* 1) Périmètre — colonne fixe */}
       {task.scope
-        ? <span style={{ fontSize:9,color:"#6B7280",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
+        ? <span style={{ fontSize:10,color:"#6B7280",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
         : <span style={{ width:cw.scope||90,flexShrink:0 }} />}
       {/* 1) Étiquettes — colonne avec bouton + */}
       <div style={{ width:cw.labels||80,flexShrink:0,overflow:"visible" }}>
@@ -4124,11 +4149,11 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
       <div style={{ flex:1 }} />
       {/* Version */}
       {task.version
-        ? <span style={{ fontSize:9,fontFamily:"'Lora',serif",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
+        ? <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
         : <span style={{ minWidth:60,flexShrink:0 }} />}
       {/* Date cible */}
       {task.dueDate
-        ? <span style={{ fontSize:9,color:"#95A5A6",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
+        ? <span style={{ fontSize:10,color:"#95A5A6",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
         : <span style={{ minWidth:80,flexShrink:0 }} />}
       <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
         style={{ border:"none",background:"none",cursor:"pointer",color:hovered?"#E8A0A0":"transparent",fontSize:13,padding:"0 2px",transition:"color 0.1s",flexShrink:0,lineHeight:1,width:20 }}>×</button>
@@ -4322,7 +4347,7 @@ function DevView() {
   );
   const ColHdr = ({label,col}) => (
     <div style={{ display:"flex",alignItems:"center",flexShrink:0,width:colWidths[col]||72 }}>
-      <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
+      <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
       <ResizeHandle col={col} />
     </div>
   );
@@ -4350,10 +4375,10 @@ function DevView() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display:"flex",alignItems:"center",gap:7,padding:"4px 14px 3px 14px",borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
-        <div style={{ width:14,flexShrink:0 }} />
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
+      <div style={{ display:"flex",alignItems:"center",gap:7,paddingLeft:5,paddingRight:6,paddingTop:4,paddingBottom:3,borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
+        <div style={{ width:14,marginLeft:5,flexShrink:0 }} />
+        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
         <ColHdr label="ÉVOLUTION"  col="title" />
         <ColHdr label="STATUT"     col="status" />
         <ColHdr label="CATÉGORIE"  col="category" />
@@ -4361,8 +4386,8 @@ function DevView() {
         <ColHdr label="PÉRIMÈTRE"  col="scope" />
         <ColHdr label="ÉTIQUETTES" col="labels" />
         <div style={{ flex:1 }} />
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:60,textAlign:"right" }}>VERSION</span>
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:60,textAlign:"right" }}>VERSION</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
         <span style={{ width:20,flexShrink:0 }} />
       </div>
 
