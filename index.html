@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.275<br/>05/05/26 à 22h11</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.274<br/>06/05/26</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -535,17 +535,12 @@ function CotationView({ settings }) {
   const [sortDir,  setSortDir]  = React.useState("asc");
   const [colWidths, setColWidths] = React.useState(()=>{ try{ const s=localStorage.getItem(COT_COL_WIDTHS_KEY); return s?{...DEFAULT_COT_WIDTHS,...JSON.parse(s)}:DEFAULT_COT_WIDTHS; }catch{ return DEFAULT_COT_WIDTHS; }});
 
-  const [dupAlert, setDupAlert] = React.useState(null); // { code, existingId }
-
+  const [dupAlert, setDupAlert] = React.useState(null);
   const saveData = (list) => { setCotations(list); saveCotations(list); };
   const handleSave = (d) => {
-    // Vérifie doublon code client (hors modification du même enregistrement)
     if (d.clientCode && d.clientCode.trim()) {
       const dup = cotations.find(c => c.id !== d.id && c.clientCode && c.clientCode.trim().toLowerCase() === d.clientCode.trim().toLowerCase());
-      if (dup) {
-        setDupAlert({ code: d.clientCode, existingId: dup.id, pendingSave: d });
-        return; // bloque la sauvegarde
-      }
+      if (dup) { setDupAlert({ code: d.clientCode, existingId: dup.id, pendingSave: d }); return; }
     }
     const list = d.id ? cotations.map(c=>c.id===d.id?{...d,isDuplicate:false}:c) : [...cotations,{...d,id:Date.now().toString(),isDuplicate:false}];
     saveData(list); setModal(null);
@@ -598,7 +593,7 @@ function CotationView({ settings }) {
   const totObt  = displayed.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
 
   const colOrder = ["clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
-  const gridTpl = "28px 44px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
+  const gridTpl = "44px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
 
   const ColH = ({col,label,right}) => (
     <div style={{ position:"relative", overflow:"hidden", textAlign:right?"right":"left", paddingRight:right?10:0 }}>
@@ -643,7 +638,6 @@ function CotationView({ settings }) {
       <div style={{ overflowX:"auto", background:"white", borderTop:"1px solid #ECEAE5" }}>
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"4px 8px", background:"#102A63", minWidth:"max-content", alignItems:"center" }}>
-          <div/>
           <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif" }}>PRIO.</div>
           <ColH col="clientName"       label="CLIENT"    />
           <ColH col="clientCode"       label="CODE"      />
@@ -669,33 +663,30 @@ function CotationView({ settings }) {
           return (
             <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"3px 8px",
               borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
-              alignItems:"center", minWidth:"max-content" }}>
-              <div style={{ display:"flex",alignItems:"center",justifyContent:"center" }}>
-                {c.isDuplicate && <span title="Doublon" style={{ fontSize:12 }}>⚠</span>}
-              </div>
+              alignItems:"center", minWidth:"max-content", height:32 }}>
+              <div><button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }} style={{ width:18, height:18, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"white", padding:0, lineHeight:1 }}>✓</button></div>
               {/* Prio */}
               <div style={{ display:"flex", alignItems:"center", gap:2 }}>
-                {c.priority==="urgent"&&<span style={{ fontSize:9, color:"#E74C3C" }}>▲</span>}
-                <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'DM Mono',monospace" }}>
-                  {pr.id==="urgent"||pr.id==="high"?"P1":pr.id==="normal"?"P3":"P4"}
+                <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'Lora',serif" }}>
+                  {pr.id==="urgent"||pr.id==="high"?"⊛ P1":pr.id==="normal"?"▬ P3":"▼ P4"}
                 </span>
               </div>
               {/* Client + indicateur doublon */}
-              <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}
+              <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}
                 onClick={()=>setModal(c)}>
-                {c.isDuplicate && <span title="Code client en doublon" style={{ fontSize:9,background:"#FEE2E2",color:"#B91C1C",borderRadius:4,padding:"1px 5px",fontFamily:"'DM Mono',monospace",fontWeight:700,flexShrink:0 }}>⚠ DUP</span>}
+                {c.isDuplicate && <span title="Code client en doublon" style={{ fontSize:9,background:"#FEE2E2",color:"#B91C1C",borderRadius:4,padding:"1px 5px",fontFamily:"'Lora',serif",fontWeight:700,flexShrink:0 }}>⚠ DUP</span>}
                 {c.clientName||"—"}
               </div>
               {/* Code */}
-              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
+              <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#888", overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
               {/* Date demande */}
-              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#555" }}>
+              <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#555" }}>
                 {c.requestDate?c.requestDate.split("-").reverse().join("/"):"—"}
               </div>
               {/* Demandeur */}
-              <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#555", overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
+              <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#555", overflow:"hidden", textOverflow:"ellipsis" }}>{c.requester||"—"}</div>
               {/* Statut */}
-              <div><span style={{ fontSize:8, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{st.label}</span></div>
+              <div><span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{st.label}</span></div>
               {/* Montants */}
               <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:10 }}>{fmtCotEur(c.authorizedAmount)}</div>
               <div style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#2C3E50", textAlign:"right", paddingRight:10 }}>{fmtCotEur(c.need)}</div>
@@ -703,7 +694,7 @@ function CotationView({ settings }) {
               {/* Étiquette */}
               <div><span style={{ fontSize:9, fontWeight:700, background:lb.bg, color:lb.color, borderRadius:4, padding:"2px 7px", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap" }}>{lb.label}</span></div>
               {/* Clôture */}
-              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:c.closeDate&&c.closeDate<new Date().toISOString().split("T")[0]?"#E74C3C":"#555" }}>
+              <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:c.closeDate&&c.closeDate<new Date().toISOString().split("T")[0]?"#E74C3C":"#555" }}>
                 {c.closeDate?c.closeDate.split("-").reverse().join("/"):"—"}
               </div>
               {/* Note + Actions */}
@@ -722,7 +713,7 @@ function CotationView({ settings }) {
         {/* Footer totaux */}
         {displayed.length>0&&(
           <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"5px 8px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5", minWidth:"max-content", alignItems:"center" }}>
-            <div/><div/><div/><div/><div/><div/><div/>
+            <div/><div/><div/><div/><div/><div/>
             <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:10 }}>{fmtCotEur(totAuth)}</div>
             <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:10 }}>{fmtCotEur(totNeed)}</div>
             <div style={{ fontSize:11, fontWeight:700, color:"#065F46", fontFamily:"'Lora',serif", textAlign:"right", paddingRight:10 }}>{fmtCotEur(totObt)}</div>
@@ -746,7 +737,6 @@ function CotationView({ settings }) {
         </div>
       )}
 
-      {/* Alerte doublon */}
       {dupAlert && (
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:2000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}>
           <div style={{ background:"white",borderRadius:14,width:"100%",maxWidth:420,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:"4px solid #E67E22",padding:"20px 24px" }}>
@@ -765,7 +755,6 @@ function CotationView({ settings }) {
           </div>
         </div>
       )}
-
       {modal!==null&&<CotationModal cotation={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
     </div>
   );
@@ -3523,13 +3512,15 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
               </select></div>
           </div>
 
-          {/* 4) Statut du suivi — liste déroulante */}
+          {/* 4) Statut du suivi */}
           <div style={{ marginBottom:8 }}>
             <div style={lblStyle}>STATUT DU SUIVI</div>
-            <select value={d.suiviStatus||"a_engager"} onChange={e=>setD({...d,suiviStatus:e.target.value})}
-              style={{ ...S.input, cursor:"pointer" }}>
-              {suiviStatuses.map(ss=><option key={ss.id} value={ss.id}>{ss.name}</option>)}
-            </select>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {suiviStatuses.map(ss=>(
+                <button key={ss.id} type="button" onClick={()=>setD({...d,suiviStatus:ss.id})}
+                  style={{ border:`1px solid ${d.suiviStatus===ss.id?"#C0392B":"#E0E0E0"}`,background:d.suiviStatus===ss.id?"#C0392B":"white",color:d.suiviStatus===ss.id?"white":"#666",borderRadius:20,padding:"4px 12px",fontSize:10,cursor:"pointer",fontFamily:"'DM Mono',monospace",fontWeight:d.suiviStatus===ss.id?700:400,transition:"all 0.15s" }}>{ss.name}</button>
+              ))}
+            </div>
           </div>
 
           {/* 6) Montant + Avocat — déplacés ici, format décimal */}
@@ -3797,9 +3788,39 @@ function ContentieuxView() {
   const saveCSettings = s => { setCSettings(s); try { localStorage.setItem(CONTENTIEUX_SETTINGS_KEY, JSON.stringify(s)); } catch {} };
   const addDossier    = d => setDossiers(p => [d,...p]);
   const updDossier    = d => setDossiers(p => p.map(x => x.id===d.id?d:x));
-  const delDossier    = id => { if(window.confirm("Supprimer ce dossier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
+  const [undoDossier, setUndoDossier] = useState(null);
+  const undoTimerRef = useRef(null);
+  const [showTrashCx, setShowTrashCx] = useState(false);
+  const [trashCx, setTrashCx] = useState(() => { try { const s=localStorage.getItem("contentieux_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const saveTrashCx = t => { try { localStorage.setItem("contentieux_trash_v1", JSON.stringify(t)); } catch {} };
+
+  const delDossier = id => {
+    const found = dossiers.find(x => x.id===id);
+    if (!found) return;
+    setDossiers(p => p.filter(x => x.id!==id));
+    const trashed = { ...found, deletedAt: new Date().toISOString() };
+    setTrashCx(p => { const n=[...p,trashed]; saveTrashCx(n); return n; });
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoDossier(found);
+    undoTimerRef.current = setTimeout(() => setUndoDossier(null), 10000);
+  };
+  const undoDeleteDossier = () => {
+    if (!undoDossier) return;
+    clearTimeout(undoTimerRef.current);
+    setDossiers(p => [undoDossier,...p]);
+    setTrashCx(p => { const n=p.filter(x=>x.id!==undoDossier.id); saveTrashCx(n); return n; });
+    setUndoDossier(null);
+  };
+  const restoreFromTrashCx = id => {
+    const r = trashCx.find(x=>x.id===id); if (!r) return;
+    const { deletedAt, ...restored } = r;
+    setDossiers(p => [restored,...p]);
+    setTrashCx(p => { const n=p.filter(x=>x.id!==id); saveTrashCx(n); return n; });
+  };
+  const purgeTrashCx = id => setTrashCx(p => { const n=p.filter(x=>x.id!==id); saveTrashCx(n); return n; });
+
   const handleSave    = d => { if(dossiers.find(x=>x.id===d.id)) updDossier(d); else addDossier(d); };
-  const openNew       = () => setModal({ id:uid_fn(),reference:"",clientName:"",montant:"",category:"",type:"",status:"identification",priority:"normale",labels:[],notes:"",avocat:"",dateOuverture:new Date().toISOString().split("T")[0],dateEcheance:"",datePrescription:"" });
+  const openNew       = () => setModal({ id:uid_fn(),reference:"",clientName:"",montant:"",category:"",type:"",status:"identification",suiviStatus:"a_engager",priority:"normale",labels:[],subtasks:[],attachments:[],notes:"",avocat:"",dateOuverture:new Date().toISOString().split("T")[0],dateEcheance:"",dateCloture:"",procedureCollective:"",dateDeclarationCreance:"" });
 
   const handleDrop = colId => {
     if (!dragId) return;
@@ -3814,6 +3835,9 @@ function ContentieuxView() {
 
   const activeDossiers = dossiers.filter(d => d.status !== "clos");
   const closDossiers   = dossiers.filter(d => d.status === "clos");
+  const thirtyDaysAgoCx = new Date(Date.now()-30*864e5).toISOString();
+  const activeTrashCx   = trashCx.filter(r=>r.deletedAt>thirtyDaysAgoCx);
+  const trashDaysLeftCx = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
 
   // filtrage
   const filtered = d => {
@@ -3867,20 +3891,6 @@ function ContentieuxView() {
           {typeObj && <span style={{ fontSize:8,background:"#F5F5F5",color:"#555",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif" }}>{typeObj.icon} {typeObj.name}</span>}
           {(item.labels||[]).map((lbl,i)=>{ const lObj=cSettings.labels.find(l=>l.name===lbl)||{color:"#C0392B",bg:"#FDEDEC"}; return <span key={i} style={{ fontSize:8,background:lObj.bg,color:lObj.color,borderRadius:20,padding:"1px 6px",fontFamily:"'Lora',serif",border:`1px solid ${lObj.color}20` }}>🏷 {lbl}</span>; })}
         </div>
-        {/* Statut suivi + compteur sous-tâches */}
-        <div style={{ display:"flex",gap:6,alignItems:"center",marginBottom:item.dateEcheance||item.avocat?4:0 }}>
-          {item.suiviStatus && item.suiviStatus !== "a_engager" && (()=>{
-            const ss = [{id:"a_engager",name:"À engager"},{id:"preparation",name:"En préparation"},{id:"en_cours",name:"En cours"},{id:"attente",name:"En attente"},{id:"suspendu",name:"Suspendu"},{id:"cloture",name:"Clôturé"}];
-            const s = ss.find(x=>x.id===item.suiviStatus);
-            return s ? <span style={{ fontSize:8,background:"#F0F0F0",color:"#555",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif" }}>📋 {s.name}</span> : null;
-          })()}
-          {(item.subtasks||[]).length > 0 && (()=>{
-            const pending = (item.subtasks||[]).filter(s=>s.status!=="done").length;
-            return pending > 0
-              ? <span style={{ fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>⬜ {pending} à faire</span>
-              : <span style={{ fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif" }}>✓ tout fait</span>;
-          })()}
-        </div>
         {/* Footer dates */}
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:9,fontFamily:"'Lora',serif",color:"#AAA" }}>
           {item.dateEcheance && <span style={{ color:overdue?"#C0392B":"#AAA",fontWeight:overdue?700:400 }}>{overdue?"⚠ ":""}{fmtD(item.dateEcheance)}</span>}
@@ -3911,11 +3921,39 @@ function ContentieuxView() {
         <span style={{ fontSize:12,fontFamily:"'Lora',serif",color:"#C0392B",fontWeight:700 }}>
           {totalMontant.toLocaleString("fr-FR",{minimumFractionDigits:2})} €
         </span>
+        <button onClick={()=>setShowTrashCx(p=>!p)}
+          style={{ border:`1px solid ${showTrashCx?"#E67E22":"#E0E0E0"}`,background:showTrashCx?"#FEF9E7":"white",color:showTrashCx?"#E67E22":"#888",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",gap:5 }}>
+          🗑 {activeTrashCx.length>0&&<span style={{ background:"#E67E22",color:"white",borderRadius:10,fontSize:9,padding:"1px 5px" }}>{activeTrashCx.length}</span>}
+        </button>
         <button onClick={()=>setShowSettings(true)} style={{ border:"1px solid #FCA5A5",background:"#FEF2F2",color:"#C0392B",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
         <button onClick={openNew} style={{ ...S.btn("#C0392B"),padding:"5px 14px",fontSize:11 }}>+ Nouveau dossier</button>
       </div>
 
-      {/* Kanban */}
+      {/* Corbeille ou Kanban */}
+      {showTrashCx ? (
+        <div style={{ flex:1,overflowY:"auto",padding:"16px" }}>
+          <div style={{ fontSize:13,fontFamily:"'Lora',serif",fontWeight:700,color:"#2C3E50",marginBottom:10 }}>🗑 Corbeille — dossiers supprimés (30 jours)</div>
+          {activeTrashCx.length===0
+            ? <div style={{ textAlign:"center",padding:"40px",color:"#CCC",fontFamily:"'Lora',serif" }}>Corbeille vide</div>
+            : <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(250px,1fr))",gap:12 }}>
+                {activeTrashCx.map(r=>(
+                  <div key={r.id} style={{ opacity:0.8 }}>
+                    <div style={{ background:"white",borderRadius:10,padding:"10px 12px",border:"1px dashed #E0E0E0" }}>
+                      <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginBottom:2 }}>{r.reference||"—"}</div>
+                      <div style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#888",marginBottom:4 }}>{r.clientName||"Sans nom"}</div>
+                      {r.montant&&<div style={{ fontSize:11,color:"#C0392B",fontFamily:"'Lora',serif" }}>{fmtE(r.montant)}</div>}
+                    </div>
+                    <div style={{ display:"flex",gap:6,marginTop:6 }}>
+                      <button onClick={()=>restoreFromTrashCx(r.id)} style={{ ...S.btn("#27AE60"),fontSize:10,padding:"5px 12px",flex:1 }}>↩ Restaurer</button>
+                      <span style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif",alignSelf:"center" }}>J-{trashDaysLeftCx(r)}</span>
+                      <button onClick={()=>purgeTrashCx(r.id)} style={{ ...S.btn("#E74C3C"),fontSize:10,padding:"5px 10px" }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+        </div>
+      ) : (
+        <>
       <div style={{ flex:1,overflowX:"auto",overflowY:"hidden",padding:"12px 16px",display:"flex",gap:12,alignItems:"flex-start" }}>
         {cols.map(col => (
           <div key={col.id}
@@ -3925,12 +3963,12 @@ function ContentieuxView() {
             style={{ minWidth:240,flex:"0 0 240px",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 160px)" }}>
             {/* Col header */}
             <div style={{ padding:"10px 14px",background:col.bg,borderRadius:"10px 10px 0 0",border:`1px solid ${dragOver===col.id?"#C0392B":"#E8E8E8"}`,borderBottom:"none",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-              <span style={{ fontSize:11,fontWeight:700,fontFamily:"'Lora',serif",color:col.color }}>{col.name.toUpperCase()}</span>
+              <span style={{ fontSize:11,fontWeight:700,fontFamily:"'DM Mono',monospace",color:col.color }}>{col.name.toUpperCase()}</span>
               <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                {col.items.length>0 && <span style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:col.color,fontWeight:700 }}>
+                {col.items.length>0 && <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:col.color,fontWeight:700 }}>
                   {col.items.reduce((a,d)=>a+(parseFloat(d.montant)||0),0).toLocaleString("fr-FR",{minimumFractionDigits:0})}€
                 </span>}
-                <span style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:col.color,background:"white",borderRadius:20,padding:"1px 8px",fontWeight:700 }}>{col.items.length}</span>
+                <span style={{ fontSize:11,fontFamily:"'Lora',serif",color:col.color,background:"white",borderRadius:20,padding:"1px 8px",fontWeight:700 }}>{col.items.length}</span>
               </div>
             </div>
             {/* Col body */}
@@ -3954,6 +3992,16 @@ function ContentieuxView() {
           </div>
         )}
       </div>
+
+      </> )}
+
+      {undoDossier && (
+        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9998,background:"#2C3E50",color:"white",borderRadius:12,padding:"12px 20px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:16,fontFamily:"'Lora',serif",fontSize:12 }}>
+          <span>🗑 <strong>"{(undoDossier.clientName||undoDossier.reference||"Dossier").slice(0,30)}"</strong> supprimé</span>
+          <button onClick={undoDeleteDossier} style={{ background:"#27AE60",border:"none",borderRadius:6,color:"white",padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>↩ Annuler</button>
+          <button onClick={()=>setUndoDossier(null)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:0 }}>×</button>
+        </div>
+      )}
 
       {modal && <ContentieuxDossierModal dossier={modal} cSettings={cSettings} onSave={handleSave} onClose={()=>setModal(null)} />}
       {showSettings && <ContentieuxSettingsPanel cSettings={cSettings} onSave={saveCSettings} onClose={()=>setShowSettings(false)} />}
@@ -4037,19 +4085,19 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
         cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
       <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
         style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
-      <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
+      <span style={{ fontSize:9,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
       <span title={`Priorité ${task.priority}`} style={{ fontSize:10,color:prioColor,flexShrink:0,fontWeight:700,lineHeight:1,minWidth:12,textAlign:"center" }}>{prioIcon}</span>
       {/* Titre */}
       <span style={{ fontSize:13,fontWeight:500,color:task.completed?"#AAA":"#2C3E50",textDecoration:task.completed?"line-through":"none",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",width:cw.title,flexShrink:0 }}>{task.title}</span>
       {/* Statut */}
-      <span style={{ fontSize:8,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
+      <span style={{ fontSize:9,fontWeight:700,background:statusObj.bg,color:statusObj.color,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.status,overflow:"hidden",textOverflow:"ellipsis" }}>{statusObj.name}</span>
       {/* Catégorie */}
-      <span style={{ fontSize:8,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
+      <span style={{ fontSize:9,fontWeight:700,background:catBg,color:catAccent,borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.category,overflow:"hidden",textOverflow:"ellipsis" }}>{task.category}</span>
       {/* Type */}
-      <span style={{ fontSize:8,color:"#555",fontFamily:"'Lora',serif",fontSize:10,flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
+      <span style={{ fontSize:10,color:"#555",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",width:cw.type,overflow:"hidden",textOverflow:"ellipsis" }}>{typeObj?.icon||""} {task.type}</span>
       {/* 1) Périmètre — colonne fixe */}
       {task.scope
-        ? <span style={{ fontSize:10,color:"#6B7280",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
+        ? <span style={{ fontSize:9,color:"#6B7280",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",background:"#F3F4F6",borderRadius:3,padding:"1px 6px",width:cw.scope||90,overflow:"hidden",textOverflow:"ellipsis" }}>📍 {task.scope}</span>
         : <span style={{ width:cw.scope||90,flexShrink:0 }} />}
       {/* 1) Étiquettes — colonne avec bouton + */}
       <div style={{ width:cw.labels||80,flexShrink:0,overflow:"visible" }}>
@@ -4059,11 +4107,11 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
       <div style={{ flex:1 }} />
       {/* Version */}
       {task.version
-        ? <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
+        ? <span style={{ fontSize:9,fontFamily:"'Lora',serif",color:"#4F46E5",background:"#EEF2FF",borderRadius:3,padding:"1px 5px",flexShrink:0,minWidth:60,textAlign:"right" }}>{task.version}</span>
         : <span style={{ minWidth:60,flexShrink:0 }} />}
       {/* Date cible */}
       {task.dueDate
-        ? <span style={{ fontSize:10,color:"#95A5A6",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
+        ? <span style={{ fontSize:9,color:"#95A5A6",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap",minWidth:80,textAlign:"right" }}>⏱ {task.dueDate}</span>
         : <span style={{ minWidth:80,flexShrink:0 }} />}
       <button onClick={e=>{e.stopPropagation();onDelete(task.id);}}
         style={{ border:"none",background:"none",cursor:"pointer",color:hovered?"#E8A0A0":"transparent",fontSize:13,padding:"0 2px",transition:"color 0.1s",flexShrink:0,lineHeight:1,width:20 }}>×</button>
@@ -4164,11 +4212,6 @@ function DevView() {
 
   const [devSettings, setDevSettings] = useState(() => loadDevSettings());
   const [tasks, setTasks] = useState(() => { try { const s=localStorage.getItem(DEV_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
-  const [undoDevTask, setUndoDevTask]   = React.useState(null);
-  const undoDevTimerRef                 = React.useRef(null);
-  const [showDevTrash, setShowDevTrash] = React.useState(false);
-  const [devTrash, setDevTrash]         = React.useState(() => { try { const s=localStorage.getItem("dev_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
-  const saveDevTrash = (t) => { try { localStorage.setItem("dev_trash_v1", JSON.stringify(t)); } catch {} };
   const [modal, setModal] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [filterCat,    setFilterCat]    = useState("Toutes");
@@ -4191,33 +4234,37 @@ function DevView() {
     return () => window.removeEventListener("devAddLabel", handler);
   }, []);
 
+  const [undoDevTask, setUndoDevTask] = useState(null);
+  const undoDevTimerRef = useRef(null);
+  const [showTrashDev, setShowTrashDev] = useState(false);
+  const [trashDev, setTrashDev] = useState(() => { try { const s=localStorage.getItem("devtracker_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const saveTrashDev = t => { try { localStorage.setItem("devtracker_trash_v1", JSON.stringify(t)); } catch {} };
+
   const addTask  = t => setTasks(p=>[t,...p]);
   const updTask  = t => setTasks(p=>p.map(x=>x.id===t.id?t:x));
-  const delTask = (id) => {
-    const r = tasks.find(x => x.id === id);
-    if (!r) return;
-    setTasks(p => p.filter(x => x.id !== id));
-    const trashed = { ...r, deletedAt: new Date().toISOString() };
-    setDevTrash(p => { const n = [...p, trashed]; saveDevTrash(n); return n; });
+  const delTask  = id => {
+    const found = tasks.find(x=>x.id===id); if (!found) return;
+    setTasks(p=>p.filter(x=>x.id!==id));
+    const trashed = { ...found, deletedAt: new Date().toISOString() };
+    setTrashDev(p=>{ const n=[...p,trashed]; saveTrashDev(n); return n; });
     if (undoDevTimerRef.current) clearTimeout(undoDevTimerRef.current);
-    setUndoDevTask(r);
+    setUndoDevTask(found);
     undoDevTimerRef.current = setTimeout(() => setUndoDevTask(null), 10000);
   };
-  const undoDelDev = () => {
+  const undoDeleteDev = () => {
     if (!undoDevTask) return;
     clearTimeout(undoDevTimerRef.current);
-    setTasks(p => [...p, undoDevTask]);
-    setDevTrash(p => { const n = p.filter(x => x.id !== undoDevTask.id); saveDevTrash(n); return n; });
+    setTasks(p=>[undoDevTask,...p]);
+    setTrashDev(p=>{ const n=p.filter(x=>x.id!==undoDevTask.id); saveTrashDev(n); return n; });
     setUndoDevTask(null);
   };
-  const restoreDevFromTrash = (id) => {
-    const r = devTrash.find(x => x.id === id);
-    if (!r) return;
+  const restoreFromTrashDev = id => {
+    const r = trashDev.find(x=>x.id===id); if (!r) return;
     const { deletedAt, ...restored } = r;
-    setTasks(p => [...p, restored]);
-    setDevTrash(p => { const n = p.filter(x => x.id !== id); saveDevTrash(n); return n; });
+    setTasks(p=>[restored,...p]);
+    setTrashDev(p=>{ const n=p.filter(x=>x.id!==id); saveTrashDev(n); return n; });
   };
-  const purgeDevTrash = (id) => setDevTrash(p => { const n = p.filter(x => x.id !== id); saveDevTrash(n); return n; });
+  const purgeTrashDev = id => setTrashDev(p=>{ const n=p.filter(x=>x.id!==id); saveTrashDev(n); return n; });
   const togTask  = id => setTasks(p=>p.map(x=>x.id===id?{...x,completed:!x.completed,status:!x.completed?"done":x.status}:x));
   const handleSave = t => { if(tasks.find(x=>x.id===t.id)) updTask(t); else addTask(t); };
   const saveDevSettings = s => { setDevSettings(s); try { localStorage.setItem(DEV_SETTINGS_KEY,JSON.stringify(s)); } catch {} };
@@ -4239,6 +4286,10 @@ function DevView() {
     if (search && !t.title.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+
+  const thirtyDaysAgoDev = new Date(Date.now()-30*864e5).toISOString();
+  const activeTrashDev   = trashDev.filter(r=>r.deletedAt>thirtyDaysAgoDev);
+  const trashDaysLeftDev = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
 
   // Stats
   const total     = tasks.length;
@@ -4273,16 +4324,19 @@ function DevView() {
           {["Toutes",...devSettings.categories.map(c=>c.name)].map(c=>{ const co=devSettings.categories.find(x=>x.name===c); return <FBtn key={c} label={c} active={filterCat===c} onClick={()=>setFilterCat(c)} color={co?.accent} />; })}
         </>}
         <div style={{ flex:1 }} />
+        <button onClick={()=>setShowTrashDev(p=>!p)}
+          style={{ border:`1px solid ${showTrashDev?"#E67E22":"#E0E0E0"}`,background:showTrashDev?"#FEF9E7":"white",color:showTrashDev?"#E67E22":"#888",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",gap:5 }}>
+          🗑 {activeTrashDev.length>0&&<span style={{ background:"#E67E22",color:"white",borderRadius:10,fontSize:9,padding:"1px 5px" }}>{activeTrashDev.length}</span>}
+        </button>
         <button onClick={()=>setShowSettings(true)} title="Paramètres Dev" style={{ border:"1px solid #C7D2FE",background:"#EEF2FF",color:"#4F46E5",borderRadius:6,padding:"4px 10px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace" }}>⚙ Paramètres</button>
-        <button onClick={()=>setShowDevTrash(true)} title="Corbeille Dev" style={{ border:"1px solid #E0E0E0",background:"white",color:"#888",borderRadius:6,padding:"4px 10px",fontSize:13,cursor:"pointer" }}>🗑</button>
         <button onClick={openNew} style={{ ...S.btn("#4F46E5"),padding:"4px 14px",fontSize:11 }}>+ Nouvelle</button>
       </div>
 
       {/* Column headers */}
       <div style={{ display:"flex",alignItems:"center",gap:7,padding:"4px 12px 3px",borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
         <div style={{ width:14,flexShrink:0,marginLeft:5 }} />
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:16 }}>#</span>
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:12 }}>P</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
         <ColHdr label="ÉVOLUTION"  col="title" />
         <ColHdr label="STATUT"     col="status" />
         <ColHdr label="CATÉGORIE"  col="category" />
@@ -4290,8 +4344,8 @@ function DevView() {
         <ColHdr label="PÉRIMÈTRE"  col="scope" />
         <ColHdr label="ÉTIQUETTES" col="labels" />
         <div style={{ flex:1 }} />
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:60,textAlign:"right" }}>VERSION</span>
-        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:60,textAlign:"right" }}>VERSION</span>
+        <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
         <span style={{ width:20,flexShrink:0 }} />
       </div>
 
@@ -4308,49 +4362,51 @@ function DevView() {
       {/* Stats footer */}
       <div style={{ padding:"5px 12px",borderTop:"1px solid #F0F0F0",background:"white",flexShrink:0,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center" }}>
         {statRows.map(s => (
-          <span key={s.id} style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:s.count>0?s.color:"#CCC",whiteSpace:"nowrap" }}>
+          <span key={s.id} style={{ fontSize:9,fontFamily:"'Lora',serif",color:s.count>0?s.color:"#CCC",whiteSpace:"nowrap" }}>
             <span style={{ fontWeight:700 }}>{s.name}</span> {s.count} <span style={{ opacity:0.6 }}>({pct(s.count)}%)</span>
           </span>
         ))}
-        <span style={{ flex:1,textAlign:"right",fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace" }}>{displayed.length} affiché{displayed.length!==1?"s":""} / {total} total</span>
+        <span style={{ flex:1,textAlign:"right",fontSize:9,color:"#CCC",fontFamily:"'Lora',serif" }}>{displayed.length} affiché{displayed.length!==1?"s":""} / {total} total</span>
       </div>
 
-      {/* Undo Banner Dev */}
-      {undoDevTask && (
-        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9998,background:"#2C3E50",color:"white",borderRadius:12,padding:"12px 20px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:16,fontFamily:"'Lora',serif",fontSize:12,animation:"slideUp 0.3s ease" }}>
-          <span>🗑 <strong>"{(undoDevTask.name||undoDevTask.title||"Évolution").slice(0,30)}"</strong> supprimée</span>
-          <button onClick={undoDelDev} style={{ background:"#27AE60",border:"none",borderRadius:6,color:"white",padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>↩ Annuler</button>
-          <button onClick={()=>setUndoDevTask(null)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:0 }}>×</button>
+      {showTrashDev && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:2000,display:"flex",flexDirection:"column",padding:"40px 20px",backdropFilter:"blur(4px)" }}
+          onClick={()=>setShowTrashDev(false)}>
+          <div style={{ background:"white",borderRadius:14,width:"100%",maxWidth:700,margin:"0 auto",maxHeight:"80vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)" }}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:"16px 20px",borderBottom:"1px solid #F0F0F0",fontSize:14,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>🗑 Corbeille — évolutions supprimées (30 jours)</div>
+            {activeTrashDev.length===0
+              ? <div style={{ textAlign:"center",padding:"40px",color:"#CCC",fontFamily:"'Lora',serif" }}>Corbeille vide</div>
+              : <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12,padding:"16px" }}>
+                  {activeTrashDev.map(r=>{
+                    const cat=devSettings.categories.find(c=>c.name===r.category);
+                    const st=devSettings.statuses.find(s=>s.id===r.status)||devSettings.statuses[0];
+                    return (
+                      <div key={r.id} style={{ opacity:0.8 }}>
+                        <div style={{ background:"#FAFAFA",borderRadius:10,padding:"10px 12px",border:`1px dashed #E0E0E0`,borderLeft:`3px solid ${cat?.accent||"#4F46E5"}` }}>
+                          <div style={{ fontSize:11,fontWeight:700,fontFamily:"'Lora',serif",color:"#888",marginBottom:4 }}>{r.title||"Sans titre"}</div>
+                          <div style={{ display:"flex",gap:4,flexWrap:"wrap" }}>
+                            {cat&&<span style={{ fontSize:8,background:cat.bg,color:cat.accent,borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>{cat.name}</span>}
+                            {st&&<span style={{ fontSize:8,background:st.bg,color:st.color,borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif" }}>{st.name}</span>}
+                          </div>
+                        </div>
+                        <div style={{ display:"flex",gap:6,marginTop:6 }}>
+                          <button onClick={()=>restoreFromTrashDev(r.id)} style={{ ...S.btn("#27AE60"),fontSize:10,padding:"5px 12px",flex:1 }}>↩ Restaurer</button>
+                          <span style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif",alignSelf:"center" }}>J-{trashDaysLeftDev(r)}</span>
+                          <button onClick={()=>purgeTrashDev(r.id)} style={{ ...S.btn("#E74C3C"),fontSize:10,padding:"5px 10px" }}>✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>}
+          </div>
         </div>
       )}
-      {/* Corbeille Dev */}
-      {showDevTrash && (
-        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16 }} onClick={e=>{if(e.target===e.currentTarget)setShowDevTrash(false);}}>
-          <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:600,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",padding:"24px 28px" }}>
-            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16 }}>
-              <div style={{ fontSize:17,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50" }}>🗑 Corbeille — 30 derniers jours</div>
-              <button onClick={()=>setShowDevTrash(false)} style={{ border:"none",background:"none",fontSize:20,cursor:"pointer",color:"#BDC3C7" }}>×</button>
-            </div>
-            {(() => {
-              const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-30);
-              const recent = devTrash.filter(x => new Date(x.deletedAt) >= cutoff).sort((a,b)=>new Date(b.deletedAt)-new Date(a.deletedAt));
-              if (!recent.length) return <div style={{ textAlign:"center",padding:"40px 0",color:"#CCC",fontFamily:"'Lora',serif",fontSize:14 }}>Aucun élément dans la corbeille</div>;
-              return recent.map(r => (
-                <div key={r.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:"1px solid #F5F5F5" }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:13,fontFamily:"'Lora',serif",color:"#2C3E50",fontWeight:600 }}>{r.name||r.title||"Sans titre"}</div>
-                    <div style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:"#AAA",marginTop:2 }}>
-                      Supprimé le {new Date(r.deletedAt).toLocaleDateString("fr-FR",{day:"2-digit",month:"short",year:"numeric"})}
-                      {r.category ? ` · ${r.category}` : ""}
-                      {r.type ? ` · ${r.type}` : ""}
-                    </div>
-                  </div>
-                  <button onClick={()=>restoreDevFromTrash(r.id)} style={{ border:"1px solid #27AE60",background:"#F0FFF4",color:"#27AE60",borderRadius:6,padding:"4px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,flexShrink:0 }}>↩ Restaurer</button>
-                  <button onClick={()=>purgeDevTrash(r.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:16,padding:"0 4px" }}>🗑</button>
-                </div>
-              ));
-            })()}
-          </div>
+      {undoDevTask && (
+        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9998,background:"#2C3E50",color:"white",borderRadius:12,padding:"12px 20px",boxShadow:"0 8px 24px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:16,fontFamily:"'Lora',serif",fontSize:12 }}>
+          <span>🗑 <strong>"{(undoDevTask.title||"Évolution").slice(0,30)}"</strong> supprimée</span>
+          <button onClick={undoDeleteDev} style={{ background:"#27AE60",border:"none",borderRadius:6,color:"white",padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>↩ Annuler</button>
+          <button onClick={()=>setUndoDevTask(null)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:16,padding:0 }}>×</button>
         </div>
       )}
       {modal && <DevTaskModal task={modal} devSettings={devSettings} onSave={handleSave} onClose={()=>setModal(null)} />}
@@ -5080,16 +5136,16 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
   const [reports, setReports]         = React.useState(() => loadReports());
   const [reportModal, setReportModal] = React.useState(null);
   const [rtColW, setRtColW]           = React.useState({ num: 28, prio: 20, title: 220, sub: 28, status: 80, category: 100, type: 80, created: 82, due: 82 });
-  // R2) Undo suppression
   const [undoReport, setUndoReport]   = React.useState(null);
-  const undoTimerRef                  = React.useRef(null);
-  // R3) Corbeille
-  const [showTrash, setShowTrash]     = React.useState(false);
-  const [trash, setTrash]             = React.useState(() => { try { const s=localStorage.getItem("reporting_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
-  // R4) Filtre tâches non clôturées
+  const undoRptTimerRef               = React.useRef(null);
+  const [showTrashRpt, setShowTrashRpt] = React.useState(false);
+  const [trashRpt, setTrashRpt]       = React.useState(() => { try { const s=localStorage.getItem("reporting_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
   const [showOnlyOpen, setShowOnlyOpen] = React.useState(true);
 
-  const saveTrash = (t) => { try { localStorage.setItem("reporting_trash_v1", JSON.stringify(t)); } catch {} };
+  const saveTrashRpt = t => { try { localStorage.setItem("reporting_trash_v1", JSON.stringify(t)); } catch {} };
+  const thirtyDaysAgoRpt = new Date(Date.now()-30*864e5).toISOString();
+  const activeTrashRpt   = trashRpt.filter(r=>r.deletedAt>thirtyDaysAgoRpt);
+  const trashDaysLeftRpt = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
 
   const startResizeRt = (col, e) => {
     e.preventDefault();
@@ -5108,51 +5164,34 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
     });
   };
 
-  // R2) Soft delete avec undo 10s
   const delReport = (id) => {
-    const r = reports.find(x => x.id === id);
-    if (!r) return;
-    setReports(p => { const n = p.filter(x => x.id !== id); saveReports(n); return n; });
-    // Envoyer en corbeille avec timestamp
+    const r = reports.find(x=>x.id===id); if (!r) return;
+    setReports(p=>{ const n=p.filter(x=>x.id!==id); saveReports(n); return n; });
     const trashed = { ...r, deletedAt: new Date().toISOString() };
-    setTrash(p => { const n = [...p, trashed]; saveTrash(n); return n; });
-    // Undo banner
-    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setTrashRpt(p=>{ const n=[...p,trashed]; saveTrashRpt(n); return n; });
+    if (undoRptTimerRef.current) clearTimeout(undoRptTimerRef.current);
     setUndoReport(r);
-    undoTimerRef.current = setTimeout(() => setUndoReport(null), 10000);
+    undoRptTimerRef.current = setTimeout(() => setUndoReport(null), 10000);
   };
-
-  const undoDelete = () => {
+  const undoDeleteRpt = () => {
     if (!undoReport) return;
-    clearTimeout(undoTimerRef.current);
-    setReports(p => { const n = [...p, undoReport]; saveReports(n); return n; });
-    setTrash(p => { const n = p.filter(x => x.id !== undoReport.id); saveTrash(n); return n; });
+    clearTimeout(undoRptTimerRef.current);
+    setReports(p=>{ const n=[...p,undoReport]; saveReports(n); return n; });
+    setTrashRpt(p=>{ const n=p.filter(x=>x.id!==undoReport.id); saveTrashRpt(n); return n; });
     setUndoReport(null);
   };
-
-  // R3) Restaurer depuis la corbeille
-  const restoreFromTrash = (id) => {
-    const r = trash.find(x => x.id === id);
-    if (!r) return;
+  const restoreFromTrashRpt = id => {
+    const r=trashRpt.find(x=>x.id===id); if (!r) return;
     const { deletedAt, ...restored } = r;
-    setReports(p => { const n = [...p, restored]; saveReports(n); return n; });
-    setTrash(p => { const n = p.filter(x => x.id !== id); saveTrash(n); return n; });
+    setReports(p=>{ const n=[...p,restored]; saveReports(n); return n; });
+    setTrashRpt(p=>{ const n=p.filter(x=>x.id!==id); saveTrashRpt(n); return n; });
   };
-  const purgeTrash = (id) => setTrash(p => { const n = p.filter(x => x.id !== id); saveTrash(n); return n; });
+  const purgeTrashRpt = id => setTrashRpt(p=>{ const n=p.filter(x=>x.id!==id); saveTrashRpt(n); return n; });
 
-  // Corbeille : supprimer auto après 30j
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 864e5).toISOString();
-  const activeTrash   = trash.filter(r => r.deletedAt > thirtyDaysAgo);
-  const trashDaysLeft = (r) => Math.max(0, Math.ceil((new Date(r.deletedAt).getTime() + 30*864e5 - Date.now()) / 864e5));
-
-  // R4) Filtre tâches
-  const CLOSED_STATUSES = ["done", "cancelled", "clos", "cloture", "annulé"];
+  const CLOSED_STATUSES = ["done","cancelled","clos","cloture","annulé"];
   const reportingTasks = tasks.filter(t => {
     if ((t.type || "").toLowerCase() !== "reporting") return false;
-    if (showOnlyOpen) {
-      const st = (t.status || "").toLowerCase();
-      if (CLOSED_STATUSES.some(s => st.includes(s))) return false;
-    }
+    if (showOnlyOpen) { const st=(t.status||"").toLowerCase(); if(CLOSED_STATUSES.some(s=>st.includes(s))) return false; }
     return true;
   });
 
@@ -5161,33 +5200,29 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
       {/* Bloc 1 : Tâches */}
       <div style={{ background: "white", borderRadius: 16, border: "1px solid #ECEAE5", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
         <div style={{ padding: "12px 18px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>
-            ☰ Tâches Reporting <span style={{ fontSize: 11, color: "#AAA", fontWeight: 400 }}>({reportingTasks.length})</span>
-          </div>
-          {/* R4) Toggle filtre */}
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>☰ Tâches Reporting <span style={{ fontSize: 11, color: "#AAA", fontWeight: 400 }}>({reportingTasks.length})</span></div>
           <button onClick={() => setShowOnlyOpen(p => !p)}
             style={{ border: `1px solid ${showOnlyOpen ? "#102A63" : "#E0E0E0"}`, background: showOnlyOpen ? "#EEF2FF" : "white", color: showOnlyOpen ? "#102A63" : "#888", borderRadius: 20, padding: "3px 12px", fontSize: 10, cursor: "pointer", fontFamily: "'Lora',serif", fontWeight: showOnlyOpen ? 700 : 400 }}>
             {showOnlyOpen ? "Non clôturées" : "Toutes"}
           </button>
         </div>
         {reportingTasks.length === 0 ? (
-          <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'Lora',serif" }}>
-            {showOnlyOpen ? "Aucune tâche Reporting non clôturée" : "Aucune tâche de type Reporting"}
-          </div>
+          <div style={{ padding: "28px", textAlign: "center", color: "#CCC", fontSize: 12, fontFamily: "'Lora',serif" }}>{showOnlyOpen ? "Aucune tâche Reporting non clôturée" : "Aucune tâche de type Reporting"}</div>
         ) : (
           <div style={{ overflowX: "hidden" }}>
             {/* En-têtes */}
             <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#102A63", padding: "6px 8px", minWidth: "fit-content" }}>
+              {/* Spacer : marginLeft(5) + checkbox(14) + gap(7) + num(16) = 42px, puis prio et soleil comme colonnes */}
               <div style={{ width: 42, flexShrink: 0 }} />
-              <div style={{ minWidth: 16, flexShrink: 0 }}>
+              <div style={{ minWidth: 16, flexShrink: 0, position: "relative" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>P.</span>
               </div>
-              <div style={{ width: 16, flexShrink: 0 }} />
+              <div style={{ width: 16, flexShrink: 0 }} />{/* soleil - pas d'en-tête */}
               <div style={{ width: rtColW.title, flexShrink: 0, position: "relative" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TITRE</span>
                 <div onMouseDown={e => startResizeRt("title", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
-              <div style={{ minWidth: 28, flexShrink: 0 }} />
+              <div style={{ minWidth: 28, flexShrink: 0 }} />{/* sous-tâches */}
               <div style={{ width: rtColW.status, flexShrink: 0, position: "relative" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>STATUT</span>
                 <div onMouseDown={e => startResizeRt("status", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
@@ -5200,16 +5235,16 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</span>
                 <div onMouseDown={e => startResizeRt("type", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
-              <div style={{ width: 120, flexShrink: 0 }}>
+              <div style={{ width: 120, flexShrink: 0, position: "relative" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉTIQUETTE</span>
               </div>
               <div style={{ flex: 1 }} />
-              <div style={{ width: rtColW.created, flexShrink: 0, textAlign: "right" }}>
+              <div style={{ width: rtColW.created, flexShrink: 0, position: "relative", textAlign: "right" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CRÉÉE</span>
                 <div onMouseDown={e => startResizeRt("created", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
               <div style={{ width: 16, flexShrink: 0 }} />
-              <div style={{ width: rtColW.due, flexShrink: 0, textAlign: "right" }}>
+              <div style={{ width: rtColW.due, flexShrink: 0, position: "relative", textAlign: "right" }}>
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉCHÉANCE</span>
                 <div onMouseDown={e => startResizeRt("due", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
@@ -5217,6 +5252,7 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
                 <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>NOTE</span>
               </div>
             </div>
+            {/* Lignes */}
             <div style={{ maxHeight: 360, overflowY: "auto" }}>
               {reportingTasks.map((t, i) => <TaskCard key={t.id} task={t} num={i+1} onDelete={() => {}} onToggle={onToggle} onEdit={onEdit} onSaveComment={onSaveComment} colWidths={{ title: rtColW.title, status: rtColW.status, category: rtColW.category, type: rtColW.type, created: rtColW.created, due: rtColW.due }} settings={settings} />)}
             </div>
@@ -5228,44 +5264,13 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>📊 Mes Reportings</div>
-          <div style={{ display: "flex", gap: 8 }}>
-            {/* R3) Bouton corbeille */}
-            <button onClick={() => setShowTrash(p => !p)}
-              style={{ border: `1px solid ${showTrash ? "#E67E22" : "#E0E0E0"}`, background: showTrash ? "#FEF9E7" : "white", color: showTrash ? "#E67E22" : "#888", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 5 }}>
-              🗑 Corbeille {activeTrash.length > 0 && <span style={{ background: "#E67E22", color: "white", borderRadius: 10, fontSize: 9, padding: "1px 5px" }}>{activeTrash.length}</span>}
-            </button>
-            <button onClick={() => setReportModal({})} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>+ Nouveau reporting</button>
-          </div>
+          <button onClick={() => setShowTrashRpt(p => !p)}
+            style={{ border: `1px solid ${showTrashRpt ? "#E67E22" : "#E0E0E0"}`, background: showTrashRpt ? "#FEF9E7" : "white", color: showTrashRpt ? "#E67E22" : "#888", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 5 }}>
+            🗑 Corbeille {activeTrashRpt.length > 0 && <span style={{ background: "#E67E22", color: "white", borderRadius: 10, fontSize: 9, padding: "1px 5px" }}>{activeTrashRpt.length}</span>}
+          </button>
+          <button onClick={() => setReportModal({})} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 11 }}>+ Nouveau reporting</button>
         </div>
-
-        {/* R3) Vue corbeille */}
-        {showTrash ? (
-          <div>
-            <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'Lora',serif", marginBottom: 12 }}>
-              Les reportings supprimés sont conservés 30 jours, puis supprimés définitivement.
-            </div>
-            {activeTrash.length === 0 ? (
-              <div style={{ background: "white", borderRadius: 14, border: "1px dashed #E0E0E0", padding: "32px", textAlign: "center", color: "#CCC" }}>
-                <div style={{ fontSize: 28, marginBottom: 8 }}>🗑</div>
-                <div style={{ fontFamily: "'Lora',serif", fontSize: 13 }}>Corbeille vide</div>
-              </div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
-                {activeTrash.map(r => (
-                  <div key={r.id} style={{ position: "relative", opacity: 0.75 }}>
-                    <div style={{ position: "absolute", inset: 0, borderRadius: 14, border: "2px dashed #E0E0E0", zIndex: 1, pointerEvents: "none" }} />
-                    <ReportCard report={r} onClick={() => {}} />
-                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                      <button onClick={() => restoreFromTrash(r.id)} style={{ ...S.btn("#27AE60"), fontSize: 10, padding: "5px 12px", flex: 1 }}>↩ Restaurer</button>
-                      <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'Lora',serif", alignSelf: "center" }}>J-{trashDaysLeft(r)}</span>
-                      <button onClick={() => purgeTrash(r.id)} style={{ ...S.btn("#E74C3C"), fontSize: 10, padding: "5px 10px" }}>✕</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : reports.length === 0 ? (
+        {reports.length === 0 ? (
           <div style={{ background: "white", borderRadius: 14, border: "1px dashed #E0E0E0", padding: "40px", textAlign: "center", color: "#CCC" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>📊</div>
             <div style={{ fontSize: 13, fontFamily: "'Lora',serif" }}>Aucun reporting — cliquez sur "+ Nouveau reporting" pour commencer</div>
@@ -5285,11 +5290,36 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
         )}
       </div>
 
-      {/* R2) Undo banner */}
+      {showTrashRpt && (
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 12, color: "#AAA", fontFamily: "'Lora',serif", marginBottom: 12 }}>
+            Les reportings supprimés sont conservés 30 jours, puis supprimés définitivement.
+          </div>
+          {activeTrashRpt.length === 0
+            ? <div style={{ background: "white", borderRadius: 14, border: "1px dashed #E0E0E0", padding: "32px", textAlign: "center", color: "#CCC" }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>🗑</div>
+                <div style={{ fontFamily: "'Lora',serif", fontSize: 13 }}>Corbeille vide</div>
+              </div>
+            : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 16 }}>
+                {activeTrashRpt.map(r => (
+                  <div key={r.id} style={{ position: "relative", opacity: 0.75 }}>
+                    <div style={{ position: "absolute", inset: 0, borderRadius: 14, border: "2px dashed #E0E0E0", zIndex: 1, pointerEvents: "none" }} />
+                    <ReportCard report={r} onClick={() => {}} />
+                    <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                      <button onClick={() => restoreFromTrashRpt(r.id)} style={{ ...S.btn("#27AE60"), fontSize: 10, padding: "5px 12px", flex: 1 }}>↩ Restaurer</button>
+                      <span style={{ fontSize: 10, color: "#AAA", fontFamily: "'Lora',serif", alignSelf: "center" }}>J-{trashDaysLeftRpt(r)}</span>
+                      <button onClick={() => purgeTrashRpt(r.id)} style={{ ...S.btn("#E74C3C"), fontSize: 10, padding: "5px 10px" }}>✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>}
+        </div>
+      )}
+
       {undoReport && (
-        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 9998, background: "#2C3E50", color: "white", borderRadius: 12, padding: "12px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", gap: 16, fontFamily: "'Lora',serif", fontSize: 12, animation: "slideUp 0.3s ease" }}>
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 9998, background: "#2C3E50", color: "white", borderRadius: 12, padding: "12px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.25)", display: "flex", alignItems: "center", gap: 16, fontFamily: "'Lora',serif", fontSize: 12 }}>
           <span>🗑 <strong>"{(undoReport.name||"Reporting").slice(0,30)}"</strong> supprimé</span>
-          <button onClick={undoDelete} style={{ background: "#27AE60", border: "none", borderRadius: 6, color: "white", padding: "5px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", fontWeight: 700 }}>↩ Annuler</button>
+          <button onClick={undoDeleteRpt} style={{ background: "#27AE60", border: "none", borderRadius: 6, color: "white", padding: "5px 12px", fontSize: 11, cursor: "pointer", fontFamily: "'Lora',serif", fontWeight: 700 }}>↩ Annuler</button>
           <button onClick={() => setUndoReport(null)} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
         </div>
       )}
@@ -6492,7 +6522,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                 {/* Client */}
                 <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
                   fontSize:10, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
-                  onClick={()=>setModal(c)}><input type="checkbox" checked={!!c.closed} onClick={e=>e.stopPropagation()} onChange={e=>{ e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:e.target.checked}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:e.target.checked}); }} style={{ width:14, height:14, cursor:"pointer", flexShrink:0 }} />{c.clientName||"—"}</div>
+                  onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
                 {/* Code */}
                 <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
                 {/* Date demande */}
