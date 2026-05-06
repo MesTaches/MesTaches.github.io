@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.275<br/>06/05/26 à 12:21</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.276<br/>06/05/26 à 14h54</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -3333,11 +3333,11 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
           </div>
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10 }}>
             <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>VERSION CIBLE</div>
-              <input value={d.version||""} onChange={e => setD({...d,version:e.target.value})} placeholder="ex: v2.5" style={{ ...S.input }} />
+              <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em" }}>IA UTILISÉE</div>
+              <input value={d.version||""} onChange={e => setD({...d,version:e.target.value})} placeholder="ex: GPT-4o, Claude…" style={{ ...S.input }} />
             </div>
             <div>
-              <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4 }}>DATE CIBLE</div>
+              <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em" }}>DATE CIBLE</div>
               <input type="date" value={d.dueDate||""} onChange={e => setD({...d,dueDate:e.target.value})} style={{ ...S.input,cursor:"pointer" }} />
             </div>
           </div>
@@ -3364,7 +3364,7 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
           </div>
           {/* Périmètre concerné */}
           <div style={{ marginBottom:10 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:6,letterSpacing:"0.06em" }}>PÉRIMÈTRE CONCERNÉ</div>
+            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em" }}>PÉRIMÈTRE CONCERNÉ</div>
             <div style={{ display:"flex",gap:5,flexWrap:"wrap",marginBottom:6 }}>
               {["Global","Onglet Tâches","Onglet Dev","Onglet Reporting","Onglet Réunions","Onglet Calendrier","Onglet Kanban","Paramètres","Firebase / Sync","Interface mobile"].map(p => (
                 <button key={p} type="button"
@@ -3379,7 +3379,7 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
           </div>
           {/* Description / Notes — RichTextArea complète */}
           <div style={{ marginBottom:12 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:4,letterSpacing:"0.06em" }}>DESCRIPTION / NOTES</div>
+            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em",letterSpacing:"0.06em" }}>DESCRIPTION / NOTES</div>
             <RichTextArea value={d.notes||""} onChange={v => setD({...d,notes:v})} placeholder="Description, contexte, specs, étapes de reproduction…" rows={6} />
           </div>
         </div>
@@ -4332,12 +4332,12 @@ function DevView() {
       {/* Toolbar */}
       <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"7px 12px",display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",flexShrink:0 }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher…" style={{ ...S.input,width:140,padding:"4px 8px",fontSize:11 }} />
-        <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+        <div style={{ width:2,height:20,background:"#C7D2FE",borderRadius:1,flexShrink:0 }} />
         {["Actives","Complétées","Toutes"].map(o=><FBtn key={o} label={o} active={filterStatus===o} onClick={()=>setFilterStatus(o)} />)}
         {!isMobile && <>
-          <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+          <div style={{ width:2,height:20,background:"#C7D2FE",borderRadius:1,flexShrink:0 }} />
           {["Tous",...devSettings.types.map(t=>t.name)].map(o=><FBtn key={o} label={o} active={filterType===o} onClick={()=>setFilterType(o)} />)}
-          <div style={{ width:1,height:20,background:"#E8E8E8",flexShrink:0 }} />
+          <div style={{ width:2,height:20,background:"#C7D2FE",borderRadius:1,flexShrink:0 }} />
           {["Toutes",...devSettings.categories.map(c=>c.name)].map(c=>{ const co=devSettings.categories.find(x=>x.name===c); return <FBtn key={c} label={c} active={filterCat===c} onClick={()=>setFilterCat(c)} color={co?.accent} />; })}
         </>}
         <div style={{ flex:1 }} />
@@ -4350,8 +4350,8 @@ function DevView() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display:"flex",alignItems:"center",gap:7,padding:"4px 12px 3px",borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
-        <div style={{ width:14,flexShrink:0,marginLeft:5 }} />
+      <div style={{ display:"flex",alignItems:"center",gap:7,padding:"4px 14px 3px 14px",borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
+        <div style={{ width:14,flexShrink:0 }} />
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
         <span style={{ fontSize:9,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
         <ColHdr label="ÉVOLUTION"  col="title" />
