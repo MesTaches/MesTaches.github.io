@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.277<br/>06/05/26 à 15h28</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.277c<br/>06/05/26 à 15h38</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -3284,8 +3284,18 @@ function DailySummary({ tasks, onClose }) {
 function DevTaskModal({ task, devSettings, onSave, onClose }) {
   const isNew = !task.title;
   const uid_fn = () => Math.random().toString(36).substr(2,9);
+  const subStatuses = [
+    { id:"todo",      name:"À faire",    color:"#888",    bg:"#F0F0F0" },
+    { id:"inprogress",name:"En cours",   color:"#1D4ED8", bg:"#DBEAFE" },
+    { id:"waiting",   name:"En attente", color:"#A16207", bg:"#FEF9C3" },
+    { id:"blocked",   name:"Bloqué",     color:"#B91C1C", bg:"#FEE2E2" },
+    { id:"done",      name:"Fait",       color:"#065F46", bg:"#D1FAE5" },
+    { id:"cancelled", name:"Annulé",     color:"#92400E", bg:"#F5E6DC" },
+  ];
+
+
   const [d, setD] = useState({ ...task, category: task.category||"", type: task.type||"", status: task.status||"backlog", labels: task.labels||[], subtasks: task.subtasks||[] });
-  const addDevSub = () => setD(prev => ({...prev, subtasks: [...(prev.subtasks||[]), {id: Date.now()+Math.random(), text:"", status:"todo", completed:false}]}));
+  const addDevSub = () => setD(prev => ({...prev, subtasks: [...(prev.subtasks||[]), {id: String(Date.now()), text:"", status:"todo", completed:false}]}));
   const updDevSub = (sub) => setD(prev => ({...prev, subtasks: prev.subtasks.map(x => x.id===sub.id ? sub : x)}));
   const delDevSub = (id) => setD(prev => ({...prev, subtasks: prev.subtasks.filter(x => x.id!==id)}));
   const catObj   = devSettings.categories.find(c => c.name === d.category);
@@ -3393,12 +3403,12 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
               return (
                 <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
                   <button onClick={()=>updDevSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})}
-                    style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:`2px solid ${sub.completed?"#27AE60":"#CCC"}`,background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
+                    style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:"2px solid "+(sub.completed?"#27AE60":"#CCC"),background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
                   <input value={sub.text} onChange={e=>updDevSub({...sub,text:e.target.value})}
                     placeholder="Sous-tâche…"
                     style={{ flex:1,border:"none",outline:"none",fontSize:12,fontFamily:"'Lora',serif",color:sub.completed?"#AAA":"#2C3E50",textDecoration:sub.completed?"line-through":"none",background:"transparent" }} />
                   <select value={sub.status} onChange={e=>updDevSub({...sub,status:e.target.value,completed:e.target.value==="done"})}
-                    style={{ fontSize:10,fontFamily:"'Lora',serif",border:`1px solid ${ss.color}40`,borderRadius:20,padding:"1px 6px",background:ss.bg,color:ss.color,cursor:"pointer",flexShrink:0 }}>
+                    style={{ fontSize:10,fontFamily:"'Lora',serif",border:"1px solid "+ss.color+"40",borderRadius:20,padding:"1px 6px",background:ss.bg,color:ss.color,cursor:"pointer",flexShrink:0 }}>
                     {subStatuses.map(st=><option key={st.id} value={st.id}>{st.name}</option>)}
                   </select>
                   <button onClick={()=>delDevSub(sub.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0 }}>🗑</button>
@@ -3482,14 +3492,7 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
   const [montantFocused, setMontantFocused] = useState(false);
 
   // Statuts sous-tâches
-  const subStatuses = [
-    { id:"todo",      name:"À faire",    color:"#888",    bg:"#F0F0F0" },
-    { id:"inprogress",name:"En cours",   color:"#1D4ED8", bg:"#DBEAFE" },
-    { id:"waiting",   name:"En attente", color:"#A16207", bg:"#FEF9C3" },
-    { id:"blocked",   name:"Bloqué",     color:"#B91C1C", bg:"#FEE2E2" },
-    { id:"done",      name:"Fait",       color:"#065F46", bg:"#D1FAE5" },
-    { id:"cancelled", name:"Annulé",     color:"#92400E", bg:"#F5E6DC" },
-  ];
+    // subStatuses déplacé en haut
 
   // Statuts suivi dossier
   const suiviStatuses = [
