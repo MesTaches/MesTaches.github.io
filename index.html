@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.283<br/>06/05/26 à 15:32</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.284<br/>06/05/26 à 16:45</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -2319,12 +2319,14 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
 
       {/* Grille */}
       <div style={{ background:"white", borderRadius:16, overflow:"hidden", boxShadow:"0 2px 16px rgba(0,0,0,0.06)", border:"1px solid #ECEAE5" }}>
-        {/* Jours de semaine */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)", background:"#102A63" }}>
+        {/* Jours de semaine + cellules dans une seule grille unifiée */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
           {DAYS.map((d,i) => (
             <div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:10, fontWeight:700,
               color: i>=5 ? "rgba(255,255,255,0.5)" : "white",
-              fontFamily:"'Lora',serif", letterSpacing:"0.08em" }}>{d}</div>
+              fontFamily:"'Lora',serif", letterSpacing:"0.08em",
+              background:"#102A63",
+              borderRight: i<6 ? "1px solid rgba(255,255,255,0.1)" : "none" }}>{d}</div>
           ))}
         </div>
         {/* Cellules */}
@@ -2341,7 +2343,7 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
             return (
               <div key={d}
                 ref={el => cellRefs.current[d] = el}
-                onClick={() => !isDragging.current && setSelectedDay(isSelected ? null : d)}
+                onClick={() => { if (!isDragging.current) setSelectedDay(isSelected ? null : d); }}
                 style={{ minHeight:110, borderRight:"1px solid #ECEAE5", borderBottom:"1px solid #ECEAE5",
                   padding:"8px 6px 6px", cursor:"pointer",
                   background: isHover ? "#E8F0FE" : isSelected ? "#EEF2FF" : isWeekend ? "#FAFAF8" : "white",
@@ -4478,7 +4480,7 @@ function DevView() {
   );
   const ColHdr = ({label,col}) => (
     <div style={{ display:"flex",alignItems:"center",flexShrink:0,width:colWidths[col]||72 }}>
-      <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
+      <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",letterSpacing:"0.06em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{label}</span>
       <ResizeHandle col={col} />
     </div>
   );
@@ -4506,10 +4508,10 @@ function DevView() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display:"flex",alignItems:"center",gap:7,paddingLeft:5,paddingRight:6,paddingTop:4,paddingBottom:3,borderBottom:"1px solid #ECEAE5",background:"#F8F8F6",flexShrink:0,userSelect:"none" }}>
+      <div style={{ display:"flex",alignItems:"center",gap:7,paddingLeft:5,paddingRight:6,paddingTop:5,paddingBottom:4,borderBottom:"1px solid #0A1F50",background:"#102A63",flexShrink:0,userSelect:"none" }}>
         <div style={{ width:14,marginLeft:5,flexShrink:0 }} />
-        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
-        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
         <ColHdr label="ÉVOLUTION"  col="title" />
         <ColHdr label="STATUT"     col="status" />
         <ColHdr label="CATÉGORIE"  col="category" />
@@ -4517,8 +4519,8 @@ function DevView() {
         <ColHdr label="PÉRIMÈTRE"  col="scope" />
         <ColHdr label="ÉTIQUETTES" col="labels" />
         <div style={{ flex:1 }} />
-        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:60,textAlign:"right" }}>VERSION</span>
-        <span style={{ fontSize:10,fontWeight:700,color:"#AAA",fontFamily:"'Lora',serif",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:60,textAlign:"right" }}>VERSION</span>
+        <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:80,textAlign:"right" }}>DATE CIBLE</span>
         <span style={{ width:20,flexShrink:0 }} />
       </div>
 
@@ -6069,8 +6071,8 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
   const ColHeader = ({ label, col, extra }) => (
     <div style={{ display: "flex", alignItems: "center", flexShrink: 0, width: col ? colWidths[col] : undefined, cursor: col ? "pointer" : "default", userSelect: "none", ...extra }}
       onClick={() => col && handleSort(col)}>
-      <span style={{ fontSize: 9, fontWeight: 700, color: sortCol === col ? "white" : "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
-      {col && sortCol === col && <span style={{ fontSize: 8, color: "white", marginLeft: 2 }}>{sortDir === "asc" ? "▲" : "▼"}</span>}
+      <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", letterSpacing: "0.06em", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+      {col && sortCol === col && <span style={{ fontSize: 9, color: "white", marginLeft: 2 }}>{sortDir === "asc" ? "▲" : "▼"}</span>}
       {col && <ResizeHandle col={col} />}
     </div>
   );
@@ -6185,15 +6187,15 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
       {!isMobile && (
         <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 100px 4px", borderBottom: "1px solid #0A1F50", background: "#102A63", flexShrink: 0, userSelect: "none" }}>
           <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
-          <span style={{ flexShrink: 0, minWidth: 20 }}></span><span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", minWidth: 16 }}>#</span>
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", minWidth: 12 }}>P</span>
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", width: 16, flexShrink: 0, textAlign: "center" }}>☀</span>
+          <span style={{ flexShrink: 0, minWidth: 20 }}></span><span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", minWidth: 16 }}>#</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", minWidth: 12 }}>P</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", width: 16, flexShrink: 0, textAlign: "center" }}>☀</span>
           <ColHeader label="TÂCHE" col="title" />
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", minWidth: 28 }}>ST</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", minWidth: 28 }}>ST</span>
           <ColHeader label="STATUT" col="status" />
           <ColHeader label="CATÉGORIE" col="category" />
           <ColHeader label="TYPE" col="type" />
-          <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.7)", fontFamily: "'Lora',serif", letterSpacing: "0.06em", minWidth: 60 }}>ÉTIQUETTES</span>
+          <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", letterSpacing: "0.06em", minWidth: 60 }}>ÉTIQUETTES</span>
           <div style={{ flex: 1 }} />
           <ColHeader label="CRÉATION" col="created" extra={{ textAlign: "right" }} />
           <span style={{ width: 16, flexShrink: 0 }} />
@@ -7311,7 +7313,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.283<br />06/05/26 à 15:32
+          v.0.284<br />06/05/26 à 16:45
         </div>
       </div>
 
