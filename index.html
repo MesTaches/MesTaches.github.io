@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.284<br/>06/05/26 à 16:45</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.285<br/>06/05/26 à 09:43</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -629,7 +629,7 @@ function CotationView({ settings }) {
 
   const ColH = ({col,label,right}) => (
     <div style={{ position:"relative", overflow:"hidden", textAlign:right?"right":"left", paddingRight:right?10:0 }}>
-      <span onClick={()=>handleSort(col)} style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
+      <span onClick={()=>handleSort(col)} style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:"'Lora',serif", cursor:"pointer", whiteSpace:"nowrap", userSelect:"none" }}>
         {label}{si(col)}
       </span>
       <div onMouseDown={e=>startResize(col,e)} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", zIndex:10 }} />
@@ -673,8 +673,8 @@ function CotationView({ settings }) {
       {/* ── Tableau ── */}
       <div style={{ overflowX:"auto", background:"white", borderTop:"1px solid #ECEAE5" }}>
         {/* Header */}
-        <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"4px 8px", background:"#102A63", minWidth:"max-content", alignItems:"center" }}>
-          <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:"'Lora',serif" }}>PRIO.</div>
+        <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"5px 8px 4px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:"'Lora',serif" }}>PRIO.</div>
           <ColH col="clientName"       label="CLIENT"    />
           <ColH col="clientCode"       label="CODE"      />
           <ColH col="requestDate"      label="DATE DEM." />
@@ -5463,45 +5463,44 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
         ) : (
           <div style={{ overflowX: "hidden" }}>
             {/* En-têtes */}
-            <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#102A63", padding: "6px 8px", minWidth: "fit-content" }}>
-              {/* Spacer : marginLeft(5) + checkbox(14) + gap(7) + num(16) = 42px, puis prio et soleil comme colonnes */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7, background: "#102A63", padding: "5px 8px 4px", minWidth: "fit-content", borderBottom: "1px solid #0A1F50" }}>
               <div style={{ width: 42, flexShrink: 0 }} />
-              <div style={{ minWidth: 16, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>P.</span>
+              <div style={{ minWidth: 16, flexShrink: 0 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>P.</span>
               </div>
-              <div style={{ width: 16, flexShrink: 0 }} />{/* soleil - pas d'en-tête */}
+              <div style={{ width: 16, flexShrink: 0 }} />
               <div style={{ width: rtColW.title, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TITRE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TITRE</span>
                 <div onMouseDown={e => startResizeRt("title", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
-              <div style={{ minWidth: 28, flexShrink: 0 }} />{/* sous-tâches */}
+              <div style={{ minWidth: 28, flexShrink: 0 }} />
               <div style={{ width: rtColW.status, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>STATUT</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>STATUT</span>
                 <div onMouseDown={e => startResizeRt("status", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
               <div style={{ width: rtColW.category, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CATÉGORIE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CATÉGORIE</span>
                 <div onMouseDown={e => startResizeRt("category", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
               <div style={{ width: rtColW.type, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</span>
                 <div onMouseDown={e => startResizeRt("type", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
-              <div style={{ width: 120, flexShrink: 0, position: "relative" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉTIQUETTE</span>
+              <div style={{ width: 120, flexShrink: 0 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉTIQUETTE</span>
               </div>
               <div style={{ flex: 1 }} />
               <div style={{ width: rtColW.created, flexShrink: 0, position: "relative", textAlign: "right" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CRÉÉE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>CRÉÉE</span>
                 <div onMouseDown={e => startResizeRt("created", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
               <div style={{ width: 16, flexShrink: 0 }} />
               <div style={{ width: rtColW.due, flexShrink: 0, position: "relative", textAlign: "right" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉCHÉANCE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>ÉCHÉANCE</span>
                 <div onMouseDown={e => startResizeRt("due", e)} style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 6, cursor: "col-resize", zIndex: 2 }} />
               </div>
               <div style={{ width: 30, flexShrink: 0, textAlign: "center" }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>NOTE</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>NOTE</span>
               </div>
             </div>
             {/* Lignes */}
@@ -6513,6 +6512,24 @@ function SuiviClientView({ settings }) {
         </div>
       </div>
       {deletedClient && <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9998, background:"#2C3E50", color:"white", borderRadius:12, padding:"12px 20px", boxShadow:"0 8px 24px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:16, fontFamily:"'DM Mono',monospace", fontSize:12 }}><span><strong>{deletedClient.clientName}</strong> supprimé</span><button onClick={undoDelete} style={{ background:"#27AE60", border:"none", borderRadius:6, color:"white", padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:"'DM Mono',monospace", fontWeight:700 }}>Annuler</button><button onClick={()=>setDeletedClient(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, padding:0 }}>×</button></div>}
+      {suiviDupAlert && (
+        <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2100,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}>
+          <div style={{ background:"white",borderRadius:14,width:"100%",maxWidth:440,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",borderTop:"4px solid #E67E22",padding:"22px 26px" }}>
+            <div style={{ fontSize:16,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50",marginBottom:10 }}>⚠ Code client en doublon</div>
+            <p style={{ fontSize:13,fontFamily:"'Lora',serif",color:"#555",lineHeight:1.6,marginBottom:16 }}>
+              Le code client <strong style={{ color:"#E67E22" }}>{suiviDupAlert.code}</strong> est déjà utilisé dans le suivi clients.
+            </p>
+            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+              <button onClick={()=>{ const ex=clients.find(c=>c.id===suiviDupAlert.existingId); setModal(ex||null); setSuiviDupAlert(null); }}
+                style={{ ...S.btn("#102A63"),fontSize:11,padding:"8px 16px" }}>Ouvrir le suivi existant</button>
+              <button onClick={confirmSuiviDupSave}
+                style={{ ...S.btn("#E67E22"),fontSize:11,padding:"8px 16px" }}>Enregistrer quand même</button>
+              <button onClick={()=>setSuiviDupAlert(null)}
+                style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"8px 16px" }}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
       {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
       {quickOpen && <QuickCapture />}
     </div>
@@ -6797,9 +6814,12 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
                   <span style={{ fontSize:10, fontWeight:700, color:pr.color, fontFamily:"'DM Mono',monospace" }}>{pr.label}</span>
                 </div>
                 {/* Client */}
-                <div style={{ width:colWidths.clientName, flexShrink:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                  fontSize:10, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8 }}
-                  onClick={()=>setModal(c)}>{c.clientName||"—"}</div>
+                <div style={{ width:colWidths.clientName, flexShrink:0, display:"flex", alignItems:"center", gap:4,
+                  fontSize:10, fontFamily:"'Lora',serif", color:"#000", fontWeight:600, cursor:"pointer", paddingRight:8, overflow:"hidden" }}
+                  onClick={()=>setModal(c)}>
+                  {c.isDuplicate && <span title="Code client en doublon" style={{ fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 4px",fontFamily:"'Lora',serif",fontWeight:700,flexShrink:0 }}>⚠ DUP</span>}
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.clientName||"—"}</span>
+                </div>
                 {/* Code */}
                 <div style={{ width:colWidths.clientCode, flexShrink:0, fontSize:10, fontFamily:"'Lora',serif", color:"#888", paddingRight:8, overflow:"hidden", textOverflow:"ellipsis" }}>{c.clientCode||"—"}</div>
                 {/* Date demande */}
@@ -7313,7 +7333,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.284<br />06/05/26 à 16:45
+          v.0.285<br />06/05/26 à 09:43
         </div>
       </div>
 
