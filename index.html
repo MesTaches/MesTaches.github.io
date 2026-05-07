@@ -15,7 +15,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-    html,body{height:100%;font-family:'Lora',serif;background:#F7F6F2;-webkit-font-smoothing:antialiased}
+    html,body{height:100%;width:100%;font-family:'Lora',serif;background:#F7F6F2;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
     @keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
     @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
     ::-webkit-scrollbar{width:5px;height:5px}
@@ -284,14 +284,14 @@ async function fbLogout() {
   </div>
 </div>
 <div id="fb-app" class="fb-screen" style="display:none;height:100vh;width:100%;flex-direction:column;">
-  <div id="root" style="flex:1;overflow:auto;height:100%;"></div>
+  <div id="root" style="flex:1;overflow:auto;height:100%;width:100%;"></div>
   <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
     style="position:fixed;bottom:16px;right:152px;z-index:9999;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
     onmouseover="this.style.background='#C00000';this.style.borderColor='#C00000'"
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.293<br/>07/05/26 à 10:51</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.301<br/>07/05/26 à 15:14</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -1885,6 +1885,56 @@ function LabelCell({ task, settings }) {
 }
 
 /* ─── TASK CARD ─── */
+/* ─── InlineSelect : dropdown stylé pour édition inline ─── */
+function InlineSelect({ value, options, onChange, width }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const current = options.find(o => o.value === value) || options[0] || { label:"—", style:{} };
+  return (
+    <div ref={ref} style={{ position:"relative", flexShrink:0, width }} onClick={e => e.stopPropagation()}>
+      <div onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+        style={{ ...current.style, cursor:"pointer", display:"flex", alignItems:"center",
+          justifyContent:"space-between", gap:3, padding:"0 5px", height:18, borderRadius:3,
+          width:"100%", fontSize:10, fontWeight:700, fontFamily:"'Lora',serif",
+          userSelect:"none", whiteSpace:"nowrap", overflow:"hidden" }}>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis", flex:1 }}>{current.label}</span>
+        <span style={{ fontSize:7, opacity:0.5, flexShrink:0 }}>▾</span>
+      </div>
+      {open && (
+        <div style={{ position:"fixed", zIndex:9900,
+          background:"white", borderRadius:10, boxShadow:"0 12px 32px rgba(0,0,0,0.18)",
+          border:"1px solid #ECEAE5", minWidth:140, overflow:"hidden", padding:"4px 0" }}
+          ref={el => {
+            if (el && ref.current) {
+              const r = ref.current.getBoundingClientRect();
+              el.style.top = (r.bottom + 4) + "px";
+              el.style.left = r.left + "px";
+            }
+          }}>
+          {options.map(o => (
+            <div key={o.value} onClick={() => { onChange(o.value); setOpen(false); }}
+              style={{ padding:"5px 12px", fontSize:11, fontFamily:"'Lora',serif",
+                cursor:"pointer", display:"flex", alignItems:"center", gap:8,
+                background: o.value === value ? "#F0F5FF" : "white" }}
+              onMouseEnter={e => e.currentTarget.style.background = o.value === value ? "#E8EFFE" : "#F8F9FB"}
+              onMouseLeave={e => e.currentTarget.style.background = o.value === value ? "#F0F5FF" : "white"}>
+              {o.dot && <span style={{ width:8, height:8, borderRadius:"50%", background:o.dot, flexShrink:0 }} />}
+              <span style={{ ...o.style, borderRadius:4, padding:"2px 7px", fontSize:10, fontWeight:700, fontFamily:"'Lora',serif" }}>{o.label}</span>
+              {o.value === value && <span style={{ marginLeft:"auto", fontSize:10, color:"#102A63" }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin, colWidths, settings }) {
   const [hovered, setHovered] = useState(false);
   const [showComment, setShowComment] = useState(false);
@@ -1928,9 +1978,28 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
         <span style={{ fontSize: 10, fontWeight: 500, color: task.completed ? "#AAA" : "#2C3E50", textDecoration: task.completed ? "line-through" : "none", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: colWidths.title, flexShrink: 0 }}>{task.title}</span>
         {totalSubs > 0 ? <span style={{ fontSize: 10, color: "#BBB", fontFamily: "'Lora',serif", flexShrink: 0, minWidth: 28 }}>{doneSubs}/{totalSubs}✓</span> : <span style={{ minWidth: 28, flexShrink: 0 }} />}
         {/* 3) Status badge */}
-        <span style={{ fontSize: 10, fontWeight: 700, background: statusObj.bg, color: statusObj.color, borderRadius: 3, padding: "1px 5px", fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.status || 72, overflow: "hidden", textOverflow: "ellipsis" }}>{statusObj.name}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, background: catBg, color: catAccent, borderRadius: 3, padding: "1px 5px", fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.category, overflow: "hidden", textOverflow: "ellipsis" }}>{task.category}</span>
-        <span style={{ fontSize: 10, color: "#555", fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.type, overflow: "hidden", textOverflow: "ellipsis" }}>{typeObj?.icon || ""} {task.type}</span>
+        <InlineSelect
+          value={task.status}
+          width={colWidths.status || 72}
+          options={settings.statuses.map(s => ({ value: s.id, label: s.name, dot: s.color,
+            style: { background: s.bg, color: s.color } }))}
+          onChange={v => onEdit({ ...task, status: v })}
+        />
+        <InlineSelect
+          value={task.category || ""}
+          width={colWidths.category}
+          options={settings.categories.map(c => ({ value: c.name, label: c.name, dot: c.accent,
+            style: { background: c.bg, color: c.accent } }))}
+          onChange={v => onEdit({ ...task, category: v })}
+        />
+        <InlineSelect
+          value={task.type || ""}
+          width={colWidths.type}
+          options={[{ value: "", label: "—", style: { color: "#AAA", background: "transparent" } },
+            ...settings.types.map(t => ({ value: t.name, label: `${t.icon || ""} ${t.name}`.trim(),
+              style: { background: "#F5F5F5", color: "#555" } }))]}
+          onChange={v => onEdit({ ...task, type: v })}
+        />
         <LabelCell task={task} onSaveComment={onSaveComment} settings={settings} />
         <div style={{ flex: 1 }} />
 
@@ -2054,7 +2123,7 @@ function Dashboard({ tasks, onNavigate, settings }) {
     </div>
 
     {/* KPIs */}
-    <div style={{display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: isMobile ? 8 : 12}}>
+    <div style={{display:'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: isMobile ? 8 : 20}}>
       <StatCard label="Tâches actives"   value={active.length}  sub={pct(active.length)+"%"}  color="#2C3E50" onClick={() => onNavigate('tasks')} />
       <StatCard label="En retard"        value={overdue.length} sub={pct(overdue.length)+"%"} color="#C0392B" onClick={() => onNavigate('tasks')} />
       <StatCard label="Aujourd'hui"      value={todayT.length}  sub={pct(todayT.length)+"%"}  color="#E67E22" onClick={() => onNavigate('calendar')} />
@@ -2076,7 +2145,7 @@ function Dashboard({ tasks, onNavigate, settings }) {
     </div>
 
     {/* 3 colonnes : par catégorie, par statut, par priorité */}
-    <div style={{display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? 12 : 16}}>
+    <div style={{display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? 12 : 20}}>
 
       {/* Par catégorie */}
       <div style={{background:'white', borderRadius:14, padding: isMobile ? '14px 16px' : '20px 24px', border:'1px solid #ECEAE5'}}>
@@ -2216,15 +2285,18 @@ function MyDayView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
 }
 
 /* ─── CALENDAR VIEW ─── */
-function CalendarView({ tasks, onEdit, onAdd, settings }) {
+function CalendarView({ tasks, onEdit, onUpdate, onAdd, settings }) {
   const [curDate, setCurDate] = useState(new Date());
   const year = curDate.getFullYear(), month = curDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const startPad = (firstDay + 6) % 7;
+  const startPad = Math.min((firstDay + 6) % 7, 4);
   const cells = [];
   for (let i = 0; i < startPad; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow !== 0 && dow !== 6) cells.push(d);
+  }
   const tasksByDay = {};
   tasks.forEach(t => {
     if (!t.dueDate) return;
@@ -2235,7 +2307,7 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
   });
   const [selectedDay, setSelectedDay] = useState(null);
   const todayDate = new Date();
-  const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+  const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven"];
   const MONTHS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
   /* ── Drag custom — pas d'attribut draggable HTML pour éviter le click post-drag ── */
@@ -2273,23 +2345,24 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       if (moved) {
+        /* Drag terminé — sauvegarder seulement, ne PAS ouvrir le détail */
         const day = getDayAtPos(up.clientX, up.clientY);
         if (day) {
           const newDue = `${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-          onEdit({ ...task, dueDate: newDue });
+          (onUpdate || onEdit)({ ...task, dueDate: newDue });
         }
+        isDragging.current = true;
+        setTimeout(() => { isDragging.current = false; }, 150);
       } else {
+        /* Simple clic — ouvrir le détail */
         onEdit(task);
+        isDragging.current = false;
       }
-      /* délai pour que le onClick de la cellule ne se déclenche pas pendant un drag */
-      setTimeout(() => { isDragging.current = false; }, 50);
       setGhost(null); setHoverDay(null);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
   };
-
-  const WEEKEND = [5, 6]; // Sam=5 Dim=6 (index 0=Lun)
 
   return (
     <div style={{ userSelect: "none" }}>
@@ -2318,23 +2391,18 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
       </div>
 
       {/* Grille */}
-      <div style={{ background:"white", borderRadius:16, overflow:"hidden", boxShadow:"0 2px 16px rgba(0,0,0,0.06)", border:"1px solid #ECEAE5" }}>
-        {/* Jours de semaine + cellules dans une seule grille unifiée */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
+      <div style={{ background:"white", borderRadius:16, overflow:"hidden", boxShadow:"0 2px 16px rgba(0,0,0,0.06)", border:"1px solid #ECEAE5", width:"100%" }}>
+        {/* Grille unifiée : en-têtes + cellules dans la même grille CSS */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)" }}>
           {DAYS.map((d,i) => (
             <div key={d} style={{ padding:"10px 0", textAlign:"center", fontSize:10, fontWeight:700,
               color: i>=5 ? "rgba(255,255,255,0.5)" : "white",
               fontFamily:"'Lora',serif", letterSpacing:"0.08em",
               background:"#102A63",
-              borderRight: i<6 ? "1px solid rgba(255,255,255,0.1)" : "none" }}>{d}</div>
+              borderBottom:"2px solid rgba(255,255,255,0.15)" }}>{d}</div>
           ))}
-        </div>
-        {/* Cellules */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(7,1fr)" }}>
           {cells.map((d, i) => {
-            const colIdx = i % 7;
-            const isWeekend = colIdx >= 5;
-            if (!d) return <div key={`e${i}`} style={{ minHeight:110, borderRight:"1px solid #F0F0F0", borderBottom:"1px solid #F0F0F0", background: isWeekend ? "#FAFAF8" : "#F8F7F4" }} />;
+            if (!d) return <div key={`e${i}`} style={{ minHeight:110, borderRight:"1px solid #F0F0F0", borderBottom:"1px solid #F0F0F0", background:"#F8F7F4" }} />;
             const isToday = todayDate.getDate()===d && todayDate.getMonth()===month && todayDate.getFullYear()===year;
             const isSelected = selectedDay===d;
             const dayTasks = tasksByDay[d] || [];
@@ -2346,7 +2414,7 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
                 onClick={() => { if (!isDragging.current) setSelectedDay(isSelected ? null : d); }}
                 style={{ minHeight:110, borderRight:"1px solid #ECEAE5", borderBottom:"1px solid #ECEAE5",
                   padding:"8px 6px 6px", cursor:"pointer",
-                  background: isHover ? "#E8F0FE" : isSelected ? "#EEF2FF" : isWeekend ? "#FAFAF8" : "white",
+                  background: isHover ? "#E8F0FE" : isSelected ? "#EEF2FF" : "white",
                   transition:"background 0.12s",
                   outline: isHover ? "2px solid #102A63" : "none", outlineOffset:"-2px" }}>
                 {/* Numéro du jour */}
@@ -2354,7 +2422,7 @@ function CalendarView({ tasks, onEdit, onAdd, settings }) {
                   <span style={{
                     fontSize:12, fontWeight: isToday ? 700 : 400,
                     fontFamily:"'Lora',serif",
-                    color: isToday ? "white" : isWeekend ? "#BBBBBB" : "#444",
+                    color: isToday ? "white" : "#444",
                     background: isToday ? "#102A63" : "transparent",
                     borderRadius:"50%", width:24, height:24,
                     display:"flex", alignItems:"center", justifyContent:"center",
@@ -7266,7 +7334,7 @@ function App() {
   const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
+    <div style={{ minHeight: "100vh", width: "100%", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
       <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
       <style>{`
         @keyframes slideIn  { from { transform: translateX(100%); opacity: 0 } to { transform: translateX(0); opacity: 1 } }
@@ -7333,7 +7401,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.293<br />07/05/26 à 10:51
+          v.0.301<br />07/05/26 à 15:14
         </div>
       </div>
 
@@ -7378,7 +7446,7 @@ function App() {
       )}
 
       {/* Full-width views vs contained views */}
-      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux") ? (
+      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux" || view === "calendar") ? (
         <div style={{ width: "100%" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -7398,14 +7466,19 @@ function App() {
           {view === "contentieux" && (
             <ContentieuxView />
           )}
+          {view === "calendar" && (
+            <div style={{ padding: "24px 20px" }}>
+              <CalendarView tasks={tasks} onEdit={openEdit} onUpdate={updTask} onAdd={d => openNew(d)} settings={settings} />
+            </div>
+          )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "kanban"        && <KanbanView tasks={tasks} onEdit={openEdit} onToggle={togTask} onUpdate={updTask} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
-          {view === "calendar"      && <CalendarView    tasks={tasks} onEdit={openEdit} onAdd={d => openNew(d)} settings={settings} />}
+          {/* calendar moved to full-width block */}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {/* cotation view supprimée */}
