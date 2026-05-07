@@ -291,7 +291,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.286<br/>06/05/26 à 09:43</div>
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.293<br/>07/05/26 à 10:51</div>
 <button id="fb-logout-btn" onclick="fbLogout()"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -673,7 +673,7 @@ function CotationView({ settings }) {
       {/* ── Tableau ── */}
       <div style={{ overflowX:"auto", background:"white", borderTop:"1px solid #ECEAE5" }}>
         {/* Header */}
-        <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"5px 8px 4px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50" }}>
+        <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"0 8px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50", height:25 }}>
           <div style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:"'Lora',serif" }}>PRIO.</div>
           <ColH col="clientName"       label="CLIENT"    />
           <ColH col="clientCode"       label="CODE"      />
@@ -699,7 +699,7 @@ function CotationView({ settings }) {
           return (
             <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"3px 8px",
               borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
-              alignItems:"center", minWidth:"max-content", height:32 }}>
+              alignItems:"center", minWidth:"max-content", height:25 }}>
               <div><button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }} style={{ width:18, height:18, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"white", padding:0, lineHeight:1 }}>✓</button></div>
               {/* Prio */}
               <div style={{ display:"flex", alignItems:"center", gap:2 }}>
@@ -1905,11 +1905,11 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
 
   return (
     <>
-      <div style={{ display:"flex", alignItems:"stretch" }}>
+      <div style={{ display:"flex", alignItems:"stretch", height:25, marginBottom:1 }}>
         <button onClick={(e)=>{ e.stopPropagation(); e.preventDefault(); window.__pinTask && window.__pinTask(task.id); }}
           title={task.pinned ? "Désépingler" : "Épingler"}
           style={{ border:"none", background:task.pinned?"#FFF8E1":"transparent",
-            cursor:"pointer", fontSize:12, padding:"0 3px", flexShrink:0,
+            cursor:"pointer", fontSize:10, padding:"0 3px", flexShrink:0,
             color:task.pinned?"#E8A020":"transparent", transition:"all 0.15s",
             borderLeft:task.pinned?"3px solid #E8A020":"3px solid transparent",
             display:"flex", alignItems:"center", position:"relative", zIndex:10 }}
@@ -1917,7 +1917,7 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
           onMouseLeave={(e)=>{ if(!task.pinned){e.currentTarget.style.color="transparent";e.currentTarget.style.borderLeftColor="transparent";}}}
         >📌</button>
         <div onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)} onClick={() => onEdit(task)}
-        style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 6, flex: 1, borderLeft: `2px solid ${catAccent}`, marginBottom: 1, background: hovered ? "#F5F7FB" : task.completed ? "#FAFAFA" : "white", opacity: task.completed ? 0.45 : isBlocked ? 0.6 : 1, cursor: "pointer", transition: "background 0.1s", borderRadius: "0 3px 3px 0", height: 28, overflow: "hidden" }}>
+        style={{ display: "flex", alignItems: "center", gap: 7, paddingRight: 6, flex: 1, borderLeft: `2px solid ${catAccent}`, background: hovered ? "#F5F7FB" : task.completed ? "#FAFAFA" : "white", opacity: task.completed ? 0.45 : isBlocked ? 0.6 : 1, cursor: "pointer", transition: "background 0.1s", borderRadius: "0 3px 3px 0", height: 25, overflow: "hidden" }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(task.id); }}
           style={{ width: 14, height: 14, borderRadius: "50%", flexShrink: 0, border: `1.5px solid ${task.completed ? catAccent : "#CCC"}`, background: task.completed ? catAccent : "white", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, color: "white", transition: "all 0.15s", marginLeft: 5 }}>{task.completed ? "✓" : ""}</button>
         <span style={{ fontSize:10, color:"#CCC", flexShrink:0, minWidth:16, textAlign:"right" }}>{num}</span>
@@ -1934,14 +1934,14 @@ function TaskCard({ task, num, onDelete, onToggle, onEdit, onSaveComment, onPin,
         <LabelCell task={task} onSaveComment={onSaveComment} settings={settings} />
         <div style={{ flex: 1 }} />
 
-        {parseRec(task.recurrence).type !== "none" && <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 10, flexShrink: 0, opacity: 0.5 }}>🔄</span>}
-        {task.totalTime > 0 && <span title={`Temps : ${fmtTime(task.totalTime)}`} style={{ fontSize: 10, color: "#102A63", fontFamily: "'Lora',serif", flexShrink: 0, opacity: 0.6 }}>⏱{fmtTime(task.totalTime)}</span>}
-        {task.reminder && task.reminder !== "none" && <span style={{ fontSize: 10, flexShrink: 0, opacity: 0.4 }}>🔔</span>}
-        {task.createdAt && <span style={{ fontSize: 10, color: "#BDC3C7", fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.created, textAlign: "right" }}>+ {fmtDate(task.createdAt.split("T")[0])}</span>}
+        <span style={{ width: 16, flexShrink: 0, textAlign: "center" }}>{parseRec(task.recurrence).type !== "none" ? <span title={recLabel(task.recurrence) || ""} style={{ fontSize: 10, opacity: 0.5 }}>🔄</span> : ""}</span>
+        <span style={{ width: 16, flexShrink: 0, textAlign: "center" }}>{task.totalTime > 0 ? <span title={`Temps : ${fmtTime(task.totalTime)}`} style={{ fontSize: 10, color: "#102A63", fontFamily: "'Lora',serif", opacity: 0.6 }}>⏱</span> : ""}</span>
+        <span style={{ width: 16, flexShrink: 0, textAlign: "center" }}>{task.reminder && task.reminder !== "none" ? <span style={{ fontSize: 10, opacity: 0.4 }}>🔔</span> : ""}</span>
+        <span style={{ width: colWidths.created, flexShrink: 0, whiteSpace: "nowrap", textAlign: "right", fontSize: 10, color: "#BDC3C7", fontFamily: "'Lora',serif" }}>{task.createdAt ? `+ ${fmtDate(task.createdAt.split("T")[0])}` : ""}</span>
         <span style={{ width: 16, flexShrink: 0 }} />
         {task.dueDate ? <span style={{ fontSize: 10, color: dc[ds], fontFamily: "'Lora',serif", flexShrink: 0, whiteSpace: "nowrap", width: colWidths.due, textAlign: "right" }}>{ds === "overdue" ? "⚠" : ds === "today" ? "●" : "○"} {fmtDate(task.dueDate)}</span> : <span style={{ width: colWidths.due, flexShrink: 0 }} />}
         <button onClick={(e) => { e.stopPropagation(); setShowComment(true); }} title={hasComment ? "Voir / modifier la note" : "Ajouter une note"}
-          style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, padding: "1px 5px", flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s" }}>{hasComment ? "💬" : "＋"}</button>
+          style={{ border: hasComment ? "1px solid #102A63" : "1px solid #D0D0D0", background: hasComment ? "#EEF2FF" : "#F5F5F5", borderRadius: 5, cursor: "pointer", fontSize: 11, width: 26, flexShrink: 0, lineHeight: 1, color: hasComment ? "#102A63" : "#999", transition: "all 0.1s", textAlign: "center", padding: 0 }}>{hasComment ? "💬" : "＋"}</button>
         <button onClick={(e) => { e.stopPropagation(); onDelete(task.id); }}
           style={{ border: "none", background: "none", cursor: "pointer", color: hovered ? "#E8A0A0" : "transparent", fontSize: 13, padding: "0 2px", transition: "color 0.1s", flexShrink: 0, lineHeight: 1 }}>×</button>
       </div>
@@ -4257,7 +4257,7 @@ function DevTaskCard({ task, num, onDelete, onEdit, onToggle, devSettings, colWi
     <div onMouseEnter={()=>setHovered(true)} onMouseLeave={()=>setHovered(false)} onClick={()=>onEdit(task)}
       style={{ display:"flex",alignItems:"center",gap:7,paddingRight:6,borderLeft:`2px solid ${catAccent}`,marginBottom:1,
         background:hovered?"#F5F7FB":task.completed?"#FAFAFA":"white",opacity:task.completed?0.45:1,
-        cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:28,overflow:"hidden" }}>
+        cursor:"pointer",transition:"background 0.1s",borderRadius:"0 3px 3px 0",height:25,overflow:"hidden" }}>
       <button onClick={e=>{e.stopPropagation();onToggle(task.id);}}
         style={{ width:14,height:14,borderRadius:"50%",flexShrink:0,border:`1.5px solid ${task.completed?catAccent:"#CCC"}`,background:task.completed?catAccent:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",marginLeft:5 }}>{task.completed?"✓":""}</button>
       <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",flexShrink:0,minWidth:16,textAlign:"right" }}>{num}</span>
@@ -4508,7 +4508,7 @@ function DevView() {
       </div>
 
       {/* Column headers */}
-      <div style={{ display:"flex",alignItems:"center",gap:7,paddingLeft:5,paddingRight:6,paddingTop:5,paddingBottom:4,borderBottom:"1px solid #0A1F50",background:"#102A63",flexShrink:0,userSelect:"none" }}>
+      <div style={{ display:"flex",alignItems:"center",gap:7,paddingLeft:5,paddingRight:6,borderBottom:"1px solid #0A1F50",background:"#102A63",flexShrink:0,userSelect:"none",height:25 }}>
         <div style={{ width:14,marginLeft:5,flexShrink:0 }} />
         <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:16 }}>#</span>
         <span style={{ fontSize:10,fontWeight:700,color:"white",fontFamily:"'Lora',serif",minWidth:12 }}>P</span>
@@ -6150,8 +6150,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
 
       {/* ── AI Natural Input ── */}
       {!isMobile && (
-        <div style={{ background:"#F0F3FA", borderBottom:"1px solid #DDE3F0" }}>
-          <div style={{ maxWidth:"1400px", margin:"0 auto", padding:"5px 24px" }}>
+        <div style={{ background:"#F0F3FA", borderBottom:"1px solid #DDE3F0", padding:"5px 16px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, background:"white",
                         border:"1.5px solid #D0D8F0", borderRadius:8, padding:"4px 12px",
                         boxShadow:"0 2px 8px rgba(16,42,99,0.06)" }}>
@@ -6180,15 +6179,13 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
           </div>
 
           {aiDebug && settings.showAiDebug && <div style={{ marginTop:4, padding:"4px 8px", borderRadius:6, background: aiDebug.startsWith("✅")?"#D1FAE5": aiDebug.startsWith("❌")||aiDebug.startsWith("⚠️")?"#FEE2E2":"#EEF2FF", fontSize:10, fontFamily:"'DM Mono',monospace", color: aiDebug.startsWith("✅")?"#065F46": aiDebug.startsWith("❌")||aiDebug.startsWith("⚠️")?"#B91C1C":"#3730A3" }}>{aiDebug}</div>}
-          </div>
         </div>
       )}
 
       {/* Column headers */}
       {!isMobile && (
-        <div style={{ background: "#102A63", borderBottom: "1px solid #0A1F50", flexShrink: 0, userSelect: "none" }}>
-          <div style={{ maxWidth:"1400px", margin:"0 auto", padding:"0 24px", display:"flex", alignItems:"center", gap:7, height:32 }}>
-          <div style={{ width: 14, flexShrink: 0, marginLeft: 5 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 7, paddingLeft: 40, paddingRight: 16, borderBottom: "1px solid #0A1F50", background: "#102A63", flexShrink: 0, userSelect: "none", height: 25 }}>
+          <div style={{ width: 14, flexShrink: 0 }} />
           <span style={{ flexShrink: 0, minWidth: 20 }}></span><span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", minWidth: 16 }}>#</span>
           <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", minWidth: 12 }}>P</span>
           <span style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", width: 16, flexShrink: 0, textAlign: "center" }}>☀</span>
@@ -6203,13 +6200,11 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
           <span style={{ width: 16, flexShrink: 0 }} />
           <ColHeader label="ÉCHÉANCE" col="due" extra={{ textAlign: "right" }} />
           <span style={{ width: 36, flexShrink: 0 }} />
-          </div>
         </div>
       )}
 
       {/* List */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
-        <div style={{ maxWidth: isMobile ? "100%" : "1400px", margin: "0 auto", padding: isMobile ? "8px 10px" : "4px 24px 8px" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "8px 10px" : "4px 16px 8px" }}>
         {displayList.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0", color: "#CCC" }}>
             <div style={{ fontSize: 30, marginBottom: 8 }}>✓</div>
@@ -6253,12 +6248,9 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
             );
           })
         )}
-        </div>
       </div>
-
       {/* Stats footer */}
-      <div style={{ borderTop: "1px solid #F0F0F0", background: "white", flexShrink: 0 }}>
-        <div style={{ maxWidth:"1400px", margin:"0 auto", padding:"5px 24px", display:"flex", gap:16, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ borderTop: "1px solid #F0F0F0", background: "white", flexShrink: 0, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", padding: "5px 16px" }}>
         {(() => {
           const total    = tasks.length;
           const pct      = n => total > 0 ? Math.round((n / total) * 100) : 0;
@@ -6283,7 +6275,6 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
           ));
         })()}
         <span style={{ flex: 1, textAlign: "right", fontSize: 9, color: "#CCC", fontFamily: "'DM Mono',monospace" }}>{displayList.length} affiché{displayList.length !== 1 ? "s" : ""}</span>
-        </div>
       </div>
     </div>
   );
@@ -6714,7 +6705,7 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
     <div style={{ display:"flex", alignItems:"center", height:"100%", flexShrink:0, width:col?colWidths[col]:undefined,
       cursor:col?"pointer":"default", userSelect:"none", justifyContent:right?"flex-end":center?"center":"flex-start",
       position:"relative" }} onClick={()=>col&&handleSort(col)}>
-      <span style={{ fontSize:9, fontWeight:700, color:sortCol===col?"#102A63":"#666",
+      <span style={{ fontSize:10, fontWeight:700, color:"white",
         fontFamily:"'Lora',serif", whiteSpace:"nowrap" }}>{label}{si(col)}</span>
       {col && <div onMouseDown={e=>startResize(col,e)}
         style={{ position:"absolute", right:-4, top:0, bottom:0, width:8, cursor:"col-resize", zIndex:5 }} />}
@@ -6784,10 +6775,10 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
         <div style={{ minWidth:"max-content" }}>
 
           {/* Header colonnes */}
-          <div style={{ display:"flex", alignItems:"center", gap:4, padding:"6px 6px", background:"#FAFAFA",
-            borderBottom:"2px solid #ECEAE5", position:"sticky", top:0, zIndex:2, gap:0, height:32 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:4, padding:"0 6px", background:"#102A63",
+            borderBottom:"1px solid #0A1F50", position:"sticky", top:0, zIndex:2, gap:0, height:25 }}>
             <div style={{ width:28, flexShrink:0 }} />
-            <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", height:"100%" }}><span style={{ fontSize:9, fontWeight:700, color:"#666", fontFamily:"'Lora',serif" }}>PRIO.</span></div>
+            <div style={{ width:44, flexShrink:0, display:"flex", alignItems:"center", height:"100%" }}><span style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:"'Lora',serif" }}>PRIO.</span></div>
             <ColHeader label="CLIENT"    col="clientName" />
             <ColHeader label="CODE"      col="clientCode" />
             <ColHeader label="DATE DEM." col="requestDate" />
@@ -7342,7 +7333,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.286<br />06/05/26 à 09:43
+          v.0.293<br />07/05/26 à 10:51
         </div>
       </div>
 
