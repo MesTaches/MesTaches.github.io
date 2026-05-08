@@ -6,6 +6,7 @@
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.26.0/tabler-icons.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <meta name="theme-color" content="#102A63"/>
   <meta name="mobile-web-app-capable" content="yes"/>
@@ -15,6 +16,7 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml"/>
   <style>
     *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    .cb-modal-open #fb-logout-btn,.cb-modal-open #fb-trash-btn{display:none!important}
     html,body{height:100%;width:100%;font-family:'Lora',serif;background:#F7F6F2;-webkit-font-smoothing:antialiased;display:flex;flex-direction:column}
     @keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
     @keyframes slideUp{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
@@ -291,8 +293,8 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.310<br/>07/05/26 à 18:33</div>
-<button id="fb-logout-btn" onclick="fbLogout()"
+  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.324<br/>08/05/26 à 14:57</div>
+<button id="fb-logout-btn" onclick="fbLogout()" class="fb-logout-btn"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
   </button>
@@ -521,6 +523,11 @@ function CotationModal({ cotation, onSave, onClose }) {
     return base;
   });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uidP = () => Math.random().toString(36).substr(2,9);
+  const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
+  const updPmt   = (id,k,v) => setD(p=>({...p,paiements:(p.paiements||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
+  const delPmt   = (id) => setD(p=>({...p,paiements:(p.paiements||[]).filter(r=>r.id!==id)}));
+  const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#102A63", marginBottom:4, fontWeight:700, letterSpacing:"0.06em" }}>{t}</div>;
   const inp = { ...S.input, fontSize:10, fontFamily:"'Lora',serif", padding:"5px 10px" };
   return (
@@ -976,6 +983,7 @@ const DEFAULT_SETTINGS = {
     { id: "lbl3", name: "Factor",      color: "#27AE60", bg: "#E8F8F5" },
     { id: "lbl4", name: "Financement", color: "#8E44AD", bg: "#F4ECF7" },
     { id: "lbl5", name: "Direction",   color: "#D35400", bg: "#FDEBD0" },
+    { id: "lbl6", name: "Crédit-bail",  color: "#0E7490", bg: "#E0F7FA" },
   ],
   suiviTypes: [
     { id: "retard", name: "Retard", color: "#C0392B", bg: "#FDEDEC" },
@@ -3499,6 +3507,7 @@ const ALL_TABS = [
   { id: "cotation",      label: "Cotation",         icon: "◎" },
   { id: "reporting",     label: "Reporting",        icon: "▤" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
+  { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
   { id: "dev",           label: "Dev",              icon: "⌥" },
 ];
 
@@ -4832,6 +4841,7 @@ function SettingsView({ settings, onSave }) {
           <Tab id="demands" label="📨 Demandes" />
           <Tab id="payments" label="💳 Paiements" />
           <Tab id="tabs" label="👁 Onglets" />
+          <Tab id="creditbail" label="🧾 Crédit-bail" />
           <Tab id="profiles" label="👥 Profils" />
         </div>
         <div style={{ padding: "20px 24px" }}>
@@ -4956,22 +4966,22 @@ function SettingsView({ settings, onSave }) {
                 {profiles.map(p => {
                   const role = PROFILE_ROLES.find(r => r.id === p.role) || PROFILE_ROLES[2];
                   return (
-                    <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#FAFAFA", borderRadius: 10, border: "1px solid #ECEAE5" }}>
-                      <span style={{ fontSize: 18, flexShrink: 0 }}>{role.icon}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                    <div key={p.id} style={{ padding: "10px 14px", background: "#FAFAFA", borderRadius: 10, border: "1px solid #ECEAE5" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
+                        <span style={{ fontSize: 16, flexShrink: 0 }}>{role.icon}</span>
                         <input value={p.name} onChange={e => updProfile(p.id, "name", e.target.value)}
-                          style={{ ...S.input, padding: "6px 10px", fontSize: 12, width: "100%", marginBottom: 5, display: "block" }} />
+                          style={{ ...S.input, padding: "5px 10px", fontSize: 12, flex:1, minWidth:0 }} />
                         <input value={p.email||""} onChange={e => updProfile(p.id, "email", e.target.value)}
                           placeholder="Email (facultatif)"
-                          style={{ ...S.input, padding: "5px 10px", fontSize: 11, color: "#888", width: "100%", display: "block" }} />
+                          style={{ ...S.input, padding: "5px 10px", fontSize: 11, color: "#888", flex:1, minWidth:0 }} />
+                        <select value={p.role} onChange={e => updProfile(p.id, "role", e.target.value)}
+                          disabled={p.role === "owner"}
+                          style={{ ...S.input, padding: "5px 8px", fontSize: 11, cursor: p.role==="owner"?"not-allowed":"pointer", background: role.bg, color: role.color, fontWeight: 700, border: `1px solid ${role.color}30`, flexShrink: 0 }}>
+                          {PROFILE_ROLES.map(r => <option key={r.id} value={r.id}>{r.icon} {r.name}</option>)}
+                        </select>
                       </div>
-                      <select value={p.role} onChange={e => updProfile(p.id, "role", e.target.value)}
-                        disabled={p.role === "owner"}
-                        style={{ ...S.input, padding: "5px 8px", fontSize: 11, cursor: p.role==="owner"?"not-allowed":"pointer", background: role.bg, color: role.color, fontWeight: 700, border: `1px solid ${role.color}30`, flexShrink: 0 }}>
-                        {PROFILE_ROLES.map(r => <option key={r.id} value={r.id}>{r.icon} {r.name}</option>)}
-                      </select>
-                      <span style={{ fontSize: 9, background: role.bg, color: role.color, borderRadius: 20, padding: "2px 8px", fontFamily: "'Lora',serif", fontWeight: 700, flexShrink: 0, whiteSpace: "nowrap" }}>
-                        {role.desc.split(",")[0]}
+                      <span style={{ fontSize: 9, background: role.bg, color: role.color, borderRadius: 20, padding: "2px 8px", fontFamily: "'Lora',serif", fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {role.icon} {role.desc}
                       </span>
                       {p.role !== "owner" && (
                         <button onClick={() => delProfile(p.id)}
@@ -5017,6 +5027,8 @@ function SettingsView({ settings, onSave }) {
               </div>
             </div>
           )}
+
+          {tab === "creditbail" && <CBKanbanSettings />}
 
           {tab === "labels" && <>
             {(s.labels||[]).map(l => (
@@ -5153,7 +5165,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
                 fontWeight: 700 }}
               onMouseEnter={e => e.currentTarget.style.color = "#102A63"}
               onMouseLeave={e => e.currentTarget.style.color = expanded ? "#102A63" : "#AAA"}>
-              {expanded ? "⊖" : "⊕"}
+              {expanded ? "⊖" : "📄"}
             </button>
           )}
           {depth === 0 && (task.subtasks||[]).length === 0 && (
@@ -5936,6 +5948,739 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
   );
 }
 
+
+/* ═══════════════════════════════════════════════════════════
+   CRÉDIT-BAIL — Storage keys
+   ═══════════════════════════════════════════════════════════ */
+const CB_DOSSIERS_KEY   = "creditbail_dossiers_v1";
+const CB_FINANCEURS_KEY = "creditbail_financeurs_v1"; // liste des financeurs disponibles
+const CB_COLNAMES_KEY = "creditbail_colnames_v1";
+function loadCBColNames() { try { const s=localStorage.getItem(CB_COLNAMES_KEY); return s?JSON.parse(s):{};} catch { return {}; } }
+function saveCBColNames(v) { try { localStorage.setItem(CB_COLNAMES_KEY, JSON.stringify(v)); } catch {} }
+
+function CBKanbanSettings() {
+  const defaults = Object.fromEntries(CB_KANBAN_STATUSES.map(s=>[s.id,s.name]));
+  const [names, setNames] = React.useState(()=>({...defaults,...loadCBColNames()}));
+  const upd = (id,val) => {
+    const next={...names,[id]:val}; setNames(next); saveCBColNames(next);
+    const found=CB_KANBAN_STATUSES.find(x=>x.id===id); if(found) found.name=val;
+  };
+  const reset = () => {
+    setNames(defaults); saveCBColNames({});
+    CB_KANBAN_STATUSES.forEach(s=>{s.name=defaults[s.id];});
+  };
+  return (
+    <div>
+      <div style={{ fontSize:12,color:"#888",fontFamily:"'DM Mono',monospace",marginBottom:16 }}>Personnalisez les noms des colonnes du Kanban Crédit-bail.</div>
+      <div style={{ display:"flex",flexDirection:"column",gap:8 }}>
+        {CB_KANBAN_STATUSES.map(col=>(
+          <div key={col.id} style={{ display:"flex",alignItems:"center",gap:12,padding:"8px 12px",background:"#FAFAFA",borderRadius:8,border:"1px solid #ECEAE5" }}>
+            <span style={{ width:10,height:10,borderRadius:"50%",background:col.color,flexShrink:0 }} />
+            <input value={names[col.id]||""} onChange={e=>upd(col.id,e.target.value)}
+              style={{ flex:1,border:"1px solid #E0E0E0",borderRadius:6,padding:"6px 10px",fontSize:12,fontFamily:"'Lora',serif",color:"#2C3E50",outline:"none",background:"white" }} />
+          </div>
+        ))}
+      </div>
+      <button onClick={reset} style={{ marginTop:14,border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"6px 14px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",color:"#888" }}>↺ Remettre par défaut</button>
+    </div>
+  );
+}
+
+function loadCBDossiers()   { try { const s=localStorage.getItem(CB_DOSSIERS_KEY);   return s?JSON.parse(s):[]; } catch { return []; } }
+function saveCBDossiers(v)  { try { localStorage.setItem(CB_DOSSIERS_KEY, JSON.stringify(v)); } catch {} }
+function genCBRef(dossiers) {
+  const nums = dossiers.map(d => parseInt((d.reference||"").replace("CB_",""))||0);
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  return "CB_" + String(next).padStart(5,"0");
+}
+
+function loadCBFinanceurs() { try { const s=localStorage.getItem(CB_FINANCEURS_KEY); return s?JSON.parse(s):["BNP Lease","Société Générale Équipement","Crédit Agricole Leasing","BPCE Lease","ALD Automotive"]; } catch { return []; } }
+function saveCBFinanceurs(v){ try { localStorage.setItem(CB_FINANCEURS_KEY, JSON.stringify(v)); } catch {} }
+
+const CB_KANBAN_STATUSES = [
+  { id:"montage",    name:"Montage du dossier",    color:"#1D4ED8", bg:"#DBEAFE" },
+  { id:"negociation",name:"Demande de cotation",   color:"#A16207", bg:"#FEF9C3" },
+  { id:"accepte",    name:"Offre acceptée",        color:"#065F46", bg:"#D1FAE5" },
+  { id:"signature",  name:"Contrat signé",         color:"#6D28D9", bg:"#EDE9FE" },
+  { id:"misplace",   name:"Capex mis en place",    color:"#0E7490", bg:"#E0F7FA" },
+  { id:"refuse",     name:"Refusé",                color:"#B91C1C", bg:"#FEE2E2" },
+  { id:"clos",       name:"Clos",                  color:"#6B7280", bg:"#F3F4F6" },
+];
+
+const CB_FINANCEUR_STATUSES = [
+  { id:"a_faire",    name:"Demande à faire",    color:"#888",    bg:"#F0F0F0",   border:"#CCC" },
+  { id:"envoyee",    name:"Demande envoyée",    color:"#1D4ED8", bg:"#DBEAFE",   border:"#1D4ED8" },
+  { id:"negociation",name:"En négociation",     color:"#A16207", bg:"#FEF9C3",   border:"#A16207" },
+  { id:"contrat",    name:"Contrat à signer",   color:"#6D28D9", bg:"#EDE9FE",   border:"#6D28D9" },
+  { id:"attente_mep",name:"En attente MEP",     color:"#0E7490", bg:"#E0F7FA",   border:"#0E7490" },
+  { id:"en_cours",   name:"En cours",           color:"#065F46", bg:"#D1FAE5",   border:"#065F46" },
+  { id:"termine",    name:"Terminé",            color:"#059669", bg:"#ECFDF5",   border:"#059669" },
+  { id:"refuse",     name:"Refusé",             color:"#B91C1C", bg:"#FEE2E2",   border:"#B91C1C" },
+];
+
+const CB_DOC_TYPES = [
+  { id:"devis",       name:"Devis" },
+  { id:"facture",     name:"Facture" },
+  { id:"contrat",     name:"Contrat CB" },
+  { id:"pv",          name:"PV de réception" },
+  { id:"echeancier",  name:"Échéancier" },
+];
+
+/* ── Helpers financiers ── */
+function taux_financier(n, pmt, pv, maxIter=100) {
+  // Newton-Raphson pour RATE(n, pmt, pv)
+  if (!n || !pmt || !pv) return null;
+  let r = 0.01;
+  for (let i=0; i<maxIter; i++) {
+    const f  = pv * Math.pow(1+r, n) + pmt * ((Math.pow(1+r, n)-1)/r);
+    const df = pv * n * Math.pow(1+r, n-1) + pmt * (n*r*Math.pow(1+r,n-1) - (Math.pow(1+r,n)-1)) / (r*r);
+    const r2 = r - f/df;
+    if (Math.abs(r2-r) < 1e-8) return r2;
+    r = r2;
+  }
+  return r;
+}
+function calcCBRow(row) {
+  const mht  = parseFloat(row.montantHT) || 0;
+  const coeff= parseFloat(row.coeff)     || 0;
+  const n    = parseInt(row.nbLoyers)    || 0;
+  const vr   = parseFloat(row.valeurRes) || 0;
+  const fa   = parseFloat(row.fraisAnn)  || 0;
+  const loyerHT  = mht > 0 && coeff > 0 ? mht * coeff / 100 : (parseFloat(row.loyerHT)||0);
+  const loyerTTC = loyerHT * 1.2;
+  const mttc     = mht * 1.2;
+  const loyerMaj = n > 0 ? loyerHT + vr/n + fa/n : loyerHT;
+  const r_taux   = n>0 && loyerTTC>0 && mttc>0 ? taux_financier(n, -loyerTTC, mttc) : null;
+  const taux12   = r_taux !== null ? r_taux * 12 * 100 : null;
+  // TEG
+  const r_teg    = (n>0 && loyerTTC>0 && mttc>0)
+    ? taux_financier(n, -(loyerTTC + (fa*1.2 + vr*1.2)/n), mttc)
+    : null;
+  const teg12    = r_teg !== null ? r_teg * 12 * 100 : null;
+  const coutTotal= n>0 ? loyerTTC*n + vr*1.2 + fa*1.2 - mttc : null;
+  return { loyerHT, loyerTTC, mttc, loyerMaj, taux12, teg12, coutTotal };
+}
+
+/* ── Génération d'échéancier ── */
+function genEcheancier(montantTTC, loyerTTC, nbLoyers, tauxMensuel) {
+  if (!montantTTC || !loyerTTC || !nbLoyers) return [];
+  const r = tauxMensuel || 0;
+  let capital = montantTTC;
+  const rows = [];
+  for (let i=1; i<=nbLoyers; i++) {
+    const interets = capital * r;
+    const amort    = loyerTTC - interets;
+    capital        = Math.max(0, capital - amort);
+    rows.push({ n:i, loyer:loyerTTC, interets, amort, capitalRestant:capital });
+  }
+  return rows;
+}
+
+/* ══════════════════════════════════════════════════
+   CB DOSSIER MODAL
+   ══════════════════════════════════════════════════ */
+function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFinanceurs }) {
+  const uid = () => Math.random().toString(36).substr(2,9);
+  React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
+  const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
+  const [d, setD] = useState({ ...empty, ...dossier });
+  const [tab, setTab] = useState("financeurs");
+  const [newFinanceur, setNewFinanceur] = useState("");
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uidP = () => Math.random().toString(36).substr(2,9);
+  const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
+  const updPmt   = (id,k,v) => setD(p=>({...p,paiements:(p.paiements||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
+  const delPmt   = (id) => setD(p=>({...p,paiements:(p.paiements||[]).filter(r=>r.id!==id)}));
+  const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
+
+  // Calculs auto
+  const mht  = parseFloat(d.montantHT)||0;
+  const tva  = parseFloat(d.tva)||20;
+  const mttc = mht * (1 + tva/100);
+  const lbl  = (t) => <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em" }}>{t}</div>;
+  const inp  = { border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA" };
+
+  // Financeurs row helpers
+  const updFinRow = (id,k,v) => setD(p=>({...p,financeurs:(p.financeurs||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
+  const addFinRow = () => setD(p=>({...p,financeurs:[...(p.financeurs||[]),{id:uid(),financeur:"",statut:"a_faire",coeff:"",loyerHT:"",nbLoyers:"",valeurRes:"",fraisAnn:"",montantHT:d.montantHT}]}));
+  const delFinRow = (id) => setD(p=>({...p,financeurs:(p.financeurs||[]).filter(r=>r.id!==id)}));
+
+  // Docs
+  const setDoc = (type, files) => {
+    const arr = Array.from(files).map(f=>({ name:f.name, size:f.size }));
+    setD(p=>({...p,documents:{...(p.documents||{}),[type]:arr}}));
+  };
+  const docsComplete = CB_DOC_TYPES.every(dt => (d.documents||{})[dt.id]?.length>0);
+
+  // Echéancier (from first financeur with enough data)
+  const finRow0 = (d.financeurs||[])[0]||{};
+  const calc0   = calcCBRow({...finRow0, montantHT: d.montantHT});
+  const ech     = calc0.taux12 !== null
+    ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, (calc0.taux12/100)/12)
+    : [];
+
+  const fmtN = (v,dec=2) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  const fmtE = (v,dec=0) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
+  const fmtP = (v) => v===null||v===undefined||isNaN(v)?"—":Number(v).toFixed(2)+" %";
+
+  const INVEST_TYPES = ["Matériel","Véhicule","Immobilier","IT","Outillage","Mobilier","Autre"];
+  const DUREES = ["12","24","36","48","60","72","84"];
+
+  return (
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
+      onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div style={{ width:"min(820px,95vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
+        {/* Header */}
+        <div style={{ background:"#102A63",padding:"16px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>DOSSIER CRÉDIT-BAIL</div>
+            <div style={{ fontSize:17,fontWeight:700,color:"white",fontFamily:"'Lora',serif" }}>{d.intitule||"Nouveau dossier"}</div>
+          </div>
+          <div style={{ display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
+            <span style={{ fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.04em" }}>{d.reference||""}</span>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,flexShrink:0 }}>×</button>
+          </div>
+        </div>
+
+        <div style={{ flex:1,overflowY:"auto",padding:"18px 22px" }}>
+          {/* Statut kanban */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+              {CB_KANBAN_STATUSES.map(s=>(
+                <button key={s.id} onClick={()=>set("statut",s.id)}
+                  style={{ border:`1px solid ${s.border||s.color}`,background:d.statut===s.id?s.bg:"white",color:d.statut===s.id?s.color:"#888",borderRadius:20,padding:"3px 12px",fontSize:10,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:d.statut===s.id?700:400 }}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Lignes 1+2 : grille 1fr 2fr alignée sur 4 champs */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={inp} /></div>
+            <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={inp} /></div>
+            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...inp,background:"#F5F5F5",color:"#888",userSelect:"none" }}>{d.reference||"—"}</div></div>
+            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={inp} /></div>
+          </div>
+
+          {/* Ligne 3 : Type (1fr) + Fournisseur (2fr) — même proportions */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("TYPE D'INVESTISSEMENT")}
+              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={inp}>
+                <option value="">— Choisir —</option>
+                {INVEST_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>{lbl("FOURNISSEUR")}
+              <input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+            </div>
+          </div>
+
+          {/* Ligne 3 : Montants */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("MONTANT HT")}<input type="number" value={d.montantHT} onChange={e=>set("montantHT",e.target.value)} placeholder="0" style={inp} /></div>
+            <div>{lbl("TVA (%)")}<input type="number" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={inp} /></div>
+            <div>{lbl("MONTANT TTC (auto)")}
+              <div style={{ ...inp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc):"—"}</div>
+            </div>
+            <div>{lbl("MONTANT FINANCÉ")}<input type="number" value={d.montantFinance} onChange={e=>set("montantFinance",e.target.value)} placeholder="0" style={inp} /></div>
+          </div>
+
+          {/* Ligne 4 : Durée + Périodicité + VR % */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("DURÉE (MOIS)")}
+              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={inp}>
+                {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
+              </select>
+            </div>
+            <div>{lbl("PÉRIODICITÉ")}
+              <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={inp}>
+                <option>Mensuelle</option>
+                <option>Trimestrielle</option>
+              </select>
+            </div>
+            <div>{lbl("VALEUR RÉSIDUELLE (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={inp} /></div>
+          </div>
+
+          {/* Notes */}
+          <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:14,marginBottom:14 }}>
+            {lbl("DESCRIPTION / NOTES")}
+            <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Description du projet, contexte, observations…" rows={4} />
+          </div>
+
+          {/* ── Onglets bas ── */}
+          <div style={{ borderTop:"2px solid #ECEAE5",paddingTop:0 }}>
+            <div style={{ display:"flex",gap:0,marginBottom:0 }}>
+              {["financeurs","paiements","documents","echeancier"].map(t=>{
+                const labels={"financeurs":"💼 Financeurs","paiements":"💳 Paiements","documents":"📎 Documents","echeancier":"📅 Échéancier"};
+                return <button key={t} onClick={()=>setTab(t)}
+                  style={{ padding:"9px 18px",fontSize:11,fontFamily:"'Lora',serif",fontWeight:tab===t?700:400,
+                    border:"none",borderBottom:tab===t?"2px solid #102A63":"2px solid transparent",
+                    background:"transparent",cursor:"pointer",color:tab===t?"#102A63":"#888" }}>
+                  {labels[t]}
+                </button>;
+              })}
+            </div>
+
+            {/* ── FINANCEURS ── */}
+            {tab==="financeurs" && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif" }}>
+                    <thead>
+                      <tr style={{ background:"#102A63" }}>
+                        {["Statut","Financeur","Coeff %","Loyer HT","Loyer TTC","Nb loyers","Taux %","V. résid.","Frais ann.","Loyer maj.","TEG %","Coût total","MTTC","Action"].map(h=>(
+                          <th key={h} style={{ padding:"5px 7px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:"left",fontSize:10 }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(d.financeurs||[]).map((row,i)=>{
+                        const c = calcCBRow({...row,montantHT:d.montantHT});
+                        const st = CB_FINANCEUR_STATUSES.find(s=>s.id===row.statut)||CB_FINANCEUR_STATUSES[0];
+                        return (
+                          <tr key={row.id} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
+                            <td style={{ padding:"4px 6px",whiteSpace:"nowrap" }}>
+                              <select value={row.statut} onChange={e=>updFinRow(row.id,"statut",e.target.value)}
+                                style={{ fontSize:10,fontFamily:"'Lora',serif",background:st.bg,color:st.color,border:`0.5px solid ${st.border}`,borderRadius:4,padding:"1px 6px",cursor:"pointer" }}>
+                                {CB_FINANCEUR_STATUSES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding:"4px 6px" }}>
+                              <select value={row.financeur} onChange={e=>updFinRow(row.id,"financeur",e.target.value)}
+                                style={{ fontSize:10,fontFamily:"'Lora',serif",border:"1px solid #E8E8E8",borderRadius:6,padding:"2px 6px",minWidth:120,background:"#FAFAFA" }}>
+                                <option value="">—</option>
+                                {financeursList.map(f=><option key={f} value={f}>{f}</option>)}
+                              </select>
+                            </td>
+                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.coeff} onChange={e=>updFinRow(row.id,"coeff",e.target.value)} style={{ width:60,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
+                            <td style={{ padding:"4px 6px",color:"#102A63",fontWeight:700 }}>{fmtN(c.loyerHT)}</td>
+                            <td style={{ padding:"4px 6px",color:"#102A63" }}>{fmtN(c.loyerTTC)}</td>
+                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.nbLoyers} onChange={e=>updFinRow(row.id,"nbLoyers",e.target.value)} style={{ width:50,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
+                            <td style={{ padding:"4px 6px",color:"#065F46",fontWeight:700 }}>{fmtP(c.taux12)}</td>
+                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.valeurRes} onChange={e=>updFinRow(row.id,"valeurRes",e.target.value)} style={{ width:70,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
+                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.fraisAnn} onChange={e=>updFinRow(row.id,"fraisAnn",e.target.value)} style={{ width:70,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
+                            <td style={{ padding:"4px 6px",color:"#0E7490" }}>{fmtN(c.loyerMaj)}</td>
+                            <td style={{ padding:"4px 6px",color:"#A16207",fontWeight:700 }}>{fmtP(c.teg12)}</td>
+                            <td style={{ padding:"4px 6px",color:"#C0392B" }}>{fmtE(c.coutTotal)}</td>
+                            <td style={{ padding:"4px 6px",color:"#555" }}>{fmtE(c.mttc)}</td>
+                            <td style={{ padding:"4px 6px" }}><button onClick={()=>delFinRow(row.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14 }}>×</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ display:"flex",gap:8,marginTop:10,alignItems:"center" }}>
+                  <button onClick={addFinRow} style={{ ...S.btn("#102A63"),fontSize:10,padding:"5px 14px" }}>+ Ajouter un financeur</button>
+                  <div style={{ display:"flex",gap:6,alignItems:"center" }}>
+                    <input value={newFinanceur} onChange={e=>setNewFinanceur(e.target.value)} placeholder="Nouveau financeur…"
+                      style={{ border:"1px solid #E0E0E0",borderRadius:6,padding:"4px 10px",fontSize:11,fontFamily:"'Lora',serif",outline:"none" }} />
+                    <button onClick={()=>{ if(newFinanceur.trim()){ const nl=[...financeursList,newFinanceur.trim()]; onUpdateFinanceurs(nl); setNewFinanceur(""); }}}
+                      style={{ ...S.btn("#27AE60"),fontSize:10,padding:"5px 10px" }}>Ajouter</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── PAIEMENTS ── */}
+            {tab==="paiements" && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
+                    <thead>
+                      <tr style={{ background:"#102A63" }}>
+                        {["Montant","Effectué par","Date","Nature du paiement",""].map(h=>(
+                          <th key={h} style={{ padding:"6px 10px",color:"white",fontWeight:400,textAlign:"left",fontSize:10,whiteSpace:"nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(d.paiements||[]).length===0 && (
+                        <tr><td colSpan={5} style={{ padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontStyle:"italic" }}>Aucun paiement enregistré</td></tr>
+                      )}
+                      {(d.paiements||[]).map((p,i)=>(
+                        <tr key={p.id} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
+                          <td style={{ padding:"5px 8px" }}>
+                            <input type="number" value={p.montant} onChange={e=>updPmt(p.id,"montant",e.target.value)}
+                              placeholder="0"
+                              style={{ width:110,border:"1px solid #E0E0E0",borderRadius:6,padding:"3px 8px",fontSize:11,fontFamily:"'Lora',serif",textAlign:"right",outline:"none" }} />
+                          </td>
+                          <td style={{ padding:"5px 8px" }}>
+                            <select value={p.effectuePar} onChange={e=>updPmt(p.id,"effectuePar",e.target.value)}
+                              style={{ border:"1px solid #E0E0E0",borderRadius:6,padding:"3px 8px",fontSize:11,fontFamily:"'Lora',serif",background:"#FAFAFA",outline:"none",cursor:"pointer" }}>
+                              <option>Banque</option>
+                              <option>KP1</option>
+                            </select>
+                          </td>
+                          <td style={{ padding:"5px 8px" }}>
+                            <input type="date" value={p.date} onChange={e=>updPmt(p.id,"date",e.target.value)}
+                              style={{ border:"1px solid #E0E0E0",borderRadius:6,padding:"3px 8px",fontSize:11,fontFamily:"'Lora',serif",outline:"none" }} />
+                          </td>
+                          <td style={{ padding:"5px 8px" }}>
+                            <input value={p.nature} onChange={e=>updPmt(p.id,"nature",e.target.value)}
+                              placeholder="Description…"
+                              style={{ width:"100%",border:"1px solid #E0E0E0",borderRadius:6,padding:"3px 8px",fontSize:11,fontFamily:"'Lora',serif",outline:"none",minWidth:160 }} />
+                          </td>
+                          <td style={{ padding:"5px 8px",textAlign:"center" }}>
+                            <button onClick={()=>delPmt(p.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:16 }}>×</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {(d.paiements||[]).length>0 && (
+                      <tfoot>
+                        <tr style={{ background:"#F8F9FB",borderTop:"2px solid #ECEAE5" }}>
+                          <td style={{ padding:"6px 8px",fontWeight:700,fontFamily:"'Lora',serif",fontSize:11,color:"#102A63" }}>{fmtTotal(d.paiements)}</td>
+                          <td colSpan={4}></td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+                <button onClick={addPmt} style={{ ...S.btn("#102A63"),fontSize:10,padding:"5px 14px",marginTop:10 }}>+ Ajouter un paiement</button>
+              </div>
+            )}
+
+            {/* ── DOCUMENTS ── */}
+            {tab==="documents" && (
+              <div style={{ marginTop:12 }}>
+                <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#888" }}>Statut :</span>
+                  <span style={{ fontSize:11, fontWeight:700, fontFamily:"'Lora',serif",
+                    color: docsComplete?"#065F46":"#B91C1C",
+                    background: docsComplete?"#D1FAE5":"#FEE2E2",
+                    border: `0.5px solid ${docsComplete?"#065F46":"#B91C1C"}`,
+                    borderRadius:4, padding:"2px 10px" }}>
+                    {docsComplete?"✓ Complet":"⚠ Incomplet"}
+                  </span>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  {CB_DOC_TYPES.map(dt => {
+                    const files = (d.documents||{})[dt.id]||[];
+                    return (
+                      <div key={dt.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 12px",
+                        background:"#FAFAFA", borderRadius:8, border:"1px solid #ECEAE5" }}>
+                        <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", width:140, flexShrink:0 }}>{dt.name}</div>
+                        <div style={{ flex:1 }}>
+                          {files.length>0
+                            ? <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                                {files.map((f,i)=>(
+                                  <span key={i} style={{ fontSize:10, fontFamily:"'Lora',serif", background:"#E0F7FA", color:"#0E7490",
+                                    borderRadius:4, padding:"2px 8px", border:"0.5px solid #0E7490" }}>{f.name}</span>
+                                ))}
+                              </div>
+                            : <span style={{ fontSize:11, color:"#CCC", fontFamily:"'Lora',serif", fontStyle:"italic" }}>Aucun fichier</span>}
+                        </div>
+                        <label style={{ cursor:"pointer" }}>
+                          <input type="file" multiple style={{ display:"none" }} onChange={e=>setDoc(dt.id,e.target.files)} />
+                          <span style={{ ...S.btn("#102A63"), fontSize:10, padding:"4px 10px" }}>📎 Joindre</span>
+                        </label>
+                        {files.length>0 && (
+                          <button onClick={()=>setD(p=>({...p,documents:{...(p.documents||{}),[dt.id]:[]}}))
+                          } style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14 }}>×</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* ── ÉCHÉANCIER ── */}
+            {tab==="echeancier" && (
+              <div style={{ marginTop:12 }}>
+                {ech.length===0
+                  ? <div style={{ textAlign:"center", padding:"24px", color:"#CCC", fontFamily:"'Lora',serif", fontSize:12 }}>
+                      Renseignez les données du financeur (coeff, loyers) pour générer l'échéancier automatiquement.
+                    </div>
+                  : (
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif" }}>
+                        <thead>
+                          <tr style={{ background:"#102A63" }}>
+                            {["N°","Date échéance","Loyer","Intérêts","Amortissement","Capital restant dû"].map(h=>(
+                              <th key={h} style={{ padding:"6px 10px", color:"white", fontWeight:700, textAlign:"right", fontSize:10 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(() => {
+                            const startDate = new Date();
+                            return ech.map((row,i)=>{
+                              const d2 = new Date(startDate);
+                              d2.setMonth(d2.getMonth()+i+1);
+                              const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
+                              return (
+                                <tr key={i} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
+                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#888" }}>{row.n}</td>
+                                  <td style={{ padding:"5px 10px",textAlign:"right" }}>{dateStr}</td>
+                                  <td style={{ padding:"5px 10px",textAlign:"right",fontWeight:700,color:"#102A63" }}>{fmtE(row.loyer,2)}</td>
+                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#E67E22" }}>{fmtE(row.interets,2)}</td>
+                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#27AE60" }}>{fmtE(row.amort,2)}</td>
+                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#C0392B" }}>{fmtE(row.capitalRestant,2)}</td>
+                                </tr>
+                              );
+                            });
+                          })()}
+                        </tbody>
+                        <tfoot>
+                          <tr style={{ background:"#F8F9FB", borderTop:"2px solid #ECEAE5", fontWeight:700 }}>
+                            <td colSpan={2} style={{ padding:"6px 10px",fontFamily:"'Lora',serif",fontSize:11 }}>TOTAL</td>
+                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#102A63" }}>{fmtE(ech.reduce((a,r)=>a+r.loyer,0),2)}</td>
+                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#E67E22" }}>{fmtE(ech.reduce((a,r)=>a+r.interets,0),2)}</td>
+                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#27AE60" }}>{fmtE(ech.reduce((a,r)=>a+r.amort,0),2)}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"12px 22px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0 }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
+          <button onClick={()=>{ onSave(d); onClose(); }} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════
+   CREDITBAIL VIEW
+   ══════════════════════════════════════════════════ */
+function CreditBailView({ tasks, onEdit, settings }) {
+  const uid = () => Math.random().toString(36).substr(2,9);
+  const [dossiers, setDossiers]         = useState(() => loadCBDossiers());
+  const [modal, setModal]               = useState(null);
+  const [dragId, setDragId]             = useState(null);
+  const [dragOver, setDragOver]         = useState(null);
+  const [financeursList, setFinanceursList] = useState(() => loadCBFinanceurs());
+  const [showClos, setShowClos]         = useState(false);
+  const [showRefus, setShowRefus]        = useState(false);
+  const [search, setSearch]             = useState("");
+  const [filterFinanceur, setFilterFinanceur] = useState("");
+
+  useEffect(()=>{ saveCBDossiers(dossiers); },[dossiers]);
+  useEffect(()=>{
+    const saved=loadCBColNames();
+    if(Object.keys(saved).length) CB_KANBAN_STATUSES.forEach(s=>{if(saved[s.id])s.name=saved[s.id];});
+  },[]);
+
+  const handleSave = d => {
+    setDossiers(p => p.find(x=>x.id===d.id) ? p.map(x=>x.id===d.id?d:x) : [d,...p]);
+  };
+  const handleDrop = colId => {
+    if (!dragId) return;
+    const d = dossiers.find(x=>x.id===dragId);
+    if (d && d.statut!==colId) setDossiers(p=>p.map(x=>x.id===dragId?{...x,statut:colId}:x));
+    setDragId(null); setDragOver(null);
+  };
+  const openNew = () => setModal({ id:uid(), reference:genCBRef(dossiers), codeProjet:"", intitule:"", typeInvestissement:"", fournisseur:"", site:"", montantHT:"", tva:"20", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() });
+
+  // Tâches filtrées sur étiquette Crédit-bail
+  const cbTasks = tasks.filter(t => (t.labels||[]).some(l => l.toLowerCase().includes("crédit-bail") || l.toLowerCase().includes("credit-bail") || l.toLowerCase().includes("creditbail")));
+
+  // Filtrage
+  const filteredDossiers = dossiers.filter(d => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || (d.intitule||"").toLowerCase().includes(q) || (d.reference||"").toLowerCase().includes(q) || (d.fournisseur||"").toLowerCase().includes(q) || (d.codeProjet||"").toLowerCase().includes(q) || (d.site||"").toLowerCase().includes(q);
+    const matchFinanceur = !filterFinanceur || (d.financeurs||[]).some(f=>f.financeur===filterFinanceur);
+    return matchSearch && matchFinanceur;
+  });
+
+  // Kanban (sans clos et sans refusé)
+  const activeCols = CB_KANBAN_STATUSES.filter(s=>s.id!=="clos"&&s.id!=="refuse").map(s=>({ // 5 colonnes actives
+    ...s, items: filteredDossiers.filter(d=>d.statut===s.id)
+  }));
+  const closDossiers  = filteredDossiers.filter(d=>d.statut==="clos");
+  const refusDossiers = filteredDossiers.filter(d=>d.statut==="refuse");
+
+  const fmtE = (v,dec=0) => v ? Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €" : "—";
+  const H3_PAL = {
+    montage:    {bg:"#EFF6FF",border:"#BFDBFE",nameColor:"#1E40AF",amtColor:"#3B82F6",cardBorder:"#1D4ED8"},
+    negociation:{bg:"#FFFBEB",border:"#FDE68A",nameColor:"#92400E",amtColor:"#D97706",cardBorder:"#A16207"},
+    accepte:    {bg:"#F0FDF4",border:"#BBF7D0",nameColor:"#065F46",amtColor:"#34D399",cardBorder:"#059669"},
+    signature:  {bg:"#F5F3FF",border:"#DDD6FE",nameColor:"#4C1D95",amtColor:"#8B5CF6",cardBorder:"#6D28D9"},
+    misplace:   {bg:"#ECFEFF",border:"#A5F3FC",nameColor:"#0E7490",amtColor:"#06B6D4",cardBorder:"#0E7490"},
+    default:    {bg:"#F8FAFC",border:"#E2E8F0",nameColor:"#475569",amtColor:"#94A3B8",cardBorder:"#64748B"},
+  };
+
+  return (
+    <div style={{ display:"flex",flexDirection:"column",background:"#F7F6F3",minHeight:"100vh" }}>
+      {/* Toolbar */}
+      <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap" }}>
+        {/* Recherche */}
+        <div style={{ position:"relative",flex:1,minWidth:180,maxWidth:360 }}>
+          <span style={{ position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#AAA",pointerEvents:"none" }}>🔍</span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher dossier, fournisseur, site, référence…"
+            style={{ paddingLeft:30,paddingRight:8,paddingTop:6,paddingBottom:6,border:"1px solid #E0E0E0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",outline:"none",width:"100%",boxSizing:"border-box",background:"#FAFAFA" }} />
+        </div>
+        {/* Filtre financeur */}
+        <select value={filterFinanceur} onChange={e=>setFilterFinanceur(e.target.value)}
+          style={{ border:"1px solid #E0E0E0",borderRadius:8,padding:"5px 10px",fontSize:11,fontFamily:"'Lora',serif",background:filterFinanceur?"#E0F7FA":"#FAFAFA",color:filterFinanceur?"#0E7490":"#555",cursor:"pointer",outline:"none" }}>
+          <option value="">Tous les financeurs</option>
+          {financeursList.map(f=><option key={f} value={f}>{f}</option>)}
+        </select>
+        <div style={{ flex:1 }} />
+        <button onClick={openNew} style={{ ...S.btn("#102A63"),padding:"6px 16px",fontSize:11,flexShrink:0 }}>+ Nouveau dossier</button>
+      </div>
+
+      {/* Tâches Crédit-bail — hauteur fixe 5 lignes */}
+      {cbTasks.length > 0 && (
+        <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",flexShrink:0,padding:"10px 20px" }}>
+          <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6 }}>
+            TÂCHES CRÉDIT-BAIL <span style={{ fontWeight:400,color:"#AAA" }}>({cbTasks.length})</span>
+          </div>
+          <div style={{ maxHeight: 5*27+"px", overflowY:"auto" }}>
+            {cbTasks.map((t,i) => {
+              const co = settings.categories.find(c=>c.name===t.category);
+              const st = settings.statuses.find(s=>s.id===t.status)||settings.statuses[0];
+              return (
+                <div key={t.id} onClick={()=>onEdit(t)}
+                  style={{ display:"flex",alignItems:"center",gap:8,height:26,borderBottom:"1px solid #F5F5F5",cursor:"pointer",paddingLeft:4 }}
+                  onMouseEnter={e=>e.currentTarget.style.background="#F8F9FB"}
+                  onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                  <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",minWidth:16 }}>{i+1}</span>
+                  <span style={{ width:4,height:16,borderRadius:2,background:co?.accent||"#CCC",flexShrink:0 }} />
+                  <span style={{ flex:1,fontSize:11,fontFamily:"'Lora',serif",color:t.completed?"#AAA":"#2C3E50",textDecoration:t.completed?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.title}</span>
+                  <span style={{ fontSize:9,fontWeight:700,background:st.bg||"#EEE",color:st.color||"#888",borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif",flexShrink:0 }}>{st.name}</span>
+                  {t.dueDate && <span style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif",flexShrink:0 }}>{t.dueDate.split("-").reverse().join("/")}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Kanban — 5 colonnes pleine largeur */}
+      <div style={{ padding:"12px 20px",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:14,alignItems:"flex-start",minHeight:300 }}>
+        {activeCols.map(col=>(
+          <div key={col.id}
+            onDragOver={e=>{e.preventDefault();setDragOver(col.id);}}
+            onDragLeave={()=>setDragOver(null)}
+            onDrop={()=>handleDrop(col.id)}
+            style={{ display:"flex",flexDirection:"column",minWidth:0 }}>
+            {/* En-tête H3 : fond pâle coloré par statut */}
+            {(() => { const pal=H3_PAL[col.id]||H3_PAL.default; return (<>
+            <div style={{ background:pal.bg,borderRadius:"10px 10px 0 0",padding:"10px 12px",
+              border:`0.5px solid ${pal.border}`,borderBottom:"none",
+              outline: dragOver===col.id ? `2px solid ${pal.cardBorder}` : "none",
+              outlineOffset:-1, transition:"outline 0.15s" }}>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3 }}>
+                <span style={{ fontSize:12,fontWeight:500,color:pal.nameColor,fontFamily:"'Lora',serif" }}>{col.name}</span>
+                <span style={{ fontSize:10,background:"white",color:pal.nameColor,borderRadius:20,padding:"1px 9px",fontFamily:"'Lora',serif",border:`0.5px solid ${pal.border}` }}>{col.items.length}</span>
+              </div>
+              <div style={{ fontSize:10,color:pal.amtColor,fontFamily:"'Lora',serif" }}>
+                {fmtE(col.items.reduce((a,d)=>a+(parseFloat(d.montantHT)||0),0))} HT
+              </div>
+            </div>
+            <div style={{ background:dragOver===col.id?"#F8FAFF":"#F7F7F5",
+              borderRadius:"0 0 10px 10px",border:`0.5px solid ${pal.border}`,
+              borderTop:"none",padding:8,display:"flex",flexDirection:"column",gap:6,minHeight:180 }}>
+              {col.items.length===0
+                ? <div style={{ fontSize:11,color:"#CCC",fontFamily:"'Lora',serif",fontStyle:"italic",textAlign:"center",padding:"16px 0" }}>Vide</div>
+                : col.items.map(d=>(
+                    <div key={d.id} draggable
+                      onDragStart={()=>setDragId(d.id)}
+                      onClick={()=>setModal(d)}
+                      style={{ background:"white",borderRadius:8,padding:"9px 11px",
+                        border:`0.5px solid #E8E8E8`,
+                        borderLeft:`3px solid ${(H3_PAL[col.id]||H3_PAL.default).cardBorder}`,
+                        cursor:"pointer",transition:"box-shadow 0.15s" }}
+                      onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,0.1)"}
+                      onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+                      {/* Référence + code projet */}
+                      {(d.reference||d.codeProjet) && (
+                        <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginBottom:3 }}>
+                          {d.reference||""}{d.codeProjet?` · ${d.codeProjet}`:""}
+                        </div>
+                      )}
+                      {/* Titre */}
+                      <div style={{ fontSize:12,fontWeight:500,fontFamily:"'Lora',serif",color:"#2C3E50",marginBottom:5,lineHeight:1.3 }}>
+                        {d.intitule||"Sans titre"}
+                      </div>
+                      {/* Fournisseur + montant */}
+                      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:d.site||d.typeInvestissement?4:0 }}>
+                        <span style={{ fontSize:10,color:"#888",fontFamily:"'Lora',serif" }}>{d.fournisseur||"—"}</span>
+                        {d.montantHT && <span style={{ fontSize:11,fontWeight:500,color:col.color,fontFamily:"'Lora',serif" }}>{fmtE(d.montantHT)}</span>}
+                      </div>
+                      {/* Site + type */}
+                      {(d.site||d.typeInvestissement) && (
+                        <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
+                          {d.typeInvestissement && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.typeInvestissement}</span>}
+                          {d.site && <span style={{ fontSize:9,background:"#F5F5F5",color:"#888",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.site}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+            </div>
+            </>); })()}
+          </div>
+        ))}
+      </div>
+
+      {/* Refusés + Clôturés — côte à côte */}
+      <div style={{ flexShrink:0, padding:"0 20px 12px" }}>
+        <div style={{ display:"flex", gap:10, marginBottom:8 }}>
+          <button onClick={()=>setShowClos(p=>!p)}
+            style={{ border:`1px solid ${showClos?"#065F46":"#D1D5DB"}`,background:showClos?"#D1FAE5":"white",
+              color:showClos?"#065F46":"#6B7280",borderRadius:8,padding:"5px 14px",fontSize:11,
+              cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,display:"flex",alignItems:"center",gap:6 }}>
+            <span>{showClos?"▾":"▸"}</span>
+            Dossiers clôturés
+            <span style={{ background:showClos?"#065F46":"#E5E7EB",color:showClos?"white":"#6B7280",borderRadius:20,padding:"0 7px",fontSize:10,fontWeight:700 }}>{closDossiers.length}</span>
+          </button>
+          <button onClick={()=>setShowRefus(p=>!p)}
+            style={{ border:`1px solid ${showRefus?"#B91C1C":"#D1D5DB"}`,background:showRefus?"#FEE2E2":"white",
+              color:showRefus?"#B91C1C":"#6B7280",borderRadius:8,padding:"5px 14px",fontSize:11,
+              cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,display:"flex",alignItems:"center",gap:6 }}>
+            <span>{showRefus?"▾":"▸"}</span>
+            Dossiers refusés
+            <span style={{ background:showRefus?"#B91C1C":"#E5E7EB",color:showRefus?"white":"#6B7280",borderRadius:20,padding:"0 7px",fontSize:10,fontWeight:700 }}>{refusDossiers.length}</span>
+          </button>
+        </div>
+        {(showClos||showRefus) && (
+          <div style={{ display:"flex",gap:10,overflowX:"auto",padding:"4px 0" }}>
+            {showClos && closDossiers.map(d=>(
+              <div key={d.id} onClick={()=>setModal(d)} draggable onDragStart={()=>setDragId(d.id)}
+                style={{ minWidth:200,flex:"0 0 200px",background:"white",borderRadius:8,padding:"8px 10px",border:"1px solid #ECEAE5",cursor:"pointer",opacity:0.75 }}>
+                <div style={{ fontSize:9,color:"#27AE60",fontWeight:700,fontFamily:"'Lora',serif",marginBottom:3,textTransform:"uppercase" }}>✓ Clôturé</div>
+                <div style={{ fontSize:11,fontWeight:700,fontFamily:"'Lora',serif",color:"#888" }}>{d.intitule||"Sans titre"}</div>
+                {d.montantHT && <div style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif" }}>{fmtE(d.montantHT)}</div>}
+              </div>
+            ))}
+            {showRefus && refusDossiers.map(d=>(
+              <div key={d.id} onClick={()=>setModal(d)} draggable onDragStart={()=>setDragId(d.id)}
+                style={{ minWidth:200,flex:"0 0 200px",background:"white",borderRadius:8,padding:"8px 10px",border:"1px solid #FEE2E2",cursor:"pointer",opacity:0.8 }}>
+                <div style={{ fontSize:9,color:"#B91C1C",fontWeight:700,fontFamily:"'Lora',serif",marginBottom:3,textTransform:"uppercase" }}>✗ Refusé</div>
+                <div style={{ fontSize:11,fontWeight:700,fontFamily:"'Lora',serif",color:"#888" }}>{d.intitule||"Sans titre"}</div>
+                {d.montantHT && <div style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif" }}>{fmtE(d.montantHT)}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Modal */}
+      {modal!==null && (
+        <CBDossierModal
+          dossier={modal}
+          onSave={handleSave}
+          onClose={()=>setModal(null)}
+          financeursList={financeursList}
+          onUpdateFinanceurs={v=>{ setFinanceursList(v); saveCBFinanceurs(v); }}
+        />
+      )}
+    </div>
+  );
+}
+
 function PaymentsView({ settings }) {
   const [payments, setPayments] = React.useState(() => loadPayments());
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -6522,6 +7267,11 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState({ clientName:"", clientCode:"", description:"", followupDate:today0, reminderDate:"", suiviType:"", closed:false, ...item });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uidP = () => Math.random().toString(36).substr(2,9);
+  const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
+  const updPmt   = (id,k,v) => setD(p=>({...p,paiements:(p.paiements||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
+  const delPmt   = (id) => setD(p=>({...p,paiements:(p.paiements||[]).filter(r=>r.id!==id)}));
+  const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
   const inp = { border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"#FAFAFA" };
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#102A63", marginBottom:4, fontWeight:700, letterSpacing:"0.06em" }}>{t}</div>;
   const ss=[{id:"todo",name:"À faire",color:"#888",bg:"#F0F0F0"},{id:"inprogress",name:"En cours",color:"#1D4ED8",bg:"#DBEAFE"},{id:"waiting",name:"En attente",color:"#A16207",bg:"#FEF9C3"},{id:"blocked",name:"Bloqué",color:"#B91C1C",bg:"#FEE2E2"},{id:"done",name:"Fait",color:"#065F46",bg:"#D1FAE5"},{id:"cancelled",name:"Annulé",color:"#92400E",bg:"#F5E6DC"}];
@@ -6888,6 +7638,11 @@ function Tasks2Modal({ item, onSave, onClose }) {
     return base;
   });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uidP = () => Math.random().toString(36).substr(2,9);
+  const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
+  const updPmt   = (id,k,v) => setD(p=>({...p,paiements:(p.paiements||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
+  const delPmt   = (id) => setD(p=>({...p,paiements:(p.paiements||[]).filter(r=>r.id!==id)}));
+  const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
   const fmtNum = (v) => { const n=parseInt(String(v||"").replace(/[^0-9]/g,"")); return isNaN(n)?"":n.toLocaleString("fr-FR"); };
   const parseNum = (v) => String(v||"").replace(/[^0-9]/g,"");
   const [focusField, setFocusField] = React.useState(null);
@@ -7584,6 +8339,7 @@ function App() {
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "payments",      label: "Paiements",        icon: "⬡" },
+  { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
     { id: "dev",           label: "Dev",              icon: "⌥" },
     { id: "settings",      label: "Paramètres",       icon: "⚙" },
   ];
@@ -7628,7 +8384,7 @@ function App() {
         {visibleNav.filter(n => ["dashboard","myday","tasks","kanban","categorytasks"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0, color: n.iconColor || "inherit" }}>{n.icon}</span>
+            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0, color: n.iconColor || "inherit" }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
             <span style={{ flex: 1 }}>{n.label}</span>
             {!!n.badge && <span style={{ background: "#C0392B", color: "white", borderRadius: 8, fontSize: 9, fontFamily: "'DM Mono',monospace", padding: "1px 6px" }}>{n.badge}</span>}
           </button>
@@ -7638,17 +8394,17 @@ function App() {
         {visibleNav.filter(n => ["meetings","calendar","notifications"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
+            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
             <span style={{ flex: 1 }}>{n.label}</span>
             {!!n.badge && <span style={{ background: "#C0392B", color: "white", borderRadius: 8, fontSize: 9, fontFamily: "'DM Mono',monospace", padding: "1px 6px" }}>{n.badge}</span>}
           </button>
         ))}
         {/* Section : Finance & Suivi */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Finance & Suivi</div>
-        {visibleNav.filter(n => ["suiviclient","contentieux","cotation","reporting","payments"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["suiviclient","contentieux","cotation","reporting","payments","creditbail"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
+            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
             <span style={{ flex: 1 }}>{n.label}</span>
             {!!n.badge && <span style={{ background: "#C0392B", color: "white", borderRadius: 8, fontSize: 9, fontFamily: "'DM Mono',monospace", padding: "1px 6px" }}>{n.badge}</span>}
           </button>
@@ -7658,7 +8414,7 @@ function App() {
         {visibleNav.filter(n => ["settings"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
+            <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
             <span style={{ flex: 1 }}>{n.label}</span>
           </button>
         ))}
@@ -7668,14 +8424,14 @@ function App() {
           {visibleNav.filter(n => ["dev"].includes(n.id)).map(n => (
             <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
               style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #A78BFA" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
-              <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
+              <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
               <span style={{ flex: 1 }}>{n.label}</span>
             </button>
           ))}
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.310<br />07/05/26 à 18:33
+          v.0.324<br />08/05/26 à 14:57
         </div>
       </div>
 
@@ -7720,8 +8476,8 @@ function App() {
       )}
 
       {/* Full-width views vs contained views */}
-      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux" || view === "calendar") ? (
-        <div style={{ width: "100%" }}>
+      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux" || view === "calendar" || view === "creditbail") ? (
+        <div style={{ width: "100%", flex: 1, display:"flex", flexDirection:"column" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
           )}
@@ -7744,6 +8500,9 @@ function App() {
             <div style={{ padding: "24px 20px" }}>
               <CalendarView tasks={tasks} onEdit={openEdit} onUpdate={updTask} onAdd={d => openNew(d)} settings={settings} />
             </div>
+          )}
+          {view === "creditbail" && (
+            <CreditBailView tasks={tasks} onEdit={openEdit} settings={settings} />
           )}
         </div>
       ) : (
