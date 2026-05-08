@@ -293,7 +293,7 @@ async function fbLogout() {
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
   </button>
-  <div style="position:fixed;bottom:52px;right:16px;z-index:9999;color:#FFFFFF99;font-size:10px;font-family:'DM Mono',monospace;letter-spacing:0.05em;text-align:right;pointer-events:none">v.0.324<br/>08/05/26 à 14:57</div>
+
 <button id="fb-logout-btn" onclick="fbLogout()" class="fb-logout-btn"
     style="position:fixed;bottom:16px;right:16px;z-index:9999;background:#102A63;color:white;border:none;border-radius:20px;padding:7px 14px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.2);letter-spacing:0.04em;touch-action:manipulation;display:inline-flex;align-items:center;">
     <span style="display:inline-flex;align-items:center;justify-content:center;margin-right:6px;vertical-align:middle;flex-shrink:0;line-height:1"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>Déconnexion
@@ -4970,13 +4970,13 @@ function SettingsView({ settings, onSave }) {
                       <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:6 }}>
                         <span style={{ fontSize: 16, flexShrink: 0 }}>{role.icon}</span>
                         <input value={p.name} onChange={e => updProfile(p.id, "name", e.target.value)}
-                          style={{ ...S.input, padding: "5px 10px", fontSize: 12, flex:1, minWidth:0 }} />
+                          style={{ border:"1px solid #E8E8E8", borderRadius:6, padding:"5px 10px", fontSize:12, outline:"none", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"white", flex:1, minWidth:0 }} />
                         <input value={p.email||""} onChange={e => updProfile(p.id, "email", e.target.value)}
                           placeholder="Email (facultatif)"
-                          style={{ ...S.input, padding: "5px 10px", fontSize: 11, color: "#888", flex:1, minWidth:0 }} />
+                          style={{ border:"1px solid #E8E8E8", borderRadius:6, padding:"5px 10px", fontSize:11, outline:"none", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#888", background:"white", flex:1, minWidth:0 }} />
                         <select value={p.role} onChange={e => updProfile(p.id, "role", e.target.value)}
                           disabled={p.role === "owner"}
-                          style={{ ...S.input, padding: "5px 8px", fontSize: 11, cursor: p.role==="owner"?"not-allowed":"pointer", background: role.bg, color: role.color, fontWeight: 700, border: `1px solid ${role.color}30`, flexShrink: 0 }}>
+                          style={{ border:`1px solid ${role.color}30`, borderRadius:6, padding:"5px 8px", fontSize:11, cursor:p.role==="owner"?"not-allowed":"pointer", background:role.bg, color:role.color, fontWeight:700, fontFamily:"'Lora',serif", flexShrink:0, outline:"none" }}>
                           {PROFILE_ROLES.map(r => <option key={r.id} value={r.id}>{r.icon} {r.name}</option>)}
                         </select>
                       </div>
@@ -6041,11 +6041,13 @@ function taux_financier(n, pmt, pv, maxIter=100) {
   return r;
 }
 function calcCBRow(row) {
-  const mht  = parseFloat(row.montantHT) || 0;
-  const coeff= parseFloat(row.coeff)     || 0;
-  const n    = parseInt(row.nbLoyers)    || 0;
-  const vr   = parseFloat(row.valeurRes) || 0;
-  const fa   = parseFloat(row.fraisAnn)  || 0;
+  const mht  = parseNum(row.montantHT)  || 0;
+  const coeff= parseNum(row.coeff)      || 0;
+  const n    = parseInt(row.nbLoyers)   || 0;
+  // Valeur résiduelle : priorité au taux VR si renseigné
+  const tauxVR = parseNum(row.tauxVR) || 0;
+  const vr   = tauxVR > 0 ? mht * tauxVR / 100 : (parseNum(row.valeurRes) || 0);
+  const fa   = parseNum(row.fraisAnn)   || 0;
   const loyerHT  = mht > 0 && coeff > 0 ? mht * coeff / 100 : (parseFloat(row.loyerHT)||0);
   const loyerTTC = loyerHT * 1.2;
   const mttc     = mht * 1.2;
@@ -6058,10 +6060,17 @@ function calcCBRow(row) {
     : null;
   const teg12    = r_teg !== null ? r_teg * 12 * 100 : null;
   const coutTotal= n>0 ? loyerTTC*n + vr*1.2 + fa*1.2 - mttc : null;
-  return { loyerHT, loyerTTC, mttc, loyerMaj, taux12, teg12, coutTotal };
+  return { loyerHT, loyerTTC, mttc, loyerMaj, taux12, teg12, coutTotal, vr };
 }
 
 /* ── Génération d'échéancier ── */
+/* Parse un nombre saisi avec , ou . comme décimale, et ignorant les espaces/apostrophes */
+function parseNum(v) {
+  if (v === null || v === undefined || v === "") return NaN;
+  const s = String(v).replace(/\s/g,"").replace(/'/g,"").replace(/,/g,".");
+  return parseFloat(s);
+}
+
 function genEcheancier(montantTTC, loyerTTC, nbLoyers, tauxMensuel) {
   if (!montantTTC || !loyerTTC || !nbLoyers) return [];
   const r = tauxMensuel || 0;
@@ -6079,6 +6088,132 @@ function genEcheancier(montantTTC, loyerTTC, nbLoyers, tauxMensuel) {
 /* ══════════════════════════════════════════════════
    CB DOSSIER MODAL
    ══════════════════════════════════════════════════ */
+
+/* ── Export PDF du dossier Crédit-bail ── */
+function exportCBPDF(d) {
+  const fmtE = (v,dec=0) => v===null||v===undefined||isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
+  const fmtN = (v,dec=2) => v===null||v===undefined||isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
+  const statut = CB_KANBAN_STATUSES.find(s=>s.id===d.statut)||{name:d.statut,color:"#555"};
+  const rows = (d.financeurs||[]).map(row=>{
+    const c = calcCBRow({...row,montantHT:d.montantHT});
+    return `<tr>
+      <td>${row.financeur||"—"}</td>
+      <td style="text-align:right">${row.coeff||"—"}</td>
+      <td style="text-align:right">${fmtN(c.loyerHT)}</td>
+      <td style="text-align:right">${fmtN(c.loyerTTC)}</td>
+      <td style="text-align:right">${row.nbLoyers||"—"}</td>
+      <td style="text-align:right">${fmtN(c.taux12,2)} %</td>
+      <td style="text-align:right">${fmtN(c.vr||0)}</td>
+      <td style="text-align:right">${row.fraisAnn||"0"}</td>
+      <td style="text-align:right">${fmtN(c.loyerMaj)}</td>
+      <td style="text-align:right">${fmtN(c.teg12,2)} %</td>
+      <td style="text-align:right">${fmtE(c.coutTotal,2)}</td>
+    </tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>CB ${d.reference||""} — ${d.intitule||""}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Lora',serif;color:#2C3E50;background:white;padding:0}
+    .header{background:#102A63;color:white;padding:28px 36px;display:flex;justify-content:space-between;align-items:flex-end}
+    .header h1{font-size:22px;font-weight:700;margin-bottom:4px}
+    .header .sub{font-size:11px;opacity:0.6;letter-spacing:0.06em}
+    .header .ref{font-size:11px;background:rgba(255,255,255,0.15);border-radius:4px;padding:2px 10px}
+    .badge{display:inline-block;padding:2px 12px;border-radius:20px;font-size:10px;font-weight:700;background:${statut.bg||"#EEE"};color:${statut.color};border:1px solid ${statut.color}30}
+    .section{padding:20px 36px;border-bottom:1px solid #F0F0F0}
+    .section h2{font-size:10px;font-weight:700;color:#102A63;letter-spacing:0.06em;margin-bottom:12px;text-transform:uppercase}
+    .grid{display:grid;gap:16px;margin-bottom:0}
+    .g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:repeat(2,1fr)}
+    .field label{font-size:9px;color:#AAA;letter-spacing:0.06em;display:block;margin-bottom:3px;text-transform:uppercase}
+    .field .val{font-size:12px;color:#2C3E50;font-weight:600}
+    .field .val.hi{color:#102A63;font-size:14px}
+    table{width:100%;border-collapse:collapse;font-size:10px}
+    thead tr{background:#102A63;color:white}
+    thead th{padding:6px 8px;text-align:left;font-weight:400;white-space:nowrap}
+    tbody tr:nth-child(even){background:#F8F9FB}
+    tbody td{padding:5px 8px;border-bottom:1px solid #F0F0F0}
+    .notes{padding:20px 36px;font-size:12px;line-height:1.6;color:#555}
+    .footer{padding:16px 36px;font-size:10px;color:#AAA;font-family:'DM Mono',monospace;display:flex;justify-content:space-between;border-top:1px solid #F0F0F0;margin-top:auto}
+    @media print{@page{margin:0;size:A4}.no-print{display:none}}
+  </style></head><body>
+  <div class="header">
+    <div>
+      <div class="sub">DOSSIER CRÉDIT-BAIL</div>
+      <h1>${d.intitule||"Sans titre"}</h1>
+      <div style="margin-top:8px"><span class="badge">${statut.name}</span></div>
+    </div>
+    <div style="text-align:right">
+      <span class="ref">${d.reference||""}</span>
+      <div style="font-size:10px;opacity:0.5;margin-top:6px">Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Informations générales</h2>
+    <div class="grid g4">
+      <div class="field"><label>Code projet</label><div class="val">${d.codeProjet||"—"}</div></div>
+      <div class="field"><label>Type investissement</label><div class="val">${d.typeInvestissement||"—"}</div></div>
+      <div class="field"><label>Fournisseur</label><div class="val">${d.fournisseur||"—"}</div></div>
+      <div class="field"><label>Site</label><div class="val">${d.site||"—"}</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2>Montants & durée</h2>
+    <div class="grid g4">
+      <div class="field"><label>Montant HT</label><div class="val hi">${d.montantHT||"—"} €</div></div>
+      <div class="field"><label>TVA</label><div class="val">${d.tva||"20"} %</div></div>
+      <div class="field"><label>Durée</label><div class="val">${d.duree||"—"} mois</div></div>
+      <div class="field"><label>Périodicité</label><div class="val">${d.periodicite||"—"}</div></div>
+    </div>
+    <div class="grid g3" style="margin-top:14px">
+      <div class="field"><label>Date de signature</label><div class="val">${d.dateSignature||"—"}</div></div>
+      <div class="field"><label>Démarrage échéancier</label><div class="val">${d.dateDemarrage||"—"}</div></div>
+      <div class="field"><label>Date de fin</label><div class="val">${d.dateFin||"—"}</div></div>
+    </div>
+  </div>
+
+  ${(d.financeurs||[]).length>0?`
+  <div class="section">
+    <h2>Financeurs</h2>
+    <table>
+      <thead><tr>
+        <th>Financeur</th><th>Coeff %</th><th>Loyer HT</th><th>Loyer TTC</th>
+        <th>Nb loyers</th><th>Taux %</th><th>V. résid.</th><th>Frais ann.</th>
+        <th>Loyer maj.</th><th>TEG %</th><th>Coût total</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`:""}
+
+  ${d.notes?`<div class="notes"><strong style="font-size:10px;color:#102A63;text-transform:uppercase;letter-spacing:0.06em">Notes</strong><br/><br/>${d.notes}</div>`:""}
+
+  <div class="footer">
+    <span>${d.reference||""} — ${d.intitule||""}</span>
+    <span>Crédit-bail · ${new Date().toLocaleDateString("fr-FR")}</span>
+  </div>
+  </body></html>`;
+  const win = window.open("","_blank");
+  if (win) { win.document.write(html); win.document.close(); setTimeout(()=>win.print(),500); }
+}
+
+/* ── Envoi mail du dossier CB ── */
+function sendCBEmail(d) {
+  const subject = encodeURIComponent(`Dossier Crédit-bail ${d.reference||""} — ${d.intitule||""}`);
+  const body = encodeURIComponent(
+    `Bonjour,\n\nVeuillez trouver ci-joint le détail du dossier crédit-bail suivant :\n\n` +
+    `Référence : ${d.reference||"—"}\n` +
+    `Intitulé  : ${d.intitule||"—"}\n` +
+    `Statut    : ${(CB_KANBAN_STATUSES.find(s=>s.id===d.statut)||{name:d.statut}).name}\n` +
+    `Montant HT: ${d.montantHT||"—"} €\n` +
+    `Fournisseur: ${d.fournisseur||"—"}\n` +
+    `Site      : ${d.site||"—"}\n\n` +
+    `Pour visualiser la fiche complète avec les calculs financiers, merci d'ouvrir l'application.\n\nCordialement`
+  );
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+}
+
 function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFinanceurs }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
@@ -6094,7 +6229,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
 
   // Calculs auto
-  const mht  = parseFloat(d.montantHT)||0;
+  const mht  = parseNum(d.montantHT)||0;
   const tva  = parseFloat(d.tva)||20;
   const mttc = mht * (1 + tva/100);
   const lbl  = (t) => <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:4,letterSpacing:"0.06em" }}>{t}</div>;
@@ -6129,16 +6264,25 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
       onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ width:"min(820px,95vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
+      <div style={{ width:"min(900px,96vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
         {/* Header */}
-        <div style={{ background:"#102A63",padding:"16px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+        <div style={{ background:"#102A63",padding:"14px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+          {/* Titre + référence */}
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>DOSSIER CRÉDIT-BAIL</div>
+            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:2 }}>
+              <div style={{ fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.06em" }}>DOSSIER CRÉDIT-BAIL</div>
+              {d.reference && <span style={{ fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"'Lora',serif",background:"rgba(255,255,255,0.1)",borderRadius:4,padding:"1px 7px" }}>{d.reference}</span>}
+            </div>
             <div style={{ fontSize:17,fontWeight:700,color:"white",fontFamily:"'Lora',serif" }}>{d.intitule||"Nouveau dossier"}</div>
           </div>
-          <div style={{ display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
-            <span style={{ fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.04em" }}>{d.reference||""}</span>
-            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,flexShrink:0 }}>×</button>
+          {/* Boutons actions */}
+          <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
+            <button onClick={()=>exportCBPDF(d)} title="Exporter en PDF"
+              style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center" }}>📄</button>
+            <button onClick={()=>sendCBEmail(d)} title="Envoyer par mail"
+              style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center" }}>✉️</button>
+            <button onClick={onClose} title="Fermer"
+              style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center" }}>×</button>
           </div>
         </div>
 
@@ -6177,13 +6321,26 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
           </div>
 
           {/* Ligne 3 : Montants */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:10,marginBottom:10 }}>
-            <div>{lbl("MONTANT HT")}<input type="number" value={d.montantHT} onChange={e=>set("montantHT",e.target.value)} placeholder="0" style={inp} /></div>
-            <div>{lbl("TVA (%)")}<input type="number" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={inp} /></div>
-            <div>{lbl("MONTANT TTC (auto)")}
-              <div style={{ ...inp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc):"—"}</div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("MONTANT HT")}
+              <div style={{ position:"relative" }}>
+                <input type="text" inputMode="decimal"
+                  value={d.montantHT}
+                  onChange={e=>set("montantHT",e.target.value)}
+                  onBlur={e=>{
+                    const n=parseNum(e.target.value);
+                    if(!isNaN(n)) set("montantHT", n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));
+                  }}
+                  placeholder="0 000,00"
+                  style={{ ...inp, paddingRight:22 }} />
+                <span style={{ position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none" }}>€</span>
+              </div>
             </div>
-            <div>{lbl("MONTANT FINANCÉ")}<input type="number" value={d.montantFinance} onChange={e=>set("montantFinance",e.target.value)} placeholder="0" style={inp} /></div>
+            <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={inp} /></div>
+            <div>{lbl("MONTANT TTC (auto)")}
+              <div style={{ ...inp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
+            </div>
+            
           </div>
 
           {/* Ligne 4 : Durée + Périodicité + VR % */}
@@ -6200,6 +6357,19 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
               </select>
             </div>
             <div>{lbl("VALEUR RÉSIDUELLE (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={inp} /></div>
+          </div>
+
+          {/* Dates */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("DATE DE SIGNATURE")}
+              <input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={inp} />
+            </div>
+            <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}
+              <input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={inp} />
+            </div>
+            <div>{lbl("DATE DE FIN")}
+              <input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={inp} />
+            </div>
           </div>
 
           {/* Notes */}
@@ -6224,54 +6394,114 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
 
             {/* ── FINANCEURS ── */}
             {tab==="financeurs" && (
-              <div style={{ marginTop:12 }}>
-                <div style={{ overflowX:"auto" }}>
-                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif" }}>
-                    <thead>
-                      <tr style={{ background:"#102A63" }}>
-                        {["Statut","Financeur","Coeff %","Loyer HT","Loyer TTC","Nb loyers","Taux %","V. résid.","Frais ann.","Loyer maj.","TEG %","Coût total","MTTC","Action"].map(h=>(
-                          <th key={h} style={{ padding:"5px 7px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:"left",fontSize:10 }}>{h}</th>
+              <div style={{ marginTop:12,display:"flex",flexDirection:"column",gap:10 }}>
+
+                {(d.financeurs||[]).map((row,i)=>{
+                  const c  = calcCBRow({...row,montantHT:d.montantHT});
+                  const st = CB_FINANCEUR_STATUSES.find(s=>s.id===row.statut)||CB_FINANCEUR_STATUSES[0];
+                  const inpS = { border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,
+                    fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",outline:"none",width:"100%" };
+                  return (
+                    <div key={row.id} style={{ background:"white",borderRadius:10,border:"1px solid #ECEAE5",
+                      overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+
+                      {/* ── Ligne 1 : saisies ── */}
+                      <div style={{ background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",
+                        padding:"10px 14px",display:"grid",
+                        gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 28px",
+                        gap:8,alignItems:"center" }}>
+
+                        {/* Financeur */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>FINANCEUR</div>
+                          <select value={row.financeur} onChange={e=>updFinRow(row.id,"financeur",e.target.value)}
+                            style={{ ...inpS,fontWeight:600,color:"#102A63" }}>
+                            <option value="">— Choisir —</option>
+                            {financeursList.map(f=><option key={f} value={f}>{f}</option>)}
+                          </select>
+                        </div>
+
+                        {/* Statut */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>STATUT</div>
+                          <select value={row.statut} onChange={e=>updFinRow(row.id,"statut",e.target.value)}
+                            style={{ ...inpS,background:st.bg,color:st.color,border:`1px solid ${st.border}40`,fontWeight:600 }}>
+                            {CB_FINANCEUR_STATUSES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                          </select>
+                        </div>
+
+                        {/* Coeff */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>COEFF %</div>
+                          <input type="text" inputMode="decimal" value={row.coeff} onChange={e=>updFinRow(row.id,"coeff",e.target.value)}
+                            placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />
+                        </div>
+
+                        {/* Nb loyers */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>NB LOYERS</div>
+                          <input type="text" inputMode="numeric" value={row.nbLoyers} onChange={e=>updFinRow(row.id,"nbLoyers",e.target.value)}
+                            placeholder="36" style={{ ...inpS,textAlign:"right" }} />
+                        </div>
+
+                        {/* Taux VR */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>TAUX V.R. %</div>
+                          <input type="text" inputMode="decimal" value={row.tauxVR||""} onChange={e=>updFinRow(row.id,"tauxVR",e.target.value)}
+                            placeholder="1,00" style={{ ...inpS,textAlign:"right" }} />
+                        </div>
+
+                        {/* Frais ann. */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>FRAIS ANN.</div>
+                          <input type="text" inputMode="decimal" value={row.fraisAnn} onChange={e=>updFinRow(row.id,"fraisAnn",e.target.value)}
+                            placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />
+                        </div>
+
+                        {/* Valeur résiduelle saisie (si pas de tauxVR) */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>V. RÉSID. €</div>
+                          {row.tauxVR
+                            ? <div style={{ ...inpS,background:"#F5F5F5",color:"#6D28D9",fontWeight:700,textAlign:"right" }}>{fmtN(c.vr||0)}</div>
+                            : <input type="text" inputMode="decimal" value={row.valeurRes} onChange={e=>updFinRow(row.id,"valeurRes",e.target.value)}
+                                placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />}
+                        </div>
+
+                        {/* Supprimer */}
+                        <button onClick={()=>delFinRow(row.id)}
+                          style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:18,alignSelf:"flex-end",paddingBottom:2 }}>×</button>
+                      </div>
+
+                      {/* ── Ligne 2 : résultats calculés ── */}
+                      <div style={{ padding:"8px 14px",display:"grid",
+                        gridTemplateColumns:"repeat(7,1fr)",gap:8,alignItems:"center" }}>
+                        {[
+                          { label:"Loyer HT",   val:fmtN(c.loyerHT),   color:"#102A63", bold:true },
+                          { label:"Loyer TTC",  val:fmtN(c.loyerTTC),  color:"#102A63" },
+                          { label:"MTTC",       val:fmtE(c.mttc,2),    color:"#555" },
+                          { label:"Taux %",     val:fmtP(c.taux12),    color:"#065F46", bold:true },
+                          { label:"Loyer maj.", val:fmtN(c.loyerMaj),  color:"#0E7490" },
+                          { label:"TEG %",      val:fmtP(c.teg12),     color:"#A16207", bold:true },
+                          { label:"Coût total", val:fmtE(c.coutTotal), color:"#C0392B", bold:true },
+                        ].map(item=>(
+                          <div key={item.label} style={{ textAlign:"center" }}>
+                            <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{item.label}</div>
+                            <div style={{ fontSize:12,fontWeight:item.bold?700:400,color:item.color,fontFamily:"'Lora',serif",whiteSpace:"nowrap" }}>{item.val}</div>
+                          </div>
                         ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(d.financeurs||[]).map((row,i)=>{
-                        const c = calcCBRow({...row,montantHT:d.montantHT});
-                        const st = CB_FINANCEUR_STATUSES.find(s=>s.id===row.statut)||CB_FINANCEUR_STATUSES[0];
-                        return (
-                          <tr key={row.id} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
-                            <td style={{ padding:"4px 6px",whiteSpace:"nowrap" }}>
-                              <select value={row.statut} onChange={e=>updFinRow(row.id,"statut",e.target.value)}
-                                style={{ fontSize:10,fontFamily:"'Lora',serif",background:st.bg,color:st.color,border:`0.5px solid ${st.border}`,borderRadius:4,padding:"1px 6px",cursor:"pointer" }}>
-                                {CB_FINANCEUR_STATUSES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ padding:"4px 6px" }}>
-                              <select value={row.financeur} onChange={e=>updFinRow(row.id,"financeur",e.target.value)}
-                                style={{ fontSize:10,fontFamily:"'Lora',serif",border:"1px solid #E8E8E8",borderRadius:6,padding:"2px 6px",minWidth:120,background:"#FAFAFA" }}>
-                                <option value="">—</option>
-                                {financeursList.map(f=><option key={f} value={f}>{f}</option>)}
-                              </select>
-                            </td>
-                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.coeff} onChange={e=>updFinRow(row.id,"coeff",e.target.value)} style={{ width:60,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
-                            <td style={{ padding:"4px 6px",color:"#102A63",fontWeight:700 }}>{fmtN(c.loyerHT)}</td>
-                            <td style={{ padding:"4px 6px",color:"#102A63" }}>{fmtN(c.loyerTTC)}</td>
-                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.nbLoyers} onChange={e=>updFinRow(row.id,"nbLoyers",e.target.value)} style={{ width:50,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
-                            <td style={{ padding:"4px 6px",color:"#065F46",fontWeight:700 }}>{fmtP(c.taux12)}</td>
-                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.valeurRes} onChange={e=>updFinRow(row.id,"valeurRes",e.target.value)} style={{ width:70,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
-                            <td style={{ padding:"4px 6px" }}><input type="number" value={row.fraisAnn} onChange={e=>updFinRow(row.id,"fraisAnn",e.target.value)} style={{ width:70,border:"1px solid #E0E0E0",borderRadius:4,padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",textAlign:"right" }} /></td>
-                            <td style={{ padding:"4px 6px",color:"#0E7490" }}>{fmtN(c.loyerMaj)}</td>
-                            <td style={{ padding:"4px 6px",color:"#A16207",fontWeight:700 }}>{fmtP(c.teg12)}</td>
-                            <td style={{ padding:"4px 6px",color:"#C0392B" }}>{fmtE(c.coutTotal)}</td>
-                            <td style={{ padding:"4px 6px",color:"#555" }}>{fmtE(c.mttc)}</td>
-                            <td style={{ padding:"4px 6px" }}><button onClick={()=>delFinRow(row.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14 }}>×</button></td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <div style={{ display:"flex",gap:8,marginTop:10,alignItems:"center" }}>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {(d.financeurs||[]).length === 0 && (
+                  <div style={{ textAlign:"center",padding:"28px",color:"#CCC",fontFamily:"'Lora',serif",fontSize:12,
+                    background:"#FAFAFA",borderRadius:10,border:"1px dashed #E0E0E0" }}>
+                    Aucun financeur — cliquez sur "+ Ajouter un financeur"
+                  </div>
+                )}
+
+                <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
                   <button onClick={addFinRow} style={{ ...S.btn("#102A63"),fontSize:10,padding:"5px 14px" }}>+ Ajouter un financeur</button>
                   <div style={{ display:"flex",gap:6,alignItems:"center" }}>
                     <input value={newFinanceur} onChange={e=>setNewFinanceur(e.target.value)} placeholder="Nouveau financeur…"
@@ -6515,8 +6745,8 @@ function CreditBailView({ tasks, onEdit, settings }) {
     <div style={{ display:"flex",flexDirection:"column",background:"#F7F6F3",minHeight:"100vh" }}>
       {/* Toolbar */}
       <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0,flexWrap:"wrap" }}>
-        {/* Recherche */}
-        <div style={{ position:"relative",flex:1,minWidth:180,maxWidth:360 }}>
+        {/* Recherche — largeur = 1 colonne kanban */}
+        <div style={{ position:"relative",width:"calc((100% - 40px - 160px - 130px) / 5)",minWidth:160,maxWidth:280 }}>
           <span style={{ position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,color:"#AAA",pointerEvents:"none" }}>🔍</span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher dossier, fournisseur, site, référence…"
             style={{ paddingLeft:30,paddingRight:8,paddingTop:6,paddingBottom:6,border:"1px solid #E0E0E0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",outline:"none",width:"100%",boxSizing:"border-box",background:"#FAFAFA" }} />
@@ -8431,7 +8661,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.324<br />08/05/26 à 14:57
+          v.0.329<br />08/05/26 à 22:00
         </div>
       </div>
 
