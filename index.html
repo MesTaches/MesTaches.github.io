@@ -394,15 +394,15 @@ function exportEchPDF(dos) {
     @media print{@page{margin:10mm;size:A4 landscape}.no-print{display:none}}
   </style></head><body>
 
-  <div class="header" style="background-color:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22">
-    <div class="header-left">
-      <div class="surtitle">Échéancier de prêt</div>
-      <h1>${dos.intitule||"Sans titre"}</h1>
-      <div class="sub">${dos.banque||""}${dos.nature?" · "+dos.nature:""}${dos.objet?" · "+dos.objet:""}</div>
+  <div style="background:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.65);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;font-family:Georgia,serif">ÉCHÉANCIER DE PRÊT</div>
+      <div style="font-size:22px;font-weight:700;color:white;font-family:Georgia,serif;margin-bottom:4px">${dos.intitule||"Sans titre"}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:Georgia,serif">${dos.banque||""}${dos.objet?" · "+dos.objet:""}</div>
     </div>
-    <div class="header-right">
-      <div class="ref">${dos.reference||""}</div>
-      <div class="date">Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.12);border-radius:4px;padding:3px 12px;display:inline-block;margin-bottom:6px;font-family:Georgia,serif">${dos.reference||""}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.45);font-family:Georgia,serif">Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
     </div>
   </div>
 
@@ -9707,7 +9707,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.360<br />08/05/26 à 22:41
+          v.0.361<br />08/05/26 à 22:45
         </div>
       </div>
 
