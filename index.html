@@ -7357,7 +7357,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               const car = parseInt(d.carence)||0;
               const dif = parseInt(d.differe)||0;
               const dur = parseInt(d.duree)||0;
-              const amort = dur - (hasCap?1:0) - car - dif;
+              const amort = dur; // dur = durée amortissement saisie directement
               const total = (hasCap?1:0) + car + dif + amort;
               const pctCap   = hasCap ? Math.round(1/total*100) : 0;
               const pctCar   = Math.round(car/total*100);
@@ -7590,7 +7590,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
   const car=parseInt(localDos.carence)||0;
   const dif=parseInt(localDos.differe)||0;
   const dur=parseInt(localDos.duree)||0;
-  const amort=dur-(hasCap?1:0)-car-dif;
+  const amort=dur; // dur = durée amortissement saisie directement
   const total=(hasCap?1:0)+car+dif+amort;
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t}</div>;
@@ -9716,7 +9716,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.363<br />08/05/26 à 23:05
+          v.0.364<br />08/05/26 à 23:23
         </div>
       </div>
 
