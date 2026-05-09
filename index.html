@@ -7102,6 +7102,10 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
   carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0) {
   if (!montant || !dureeM) return [];
+  // dureeM = durée de remboursement du capital uniquement
+  // dureeTotal = durée complète incluant toutes les périodes
+  const _avecCap = tauxCapita > 0;
+  const dureeTotal = dureeM + carenceMois + (_avecCap ? 1 : 0) + differeMois;
 
   const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
   const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r; // taux pendant différé
@@ -7123,7 +7127,7 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
 
   // Durée amortissement = total - carence - (1 si capita) - différé
   const capitalCapitalise = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
-  const dureeAmort = dureeM - carenceMois - offsetAmort - differeMois;
+  const dureeAmort = dureeM; // dureeM = durée amortissement saisie directement
   const pmtBase    = r > 0 && dureeAmort > 0
     ? capitalCapitalise * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
     : (dureeAmort > 0 ? capitalCapitalise / dureeAmort : 0);
@@ -7132,7 +7136,7 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
   let cumulInterets = 0;
   const d0 = dateDebut ? new Date(dateDebut) : new Date();
 
-  for (let i = 1; i <= dureeM; i++) {
+  for (let i = 1; i <= dureeTotal; i++) {
     // Dates strictement chronologiques
     const date = new Date(d0);
     date.setMonth(date.getMonth() + i - 1);
@@ -7302,7 +7306,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                 </select>
               </div>
               <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={inp} /></div>
-              <div>{lbl("Montant (€)")}<input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} placeholder="100 000,00" style={inp} /></div>
+              <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={inp} /></div>
               <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}><option>Mensuelle</option><option>Trimestrielle</option><option>Annuelle</option></select></div>
               <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={inp} /></div>
@@ -7355,14 +7359,14 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                 <div style={{ marginTop:4 }}>
                   <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6 }}>STRUCTURE DU PRÊT</div>
                   <div style={{ display:"flex",height:16,borderRadius:6,overflow:"hidden",gap:1 }}>
-                    {hasCap && <div style={{ width:`${pctCap}%`,background:"#6D28D9",display:"flex",alignItems:"center",justifyContent:"center",minWidth:4 }} title="Capitalisation" />}
                     {car>0 && <div style={{ width:`${pctCar}%`,background:"#FCA5A5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white",fontFamily:"'Lora',serif",minWidth:20 }} title={`Carence ${car} mois`}>{car}m</div>}
+                    {hasCap && <div style={{ width:`${pctCap}%`,background:"#6D28D9",display:"flex",alignItems:"center",justifyContent:"center",minWidth:4 }} title="Capitalisation" />}
                     {dif>0 && <div style={{ width:`${pctDif}%`,background:"#FCD34D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#92400E",fontFamily:"'Lora',serif",minWidth:20 }} title={`Différé ${dif} mois`}>{dif}m</div>}
                     {amort>0 && <div style={{ flex:1,background:"#6EE7B7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#065F46",fontFamily:"'Lora',serif",minWidth:30 }} title={`Amortissement ${amort} mois`}>{amort}m</div>}
                   </div>
                   <div style={{ display:"flex",gap:8,marginTop:5,flexWrap:"wrap" }}>
-                    {hasCap && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#6D28D9" }}><span style={{ width:8,height:8,borderRadius:2,background:"#6D28D9",display:"inline-block" }}/> Capitalisation</div>}
                     {car>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#B91C1C" }}><span style={{ width:8,height:8,borderRadius:2,background:"#FCA5A5",display:"inline-block" }}/> Carence ({car} mois)</div>}
+                    {hasCap && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#6D28D9" }}><span style={{ width:8,height:8,borderRadius:2,background:"#6D28D9",display:"inline-block" }}/> Capitalisation</div>}
                     {dif>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#A16207" }}><span style={{ width:8,height:8,borderRadius:2,background:"#FCD34D",display:"inline-block" }}/> Différé ({dif} mois)</div>}
                     {amort>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#065F46" }}><span style={{ width:8,height:8,borderRadius:2,background:"#6EE7B7",display:"inline-block" }}/> Amortissement ({amort} mois)</div>}
                   </div>
@@ -7603,8 +7607,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux…" style={inpL}/></div>
             <div>{lblL("Nature")}<select value={localDos.nature||""} onChange={e=>setL("nature",e.target.value)} style={inpL}><option value="">—</option>{ECH_NATURE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Montant (€)")}<input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Durée (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
+            <div>{lblL("Durée remboursement (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
             <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
             <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
@@ -9703,7 +9707,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.356<br />08/05/26 à 22:07
+          v.0.357<br />08/05/26 à 22:16
         </div>
       </div>
 
