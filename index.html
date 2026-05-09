@@ -7329,8 +7329,10 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
                   <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={inp} /></div>
                   <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={inp} /></div>
-                  <div>{lbl("Commission garantie (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 0,84" style={inp} /></div>
+                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inp} /></div>
                   <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={inp} /></div>
+                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={inp} /></div>
+                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inp} /></div>
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
@@ -9714,7 +9716,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.362<br />08/05/26 à 22:56
+          v.0.363<br />08/05/26 à 23:05
         </div>
       </div>
 
