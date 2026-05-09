@@ -348,7 +348,7 @@ function exportEchPDF(dos) {
     body{font-family:'Lora',serif;color:#1E293B;background:white;font-size:10px}
 
     /* Header */
-    .header{background:#102A63;padding:24px 32px;display:flex;justify-content:space-between;align-items:flex-end}
+    .header{background:#102A63;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22}
     .header-left .surtitle{font-size:10px;color:rgba(255,255,255,0.55);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
     .header-left h1{font-size:20px;font-weight:700;color:white}
     .header-left .sub{font-size:11px;color:rgba(255,255,255,0.65);margin-top:3px}
@@ -3675,7 +3675,7 @@ const ALL_TABS = [
   { id: "notifications", label: "Rappels",          icon: "◔" },
   { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
   { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
-  { id: "echeancier",    label: "Dettes",            icon: "📋" },
+  { id: "echeancier",    label: "Dettes",            icon: "▦" },
   { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
   { id: "cotation",      label: "Cotation",         icon: "◎" },
   { id: "reporting",     label: "Reporting",        icon: "▤" },
@@ -7176,7 +7176,7 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
       capital = Math.max(0, capital - amort);
     }
 
-    const echeanceGlobale = echeance + commGar + ass;
+    const echeanceGlobale = echeance; // echeance inclut déjà commission + assurance
     rows.push({
       n: i, date: dateStr,
       echeance, capital: amort, interets, cumulInterets,
@@ -7299,10 +7299,10 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={inp} /></div>
               <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={inp} /></div>
               <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={inp} /></div>
-              <div>{lbl("Nature du prêt")}
-                <select value={d.nature||""} onChange={e=>set("nature",e.target.value)} style={inp}>
-                  <option value="">—</option>
-                  {ECH_NATURE_OPTIONS.map(o=><option key={o}>{o}</option>)}
+              <div>{lbl("TYPE D'AMORTISSEMENT")}
+                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={inp}>
+                  <option value="annuites">Annuités constantes</option>
+                  <option value="capital">Capital constant</option>
                 </select>
               </div>
               <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={inp} /></div>
@@ -7605,16 +7605,11 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             <div>{lblL("Intitulé")}<input value={localDos.intitule||""} onChange={e=>setL("intitule",e.target.value)} style={inpL}/></div>
             <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
             <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux…" style={inpL}/></div>
-            <div>{lblL("Nature")}<select value={localDos.nature||""} onChange={e=>setL("nature",e.target.value)} style={inpL}><option value="">—</option>{ECH_NATURE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
+            <div>{lblL("Type amortissement")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités constantes</option><option value="capital">Capital constant</option></select></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
             <div>{lblL("Durée remboursement (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
-                <div>{lblL("Type d'amortissement")}
-                  <select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}>
-                    <option value="annuites">Annuités constantes</option>
-                    <option value="capital">Capital constant</option>
-                  </select>
-                </div>
+
             <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
             <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
@@ -7738,9 +7733,7 @@ function EcheancierView({ tasks, settings }) {
     const annee = new Date().getFullYear();
     return a + (d.lignes||[]).filter(r=>r.date?.startsWith(String(annee))).reduce((s,r)=>s+(r.echeance||0),0);
   },0);
-  const enRetard = dossiers.reduce((a,d)=>{
-    return a + (d.lignes||[]).filter(r=>r.date < now).length;
-  },0);
+  const pretsEnCours = dossiers.filter(d=>{ const lg=d.lignes||[]; return lg.length>0 && lg[lg.length-1].date > now; }).length;
   const prochaines30 = dossiers.reduce((a,d)=>{
     const d30 = new Date(); d30.setDate(d30.getDate()+30);
     const d30s = d30.toISOString().split("T")[0];
@@ -7815,7 +7808,7 @@ function EcheancierView({ tasks, settings }) {
             {[
               { label:"Capital restant dû",    val:fmtE(totalEncours),          color:"#C0392B", bg:"#FEE2E2", icon:"💶" },
               { label:"Échéances cette année",  val:fmtE(totalEcheancesAnnee),   color:"#1D4ED8", bg:"#DBEAFE", icon:"📅" },
-              { label:"Échéances en retard",    val:String(enRetard),            color:"#B91C1C", bg:"#FEE2E2", icon:"⚠️" },
+              { label:"Prêts en cours",           val:String(pretsEnCours),        color:"#1D4ED8", bg:"#DBEAFE", icon:"🏦" },
               { label:"Dans les 30 prochains j",val:String(prochaines30),        color:"#A16207", bg:"#FEF9C3", icon:"🔔" },
             ].map(k=>(
               <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 20px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -9609,7 +9602,7 @@ function App() {
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
-  { id: "echeancier",    label: "Dettes",            icon: "📋" },
+  { id: "echeancier",    label: "Dettes",            icon: "▦" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
     { id: "dev",           label: "Dev",              icon: "⌥" },
     { id: "settings",      label: "Paramètres",       icon: "⚙" },
@@ -9713,7 +9706,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.358<br />08/05/26 à 22:23
+          v.0.359<br />08/05/26 à 22:34
         </div>
       </div>
 
