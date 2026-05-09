@@ -302,7 +302,7 @@ async function fbLogout() {
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <script>
+  <script type="text/javascript">
 /* ── Export PDF Échéancier ── */
 function exportEchPDF(dos) {
   const parseNumLocal = (v) => { if(!v&&v!==0) return NaN; return parseFloat(String(v).replace(/\s/g,"").replace(/'/g,"").replace(/,/g,".")); };
@@ -456,7 +456,7 @@ function exportEchPDF(dos) {
     <span>${new Date().toLocaleDateString("fr-FR")} · ${lignes.length} échéances</span>
   </div>
 
-  <script>setTimeout(()=>window.print(),600);</script>
+  <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
   </body></html>`;
 
   // Méthode robuste : iframe caché qui déclenche l'impression
@@ -7100,7 +7100,7 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
    CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
 ── */
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0) {
+  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites") {
   if (!montant || !dureeM) return [];
   // dureeM = durée de remboursement du capital uniquement
   // dureeTotal = durée complète incluant toutes les périodes
@@ -7215,7 +7215,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
       d.dateDebut, parseNum(d.assuranceMensuelle)||0,
       parseInt(d.carence)||0, parseNum(d.tauxGarantie)||0,
       d.tauxDiffere ? parseNum(d.tauxDiffere) : null,
-      parseNum(d.tauxCapita)||0, parseInt(d.differe)||0
+      parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites"
     );
     // Préserver les données de paiement si déjà saisies
     const merged = rows.map((r,i) => {
@@ -7587,7 +7587,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t}</div>;
   const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0);
+    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites");
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
     const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
   };
@@ -7609,6 +7609,12 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
             <div>{lblL("Durée remboursement (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
+                <div>{lblL("Type d'amortissement")}
+                  <select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}>
+                    <option value="annuites">Annuités constantes</option>
+                    <option value="capital">Capital constant</option>
+                  </select>
+                </div>
             <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
             <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
@@ -9707,7 +9713,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.357<br />08/05/26 à 22:16
+          v.0.358<br />08/05/26 à 22:23
         </div>
       </div>
 
