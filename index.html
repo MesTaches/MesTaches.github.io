@@ -343,18 +343,17 @@ function exportEchPDF(dos) {
   const htm = `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>Échéancier — ${dos.intitule||dos.reference}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Lora',serif;color:#1E293B;background:white;font-size:10px}
+    body{font-family:Georgia,serif;color:#1E293B;background:white;font-size:10px}
 
-    /* Header */
-    .header{background:#102A63;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22}
-    .header-left .surtitle{font-size:10px;color:rgba(255,255,255,0.55);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-    .header-left h1{font-size:20px;font-weight:700;color:white}
-    .header-left .sub{font-size:11px;color:rgba(255,255,255,0.65);margin-top:3px}
+    /* Header — styles inline pour compatibilité file:// */
+    .header{background-color:#102A63 !important;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22}
+    .header-left .surtitle{font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+    .header-left h1{font-size:20px;font-weight:700;color:white !important}
+    .header-left .sub{font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px}
     .header-right{text-align:right}
-    .header-right .ref{font-size:10px;color:rgba(255,255,255,0.45);background:rgba(255,255,255,0.1);border-radius:4px;padding:2px 10px;display:inline-block;margin-bottom:4px}
-    .header-right .date{font-size:10px;color:rgba(255,255,255,0.4)}
+    .header-right .ref{font-size:10px;color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.15);border-radius:4px;padding:2px 10px;display:inline-block;margin-bottom:4px}
+    .header-right .date{font-size:10px;color:rgba(255,255,255,0.5)}
 
     /* KPIs */
     .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:2px solid #102A63}
@@ -395,7 +394,7 @@ function exportEchPDF(dos) {
     @media print{@page{margin:10mm;size:A4 landscape}.no-print{display:none}}
   </style></head><body>
 
-  <div class="header">
+  <div class="header" style="background-color:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22">
     <div class="header-left">
       <div class="surtitle">Échéancier de prêt</div>
       <h1>${dos.intitule||"Sans titre"}</h1>
@@ -6309,7 +6308,7 @@ function exportCBPDF(d) {
     .footer{padding:16px 36px;font-size:10px;color:#AAA;font-family:'DM Mono',monospace;display:flex;justify-content:space-between;border-top:1px solid #F0F0F0;margin-top:auto}
     @media print{@page{margin:0;size:A4}.no-print{display:none}}
   </style></head><body>
-  <div class="header">
+  <div class="header" style="background-color:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22">
     <div>
       <div class="sub">DOSSIER CRÉDIT-BAIL</div>
       <h1>${d.intitule||"Sans titre"}</h1>
@@ -7160,23 +7159,25 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
       capital = capitalCapitalise; // capital passe à montant + intérêts capitalisés
       cumulInterets += interets;
     } else if (estDiffere) {
-      // Différé : intérêts seulement sur capital capitalisé
       interets = capital * rD;
       amort    = 0;
-      echeance = interets;
       commGar  = capital * rG;
+      echeance = interets + commGar + ass;
       cumulInterets += interets;
     } else {
-      // Amortissement : mensualité constante
       interets = capital * r;
-      amort    = Math.min(pmtBase - interets, capital);
-      echeance = pmtBase;
       commGar  = capital * rG;
+      if (typeAmort === "capital") {
+        amort    = Math.min(capitalCapitalise / dureeAmort, capital);
+      } else {
+        amort    = Math.min(pmtBase - interets, capital);
+      }
+      echeance = amort + interets + commGar + ass;
       cumulInterets += interets;
       capital = Math.max(0, capital - amort);
     }
 
-    const echeanceGlobale = echeance; // echeance inclut déjà commission + assurance
+    const echeanceGlobale = echeance; // = tout inclus
     rows.push({
       n: i, date: dateStr,
       echeance, capital: amort, interets, cumulInterets,
@@ -9706,7 +9707,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.359<br />08/05/26 à 22:34
+          v.0.360<br />08/05/26 à 22:41
         </div>
       </div>
 
