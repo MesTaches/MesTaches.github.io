@@ -7099,7 +7099,7 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
    CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
 ── */
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites") {
+  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0) {
   if (!montant || !dureeM) return [];
   // dureeM = durée de remboursement du capital uniquement
   // dureeTotal = durée complète incluant toutes les périodes
@@ -7108,7 +7108,9 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
 
   const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
   const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r; // taux pendant différé
-  const rG   = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
+  const rG1  = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
+  const rG2  = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
+  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999; // si pas de durée saisie → taux 1 toujours
   const ass  = parseNum(assuranceMensuelle) || 0;
 
   // Structure chronologique :
@@ -7161,12 +7163,14 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
     } else if (estDiffere) {
       interets = capital * rD;
       amort    = 0;
-      commGar  = capital * rG;
+      const rGd = i <= _dG1 ? rG1 : rG2;
+      commGar  = capital * rGd;
       echeance = interets + commGar + ass;
       cumulInterets += interets;
     } else {
       interets = capital * r;
-      commGar  = capital * rG;
+      const rGa = i <= _dG1 ? rG1 : rG2;
+      commGar  = capital * rGa;
       if (typeAmort === "capital") {
         amort    = Math.min(capitalCapitalise / dureeAmort, capital);
       } else {
@@ -7216,7 +7220,8 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
       d.dateDebut, parseNum(d.assuranceMensuelle)||0,
       parseInt(d.carence)||0, parseNum(d.tauxGarantie)||0,
       d.tauxDiffere ? parseNum(d.tauxDiffere) : null,
-      parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites"
+      parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites",
+      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0
     );
     // Préserver les données de paiement si déjà saisies
     const merged = rows.map((r,i) => {
@@ -7588,7 +7593,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t}</div>;
   const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites");
+    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0);
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
     const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
   };
@@ -7621,7 +7626,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
               <div>{lblL("TEG net (%/an)")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="0,73" style={inpL}/></div>
               <div>{lblL("TEG différé (%/an)")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
-              <div>{lblL("Com. garantie (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="0,84" style={inpL}/></div>
+              <div>{lblL("Com. gar. 1 (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="1,00" style={inpL}/></div>
+              <div>{lblL("Com. gar. 2 (%/an)")}<input type="text" value={localDos.tauxGarantie2||""} onChange={e=>setL("tauxGarantie2",e.target.value)} placeholder="2,00" style={inpL}/></div>
+              <div style={{gridColumn:"1/-1"}}>{lblL("Durée taux gar. 1 (mois)")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inpL}/></div>
               <div>{lblL("Taux capita. (%/an)")}<input type="text" value={localDos.tauxCapita||""} onChange={e=>setL("tauxCapita",e.target.value)} placeholder="0,5" style={inpL}/></div>
             </div>
           </div>
@@ -9707,7 +9714,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.361<br />08/05/26 à 22:45
+          v.0.362<br />08/05/26 à 22:56
         </div>
       </div>
 
