@@ -7314,7 +7314,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={inp} /></div>
               <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={inp} /></div>
-              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}><option>Mensuelle</option><option>Trimestrielle</option><option>Annuelle</option></select></div>
+              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
               <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={inp} /></div>
               <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={inp} /></div>
               <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={inp} /></div>
@@ -9716,7 +9716,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.364<br />08/05/26 à 23:23
+          v.0.365<br />08/05/26 à 23:38
         </div>
       </div>
 
