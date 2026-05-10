@@ -8059,25 +8059,15 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   }
   var nbPeriodesAn = Math.round(12 / periodicite);
 
-  // ── TEG : médiane sur les rangs d'amortissement stables (milieu du tableau) ──
-  // Utiliser capital AVANT remboursement = capitalRestant + capital remboursé
+  // ── TEG réel = total intérêts payés / montant initial / durée (années) × 100 ──
   var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0; });
   var tauxAuto = "";
-  if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
-    var start = Math.floor(amortsLg.length * 0.25);
-    var end   = Math.floor(amortsLg.length * 0.75);
-    var tegs  = [];
-    for (var j = start; j <= end; j++) {
-      var r = amortsLg[j];
-      var capAvant = (r.capitalRestant||0) + (r.capital||0); // capital AVANT remboursement
-      if (r && capAvant > 0) {
-        tegs.push((r.interets / capAvant) * nbPeriodesAn * 100);
-      }
-    }
-    if (tegs.length > 0) {
-      tegs.sort(function(a,b){return a-b;});
-      var medTeg = tegs[Math.floor(tegs.length/2)];
-      tauxAuto = medTeg.toFixed(2);
+  if (lg.length > 0) {
+    var totalInterets = lg.reduce(function(a,r){ return a + (r.interets||0); }, 0);
+    var dureeAn = lg.length / 12;
+    var montantBase = parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",",".")) || montantAuto;
+    if (totalInterets > 0 && montantBase > 0 && dureeAn > 0) {
+      tauxAuto = (totalInterets / montantBase / dureeAn * 100).toFixed(2);
     }
   }
 
@@ -10475,7 +10465,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.385<br />10/05/26 à 21:48
+          v.0.387<br />10/05/26 à 21:57
         </div>
       </div>
 
