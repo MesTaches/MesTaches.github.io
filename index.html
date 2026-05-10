@@ -7973,6 +7973,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Capitalisation</span>
                             :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
                             :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
+                            :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Versement</span>
+                            :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
                             :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
                         </td>
                         <td style={{...TD,textAlign:"right",color:"#16A34A",fontWeight:row.versement>0?700:400,width:70}}>
@@ -8045,7 +8047,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   const payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
   const capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
   return Object.assign({}, dos, {
-    montant:    dos.montant || String(montantAuto),
+    montant:    String(montantAuto) || dos.montant,
     duree:      dureeAuto,
     tauxAnnuel: tauxAuto,
     dateFin:    dateFin,
@@ -10361,7 +10363,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.377<br />10/05/26 à 19:53
+          v.0.378<br />10/05/26 à 19:58
         </div>
       </div>
 
