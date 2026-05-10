@@ -8060,7 +8060,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var nbPeriodesAn = Math.round(12 / periodicite);
 
   // ── TEG : médiane sur les rangs d'amortissement stables (milieu du tableau) ──
-  var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0 && (r.capitalRestant||0) > 0; });
+  // Utiliser capital AVANT remboursement = capitalRestant + capital remboursé
+  var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0; });
   var tauxAuto = "";
   if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
     var start = Math.floor(amortsLg.length * 0.25);
@@ -8068,8 +8069,9 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     var tegs  = [];
     for (var j = start; j <= end; j++) {
       var r = amortsLg[j];
-      if (r && r.capitalRestant > 0) {
-        tegs.push((r.interets / r.capitalRestant) * nbPeriodesAn * 100);
+      var capAvant = (r.capitalRestant||0) + (r.capital||0); // capital AVANT remboursement
+      if (r && capAvant > 0) {
+        tegs.push((r.interets / capAvant) * nbPeriodesAn * 100);
       }
     }
     if (tegs.length > 0) {
@@ -8087,8 +8089,9 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     var comms  = [];
     for (var k = start2; k <= end2; k++) {
       var rc = amortsLg[k];
-      if (rc && rc.capitalRestant > 0 && (rc.commGarantie||0) > 0) {
-        comms.push((rc.commGarantie / rc.capitalRestant) * nbPeriodesAn * 100);
+      var capAvantC = (rc.capitalRestant||0) + (rc.capital||0);
+      if (rc && capAvantC > 0 && (rc.commGarantie||0) > 0) {
+        comms.push((rc.commGarantie / capAvantC) * nbPeriodesAn * 100);
       }
     }
     if (comms.length > 0) {
@@ -10472,7 +10475,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.384<br />10/05/26 à 21:42
+          v.0.385<br />10/05/26 à 21:48
         </div>
       </div>
 
