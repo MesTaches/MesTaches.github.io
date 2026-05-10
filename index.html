@@ -7708,6 +7708,17 @@ function EchAttachments({ attachments, onChange }) {
 /* ── EchDossierTab ── */
 function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const now = new Date().toISOString().split("T")[0];
+  // Tri : ordre manuel si défini, sinon dateFin décroissante
+  const dossiersOrdres = React.useMemo(() => {
+    if (ordre && ordre.length === dossiers.length) {
+      return ordre.map(id => dossiers.find(d => d.id === id)).filter(Boolean);
+    }
+    return [...dossiers].sort((a, b) => {
+      const dA = a.dateFin || "";
+      const dB = b.dateFin || "";
+      return dB > dA ? 1 : dB < dA ? -1 : 0;
+    });
+  }, [dossiers, ordre]);
   const [localDos, setLocalDos] = React.useState(dos);
   const [editMode, setEditMode] = React.useState(false);
   React.useEffect(()=>setLocalDos(dos),[dos.id]);
@@ -8014,15 +8025,54 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   );
 }
 
+
+/* ── Calcul automatique des métadonnées d'un dossier depuis ses lignes ── */
+function calcDossierAuto(dos) {
+  const lignes = dos.lignes || [];
+  if (lignes.length === 0) return dos;
+
+  const nowS = new Date().toISOString().split("T")[0];
+  const payeN = lignes.filter(r => r.date <= nowS).length;
+
+  // Montant initial = capital restant de la première ligne (ou max capital restant)
+  const montantAuto = lignes[0]?.capitalRestant || Math.max(...lignes.map(r => r.capitalRestant || 0));
+
+  // Durée amortissement = nombre de lignes avec capital remboursé > 0
+  const lignesAmort = lignes.filter(r => (r.capital || 0) > 0);
+  const dureeAuto = lignesAmort.length || lignes.length;
+
+  // Date fin = dernière date de l'échéancier
+  const datesValides = lignes.map(r => r.date).filter(Boolean).sort();
+  const dateFin = datesValides[datesValides.length - 1] || "";
+
+  // Taux approximatif = intérêts premier rang amort / capital restant × 12
+  const premierAmort = lignes.find(r => (r.capital || 0) > 0);
+  let tauxAuto = dos.tauxAnnuel;
+  if (!tauxAuto && premierAmort && premierAmort.capitalRestant > 0) {
+    const tAnnuel = (premierAmort.interets / premierAmort.capitalRestant) * 12 * 100;
+    tauxAuto = tAnnuel.toFixed(4);
+  }
+
+  return {
+    ...dos,
+    montant:    dos.montant || String(montantAuto),
+    duree:      dos.duree   || String(dureeAuto),
+    tauxAnnuel: tauxAuto    || dos.tauxAnnuel || "",
+    dateFin:    dateFin,
+  };
+}
+
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState(()=>loadEchDossiers());
+  const [ordre, setOrdre]       = React.useState(null);
+  const [dragIdx, setDragIdx]   = React.useState(null);
   const [activeTab, setActiveTab] = React.useState("dashboard");
   const [modal, setModal] = React.useState(null);
 
   React.useEffect(()=>{ saveEchDossiers(dossiers); },[dossiers]);
 
-  const saveDossier = d => setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]);
+  const saveDossier = dosRaw => { const dos=calcDossierAuto(dosRaw); setDossiers(p => p.find(x=>x.id===dos.id)?p.map(x=>x.id===dos.id?dos:x):[dos,...p]); };
   const deleteDossier = id => { if(window.confirm("Supprimer cet échéancier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
   const openNew = () => setModal({ id:uid(), reference:"ECH_"+String(dossiers.length+1).padStart(5,"0"), intitule:"", banque:"", nature:"", numContrat:"", montant:"", tauxAnnuel:"", duree:"", periodicite:"Mensuelle", dateContrat:"", dateDebut:"", assuranceMensuelle:"", garantie:"", objet:"", notes:"", attachments:[], lignes:[] });
 
@@ -8139,39 +8189,56 @@ function EcheancierView({ tasks, settings }) {
               : <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
                   <thead>
                     <tr style={{ background:"#102A63" }}>
-                      {["Référence","Intitulé","Banque","Montant","Taux","Durée","Capital restant","Avancement",""].map(h=>(
+                      {["","Référence","Intitulé","Banque","Montant","Taux","Durée","Date fin","Capital restant","Avancement",""].map(h=>(
                         <th key={h} style={{ padding:"7px 12px",color:"white",fontWeight:400,textAlign:h==="Avancement"||h===""?"center":"left",fontSize:10 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {dossiers.map((dos,i)=>{
+                    {dossiersOrdres.map((dos,i)=>{
                       const lignes = dos.lignes||[];
                       const nowT5 = new Date().toISOString().split("T")[0];
                       const paye = lignes.filter(r=>r.date<=nowT5).length;
                       const pct = lignes.length>0?Math.round(paye/lignes.length*100):0;
                       const restantDu = lignes[paye]?.capitalRestant||0;
+                      const isDragging = dragIdx === i;
                       return (
-                        <tr key={dos.id} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"pointer" }}
+                        <tr key={dos.id}
+                          draggable={true}
+                          onDragStart={()=>setDragIdx(i)}
+                          onDragOver={e=>{e.preventDefault();}}
+                          onDrop={e=>{
+                            e.preventDefault();
+                            if (dragIdx===null||dragIdx===i) return;
+                            const arr=[...dossiersOrdres];
+                            const [moved]=arr.splice(dragIdx,1);
+                            arr.splice(i,0,moved);
+                            setOrdre(arr.map(d=>d.id));
+                            setDragIdx(null);
+                          }}
+                          onDragEnd={()=>setDragIdx(null)}
+                          style={{ background:isDragging?"#EFF6FF":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"grab",opacity:isDragging?0.5:1,transition:"opacity 0.15s" }}
                           onClick={()=>setActiveTab(dos.id)}>
-                          <td style={{ padding:"8px 12px",color:"#888",fontSize:10 }}>{dos.reference}</td>
-                          <td style={{ padding:"8px 12px",fontWeight:600,color:"#102A63" }}>{dos.intitule||"—"}</td>
-                          <td style={{ padding:"8px 12px",color:"#555" }}>{dos.banque||"—"}</td>
-                          <td style={{ padding:"8px 12px",fontWeight:600 }}>{fmtE(parseNum(dos.montant))}</td>
-                          <td style={{ padding:"8px 12px",color:"#065F46" }}>{dos.tauxAnnuel||"—"} %</td>
-                          <td style={{ padding:"8px 12px",color:"#555" }}>{dos.duree||"—"} mois</td>
-                          <td style={{ padding:"8px 12px",fontWeight:700,color:"#C0392B" }}>{fmtE(restantDu)}</td>
-                          <td style={{ padding:"8px 12px" }}>
+                          <td style={{ padding:"8px 6px",textAlign:"center",color:"#CCC",cursor:"grab",fontSize:14,userSelect:"none" }} title="Déplacer">⠿</td>
+                          <td style={{ padding:"8px 10px",color:"#888",fontSize:10 }}>{dos.reference}</td>
+                          <td style={{ padding:"8px 10px",fontWeight:600,color:"#102A63" }}>{dos.intitule||"—"}</td>
+                          <td style={{ padding:"8px 10px",color:"#555" }}>{dos.banque||"—"}</td>
+                          <td style={{ padding:"8px 10px",fontWeight:600 }}>{fmtE(parseNum(dos.montant))}</td>
+                          <td style={{ padding:"8px 10px",color:"#065F46" }}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
+                          <td style={{ padding:"8px 10px",color:"#555" }}>{dos.duree?dos.duree+" mois":"—"}</td>
+                          <td style={{ padding:"8px 10px",color:"#888",fontSize:10 }}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
+                          <td style={{ padding:"8px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60" }}>{fmtE(restantDu)}</td>
+                          <td style={{ padding:"8px 10px" }}>
                             <div style={{ display:"flex",alignItems:"center",gap:8 }}>
-                              <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden" }}>
-                                <div style={{ width:`${pct}%`,height:"100%",background:"#27AE60",borderRadius:3 }} />
+                              <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:60 }}>
+                                <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3 }} />
                               </div>
-                              <span style={{ fontSize:10,color:"#888",minWidth:30 }}>{pct}%</span>
+                              <span style={{ fontSize:10,color:"#888",minWidth:32 }}>{pct}%</span>
                             </div>
                           </td>
-                          <td style={{ padding:"8px 12px",textAlign:"center" }}>
+                          <td style={{ padding:"8px 10px",textAlign:"center" }}>
                             <button onClick={e=>{e.stopPropagation();setModal(dos);}}
-                              style={{ border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#555",fontFamily:"'Lora',serif" }}>✏️</button>
+                              style={{ border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#E67E22",fontFamily:"'Lora',serif" }}>✏️</button>
                           </td>
                         </tr>
                       );
@@ -10308,7 +10375,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.370<br />10/05/26 à 18:56
+          v.0.371<br />10/05/26 à 19:07
         </div>
       </div>
 
