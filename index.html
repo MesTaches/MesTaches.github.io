@@ -52,6 +52,12 @@
   font-size: 10px !important;
   font-family: 'Lora', serif !important;
 }
+/* Placeholders transparents */
+input::placeholder, textarea::placeholder {
+  color: #C8D0DC !important;
+  opacity: 1;
+  font-style: italic;
+}
 </style>
   <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -7935,7 +7941,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
                 <thead style={{position:"sticky",top:0,zIndex:2}}>
                   <tr style={{background:"#102A63"}}>
-                    {["N°","Date","Type","Versement","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
+                    {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
                       <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
@@ -8017,40 +8023,94 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
 
 /* ── calcDossierAuto ── */
 window.calcDossierAuto = function calcDossierAuto(dos) {
-  const lg = dos.lignes || [];
+  var lg = dos.lignes || [];
   if (!lg.length) return dos;
-  const nowS = new Date().toISOString().split("T")[0];
-  // Montant = somme des versements si renseignés, sinon somme du capital remboursé
-  const totalVers = (dos.versements||[]).reduce(function(a,v){
+  var nowS = new Date().toISOString().split("T")[0];
+
+  // ── Montant = somme versements ou somme capital remboursé ──
+  var totalVers = (dos.versements||[]).reduce(function(a,v){
     return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
   }, 0);
-  const totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
-  const montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
-  // Durée totale = nombre total de lignes de l'échéancier
-  const dureeAuto = String(lg.length);
-  // Date fin
-  const dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
-  const dateFin = dates.length ? dates[dates.length-1] : "";
-  // Taux : médiane des rangs d'amortissement
-  const amortsLg = lg.filter(function(r){ return (r.capital||0) > 0; });
-  let tauxAuto = dos.tauxAnnuel || "";
-  if (!tauxAuto && amortsLg.length > 0) {
-    const mid = amortsLg[Math.floor(amortsLg.length / 2)];
-    if (mid && mid.capitalRestant > 0)
-      tauxAuto = ((mid.interets / mid.capitalRestant) * 12 * 100).toFixed(2);
+  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
+  var montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
+
+  // ── Durée totale ──
+  var dureeAuto = String(lg.length);
+
+  // ── Date fin ──
+  var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
+  var dateFin = dates.length ? dates[dates.length-1] : "";
+
+  // ── Détecter la périodicité (en mois) depuis l'écart entre rangs avec flux ──
+  var rangsFlux = lg.filter(function(r){ return (r.interets||0) > 0 || (r.capital||0) > 0; });
+  var periodicite = 1; // mensuelle par défaut
+  if (rangsFlux.length >= 2) {
+    var ecarts = [];
+    for (var i = 1; i < Math.min(rangsFlux.length, 5); i++) {
+      var d1 = new Date(rangsFlux[i-1].date||"2000-01-01");
+      var d2 = new Date(rangsFlux[i].date||"2000-01-01");
+      var diff = Math.round((d2 - d1) / (1000*60*60*24*30));
+      if (diff > 0) ecarts.push(diff);
+    }
+    if (ecarts.length > 0) {
+      ecarts.sort(function(a,b){return a-b;});
+      periodicite = ecarts[Math.floor(ecarts.length/2)] || 1;
+    }
   }
-  // Capital restant actuel
-  const payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
-  const capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+  var nbPeriodesAn = Math.round(12 / periodicite);
+
+  // ── TEG : médiane sur les rangs d'amortissement stables (milieu du tableau) ──
+  var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0 && (r.capitalRestant||0) > 0; });
+  var tauxAuto = dos.tauxAnnuel || "";
+  if (!tauxAuto && amortsLg.length >= 3) {
+    var start = Math.floor(amortsLg.length * 0.25);
+    var end   = Math.floor(amortsLg.length * 0.75);
+    var tegs  = [];
+    for (var j = start; j <= end; j++) {
+      var r = amortsLg[j];
+      if (r && r.capitalRestant > 0) {
+        tegs.push((r.interets / r.capitalRestant) * nbPeriodesAn * 100);
+      }
+    }
+    if (tegs.length > 0) {
+      tegs.sort(function(a,b){return a-b;});
+      var medTeg = tegs[Math.floor(tegs.length/2)];
+      tauxAuto = medTeg.toFixed(2);
+    }
+  }
+
+  // ── Commission garantie : médiane sur les rangs d'amortissement ──
+  var commAuto = dos.tauxGarantie || "";
+  if (!commAuto && amortsLg.length >= 3) {
+    var start2 = Math.floor(amortsLg.length * 0.25);
+    var end2   = Math.floor(amortsLg.length * 0.75);
+    var comms  = [];
+    for (var k = start2; k <= end2; k++) {
+      var rc = amortsLg[k];
+      if (rc && rc.capitalRestant > 0 && (rc.commGarantie||0) > 0) {
+        comms.push((rc.commGarantie / rc.capitalRestant) * nbPeriodesAn * 100);
+      }
+    }
+    if (comms.length > 0) {
+      comms.sort(function(a,b){return a-b;});
+      commAuto = comms[Math.floor(comms.length/2)].toFixed(2);
+    }
+  }
+
+  // ── Capital restant actuel ──
+  var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
+  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+
   return Object.assign({}, dos, {
     montant:    String(montantAuto) || dos.montant,
     duree:      dureeAuto,
     tauxAnnuel: tauxAuto,
+    tauxGarantie: commAuto,
     dateFin:    dateFin,
     capitalRestantActuel: capitalRestantActuel,
     totalVersements: totalVers || montantAuto,
   });
-}
+};
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState(()=>loadEchDossiers());
@@ -8247,26 +8307,42 @@ function EcheancierView({ tasks, settings }) {
                   const restantDu=lignes[paye]?.capitalRestant||0;
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
+                  // Calcul timeline
+                  const hasCap=parseNum(dos.tauxCapita)>0;
+                  const car=parseInt(dos.carence)||0;
+                  const dif=parseInt(dos.differe)||0;
+                  const durA=parseInt(dos.duree)||lignes.length;
+                  const totalT=(hasCap?1:0)+car+dif+durA;
+                  // Position actuelle dans la timeline
+                  const dateDebut=dos.dateDebut||lignes[0]?.date||"";
+                  const dateFin2=dos.dateFin||lignes[lignes.length-1]?.date||"";
+                  let pctTimeline=0;
+                  if(dateDebut&&dateFin2){
+                    const dD=new Date(dateDebut),dF=new Date(dateFin2),dN=new Date(nowT3);
+                    pctTimeline=Math.min(100,Math.max(0,Math.round((dN-dD)/(dF-dD)*100)));
+                  }
                   return (
                     <div key={dos.id} style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",padding:"16px 20px",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}
                       onClick={()=>setActiveTab(dos.id)}>
+                      {/* Header */}
                       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
                         <div>
                           <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{dos.reference} · {dos.banque||"—"}</div>
                           <div style={{ fontSize:14,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{dos.intitule||"Sans titre"}</div>
-                          {dos.nature && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:4,padding:"1px 7px",fontFamily:"'Lora',serif",fontWeight:700,marginTop:4,display:"inline-block" }}>{dos.nature}</span>}
+                          {dos.typeAmort && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:4,padding:"1px 7px",fontFamily:"'Lora',serif",fontWeight:700,marginTop:4,display:"inline-block" }}>{dos.typeAmort==="capital"?"Capital constant":"Annuités constantes"}</span>}
                         </div>
                         <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:18,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif" }}>{fmtE(restantDu)}</div>
+                          <div style={{ fontSize:18,fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60",fontFamily:"'Lora',serif" }}>{fmtE(restantDu)}</div>
                           <div style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif" }}>capital restant</div>
                         </div>
                       </div>
-                      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:12 }}>
+                      {/* KPIs */}
+                      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14 }}>
                         {[
                           {label:"Montant initial",val:fmtE(parseNum(dos.montant))},
                           {label:"Taux",val:(dos.tauxAnnuel||"—")+" %"},
                           {label:"Prochaine échéance",val:prochaine?prochaine.date.split("-").reverse().join("/"):"Terminé"},
-                          {label:"En retard",val:String(enRetardDos),color:enRetardDos>0?"#C0392B":"#27AE60"},
+                          {label:"Avancement",val:`${pct}%`,color:pct===100?"#27AE60":"#1D4ED8"},
                         ].map(f=>(
                           <div key={f.label}>
                             <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{f.label}</div>
@@ -8274,11 +8350,40 @@ function EcheancierView({ tasks, settings }) {
                           </div>
                         ))}
                       </div>
+                      {/* Timeline structure + position actuelle */}
+                      {totalT > 0 && (
+                        <div style={{ marginBottom:10 }}>
+                          <div style={{ position:"relative",height:14,borderRadius:7,overflow:"visible",display:"flex",gap:1,marginBottom:4 }}>
+                            {car>0&&<div style={{ width:`${car/totalT*100}%`,height:"100%",background:"#FCA5A5",borderRadius:"7px 0 0 7px",minWidth:4 }} title={`Carence ${car}m`}/>}
+                            {hasCap&&<div style={{ width:`${1/totalT*100}%`,height:"100%",background:"#6D28D9",minWidth:3 }} title="Capitalisation"/>}
+                            {dif>0&&<div style={{ width:`${dif/totalT*100}%`,height:"100%",background:"#FCD34D",minWidth:4 }} title={`Différé ${dif}m`}/>}
+                            <div style={{ flex:1,height:"100%",background:pct===100?"#27AE60":"#6EE7B7",borderRadius:car===0&&!hasCap&&dif===0?"7px":"0 7px 7px 0",minWidth:10 }} title={`Amortissement ${durA}m`}/>
+                            {/* Indicateur position actuelle */}
+                            {pctTimeline>0&&pctTimeline<100&&(
+                              <div style={{ position:"absolute",left:`${pctTimeline}%`,top:-3,transform:"translateX(-50%)",width:3,height:20,background:"#102A63",borderRadius:2,boxShadow:"0 0 0 2px white",zIndex:2 }} title={`Aujourd'hui (${pctTimeline}%)`}/>
+                            )}
+                          </div>
+                          {/* Légende + dates */}
+                          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+                              {car>0&&<span style={{ fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif" }}>● Carence {car}m</span>}
+                              {hasCap&&<span style={{ fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif" }}>● Cap.</span>}
+                              {dif>0&&<span style={{ fontSize:9,color:"#A16207",fontFamily:"'Lora',serif" }}>● Différé {dif}m</span>}
+                              <span style={{ fontSize:9,color:"#065F46",fontFamily:"'Lora',serif" }}>● Amort. {durA}m</span>
+                            </div>
+                            <div style={{ display:"flex",gap:12 }}>
+                              {dateDebut&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{dateDebut.split("-").reverse().join("/")} →</span>}
+                              {dateFin2&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>→ {dateFin2.split("-").reverse().join("/")}</span>}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      {/* Barre avancement */}
                       <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                        <div style={{ flex:1,height:8,background:"#F0F0F0",borderRadius:4,overflow:"hidden" }}>
+                        <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:4,overflow:"hidden" }}>
                           <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:4,transition:"width 0.3s" }} />
                         </div>
-                        <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:60 }}>{paye}/{lignes.length} versements</span>
+                        <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:80 }}>{paye}/{lignes.length} versements</span>
                       </div>
                     </div>
                   );
@@ -8494,6 +8599,7 @@ function RCFView({ settings }) {
                               <div style={{ fontSize: 11, fontWeight: 700, color: isPast ? "#888" : "#102A63", fontFamily: "'Lora',serif" }}>{fmtE(t.montant)}</div>
                               <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif" }}>éch. {fmtD(t.dateEcheance)}</div>
                             </div>
+                            {t.renouvAuto && !isPast && <span style={{ fontSize:9,background:"#ECFDF5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontWeight:700,fontFamily:"'Lora',serif",border:"1px solid #6EE7B7" }}>↺ Auto</span>}
                             {alerteT && <AlertBadge date={t.dateEcheance} fn={alertesTirage} />}
                             {isPast && <span style={{ fontSize: 9, background: "#D1FAE5", color: "#065F46", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "'Lora',serif" }}>Remboursé</span>}
                           </div>
@@ -8572,10 +8678,14 @@ function RCFModal({ ligne, onSave, onClose }) {
             {(d.tirages || []).length === 0
               ? <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif" }}>Aucun tirage — cliquez sur "+ Ajouter"</div>
               : (d.tirages || []).map((t, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr auto auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
                   <div>{lbl("Montant (€)")}<input type="text" value={t.montant} onChange={e => updTirage(i, "montant", e.target.value)} placeholder="500 000" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
                   <div>{lbl("Échéance")}<input type="date" value={t.dateEcheance} onChange={e => updTirage(i, "dateEcheance", e.target.value)} style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
                   <div>{lbl("Note")}<input value={t.note || ""} onChange={e => updTirage(i, "note", e.target.value)} placeholder="Tranche A…" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
+                  <div style={{ display:"flex",alignItems:"center",gap:6,paddingTop:18 }}>
+                    <input type="checkbox" id={`renouv_${i}`} checked={t.renouvAuto||false} onChange={e=>updTirage(i,"renouvAuto",e.target.checked)} style={{ cursor:"pointer",width:14,height:14 }}/>
+                    <label htmlFor={`renouv_${i}`} style={{ fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",cursor:"pointer",fontWeight:t.renouvAuto?700:400 }}>Renouvellement automatique</label>
+                  </div>
                   <button onClick={() => delTirage(i)} style={{ border: "none", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, width: 30, height: 32, cursor: "pointer", fontSize: 14 }}>×</button>
                 </div>
               ))}
@@ -10359,7 +10469,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.379<br />10/05/26 à 21:11
+          v.0.383<br />10/05/26 à 21:32
         </div>
       </div>
 
