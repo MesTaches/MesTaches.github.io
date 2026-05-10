@@ -7977,11 +7977,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
                             :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
                         </td>
-                        <td style={{...TD,textAlign:"right",color:"#16A34A",fontWeight:row.versement>0?700:400,width:70}}>
-                          {editMode
-                            ?<input value={row.versement||""} onChange={e=>updRow("versement",parseNum(e.target.value))} style={inpS} placeholder="0"/>
-                            :row.versement>0?"+"+fmtE(row.versement):"—"}
-                        </td>
+
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow("echeance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow("capital",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
@@ -8030,8 +8026,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   }, 0);
   const totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
   const montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
-  // Durée amortissement
-  const dureeAuto = String(lg.filter(function(r){ return (r.capital||0) > 0; }).length || lg.length);
+  // Durée totale = nombre total de lignes de l'échéancier
+  const dureeAuto = String(lg.length);
   // Date fin
   const dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
   const dateFin = dates.length ? dates[dates.length-1] : "";
@@ -10363,7 +10359,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.378<br />10/05/26 à 19:58
+          v.0.379<br />10/05/26 à 21:11
         </div>
       </div>
 
