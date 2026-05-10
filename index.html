@@ -3743,6 +3743,7 @@ const ALL_TABS = [
   { id: "notifications", label: "Rappels",          icon: "◔" },
   { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
   { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
+  { id: "rcf",           label: "RCF",               icon: "↺" },
   { id: "echeancier",    label: "Dettes",            icon: "▦" },
   { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
   { id: "cotation",      label: "Cotation",         icon: "◎" },
@@ -7670,17 +7671,18 @@ function EchAttachments({ attachments, onChange }) {
 }
 
 /* ── EchDossierTab ── */
-function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
+function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
+  const now = new Date().toISOString().split("T")[0];
   const [localDos, setLocalDos] = React.useState(dos);
+  const [editMode, setEditMode] = React.useState(false);
   React.useEffect(()=>setLocalDos(dos),[dos.id]);
   const setL = (k,v) => setLocalDos(p=>({...p,[k]:v}));
   const lignes=dos.lignes||[];
-  const now2=new Date().toISOString().split("T")[0];
-  const payeAuto=lignes.filter(r=>r.date<=now2).length;
+  const payeAuto=lignes.filter(r=>r.date<=now).length;
   const pct=lignes.length>0?Math.round(payeAuto/lignes.length*100):0;
   const restantDu=lignes[payeAuto]?.capitalRestant||(lignes.length>0?lignes[lignes.length-1].capitalRestant:0);
   const totalInt=lignes.reduce((a,r)=>a+(r.interets||0),0);
-  const prochaine=lignes.find(r=>r.date>now2);
+  const prochaine=lignes.find(r=>r.date>now);
   const hasCap=parseNum(localDos.tauxCapita)>0;
   const car=parseInt(localDos.carence)||0;
   const dif=parseInt(localDos.differe)||0;
@@ -7835,8 +7837,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
                 </thead>
                 <tbody>
                   {lignes.map((row,i)=>{
-                    const isPast=row.date<=now2;
-                    const isNext=row.date>now2&&i===payeAuto;
+                    const isPast=row.date<=now;
+                    const isNext=row.date>now&&i===payeAuto;
                     const TD={padding:"2px 4px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
                     const updRow=(k,v)=>{
                       const l=[...lignes]; l[i]={...l[i],[k]:v};
@@ -8143,6 +8145,300 @@ function EcheancierView({ tasks, settings }) {
   );
 }
 
+
+
+/* ══════════════════════════════════════════════
+   MODULE RCF — Revolving Credit Facilities
+   ══════════════════════════════════════════════ */
+const RCF_KEY = "taskmanager_rcf_v1";
+
+function RCFView({ settings }) {
+  const [lignes, setLignes] = React.useState([]);
+  const [modal, setModal] = React.useState(null); // null | "new" | ligne
+  const now = new Date().toISOString().split("T")[0];
+  const today = new Date(now);
+
+  React.useEffect(() => {
+    if (!_db || !_auth?.currentUser) return;
+    const uid = _auth.currentUser.uid;
+    _db.collection("users").doc(uid).collection("data").doc(RCF_KEY).get().then(doc => {
+      if (doc.exists) setLignes(doc.data().lignes || []);
+    });
+  }, []);
+
+  const save = (l) => {
+    setLignes(l);
+    if (!_db || !_auth?.currentUser) return;
+    const uid = _auth.currentUser.uid;
+    _db.collection("users").doc(uid).collection("data").doc(RCF_KEY).set({ lignes: l });
+  };
+
+  const delLigne = (id) => save(lignes.filter(l => l.id !== id));
+
+  const fmtD = (s) => s ? s.split("-").reverse().join("/") : "—";
+  const fmtE = (v) => v ? Number(v).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €" : "—";
+
+  // Calcul alertes
+  const alertes = (dateStr, seuils) => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    const diff = Math.round((d - today) / 86400000);
+    if (diff < 0) return { label: "Échu", color: "#DC2626", bg: "#FEE2E2", urgent: true };
+    for (const [jours, label, color, bg] of seuils) {
+      if (diff <= jours) return { label, color, bg, diff, urgent: diff <= seuils[seuils.length-1][0] };
+    }
+    return null;
+  };
+
+  const alertesContrat = (d) => alertes(d, [
+    [90, "< 3 mois", "#D97706", "#FFFBEB"],
+    [30, "< 1 mois", "#EA580C", "#FFF7ED"],
+    [15, "< 15 jours", "#DC2626", "#FEF2F2"],
+  ]);
+  const alertesTirage = (d) => alertes(d, [
+    [30, "< 30 jours", "#6D28D9", "#F5F3FF"],
+    [20, "< 20 jours", "#EA580C", "#FFF7ED"],
+    [10, "< 10 jours", "#DC2626", "#FEF2F2"],
+  ]);
+
+  // KPIs globaux
+  const totalAutorise  = lignes.reduce((a, l) => a + (Number(l.montantAutorise) || 0), 0);
+  const totalTire      = lignes.reduce((a, l) => a + (Number(l.montantTire) || 0), 0);
+  const totalDispo     = totalAutorise - totalTire;
+  const lignesActives  = lignes.filter(l => !l.dateFinContrat || l.dateFinContrat >= now).length;
+  const alertesUrgentes = lignes.filter(l =>
+    (l.dateFinContrat && alertesContrat(l.dateFinContrat)?.urgent) ||
+    (l.tirages || []).some(t => t.dateEcheance && alertesTirage(t.dateEcheance)?.urgent)
+  ).length;
+
+  const AlertBadge = ({ date, fn }) => {
+    const a = fn(date);
+    if (!a) return null;
+    return <span style={{ fontSize: 9, background: a.bg, color: a.color, borderRadius: 4, padding: "1px 6px", fontWeight: 700, whiteSpace: "nowrap", fontFamily: "'Lora',serif" }}>
+      {a.label}{a.diff !== undefined ? ` (J-${a.diff})` : ""}
+    </span>;
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div>
+          <h2 style={{ fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#102A63", margin: 0 }}>Revolving Credit Facilities</h2>
+          <p style={{ fontFamily: "'Lora',serif", fontSize: 12, color: "#888", margin: "3px 0 0" }}>Suivi des contrats et tirages RCF</p>
+        </div>
+        <button onClick={() => setModal("new")}
+          style={{ background: "#102A63", color: "white", border: "none", borderRadius: 10, padding: "9px 18px", fontSize: 12, fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer" }}>
+          + Nouveau RCF
+        </button>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14 }}>
+        {[
+          { label: "Montant autorisé total",  val: fmtE(totalAutorise), color: "#102A63", bg: "#EFF6FF", border: "#BFDBFE", icon: "🏛" },
+          { label: "Montant tiré",             val: fmtE(totalTire),     color: "#0E7490", bg: "#ECFEFF", border: "#A5F3FC", icon: "📤" },
+          { label: "Disponible",               val: fmtE(totalDispo),    color: "#065F46", bg: "#F0FDF4", border: "#BBF7D0", icon: "✅" },
+          { label: "Alertes urgentes",         val: String(alertesUrgentes), color: alertesUrgentes > 0 ? "#DC2626" : "#64748B", bg: alertesUrgentes > 0 ? "#FEF2F2" : "#F8FAFC", border: alertesUrgentes > 0 ? "#FECACA" : "#E2E8F0", icon: "⚠️" },
+        ].map(k => (
+          <div key={k.label} style={{ background: k.bg, border: `1px solid ${k.border}`, borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ fontSize: 18, marginBottom: 6 }}>{k.icon}</div>
+            <div style={{ fontSize: 20, fontWeight: 700, color: k.color, fontFamily: "'Lora',serif", marginBottom: 3 }}>{k.val}</div>
+            <div style={{ fontSize: 10, color: "#888", fontFamily: "'Lora',serif" }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Lignes RCF */}
+      {lignes.length === 0
+        ? <div style={{ background: "white", borderRadius: 16, border: "1px solid #ECEAE5", padding: "60px 24px", textAlign: "center" }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>↺</div>
+            <div style={{ fontFamily: "'Lora',serif", fontSize: 16, color: "#888", marginBottom: 8 }}>Aucun RCF enregistré</div>
+            <div style={{ fontFamily: "'Lora',serif", fontSize: 12, color: "#AAA" }}>Cliquez sur "+ Nouveau RCF" pour commencer</div>
+          </div>
+        : lignes.map(ligne => {
+          const alerteC = alertesContrat(ligne.dateFinContrat);
+          const pctTire = ligne.montantAutorise > 0 ? Math.round((ligne.montantTire || 0) / ligne.montantAutorise * 100) : 0;
+          return (
+            <div key={ligne.id} style={{ background: "white", borderRadius: 16, border: `1px solid ${alerteC?.urgent ? "#FECACA" : "#ECEAE5"}`, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+              {/* Header ligne */}
+              <div style={{ background: "#102A63", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>↺</div>
+                  <div>
+                    <div style={{ fontFamily: "'Lora',serif", fontSize: 15, fontWeight: 700, color: "white" }}>{ligne.intitule || "Sans titre"}</div>
+                    <div style={{ fontFamily: "'Lora',serif", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{ligne.banque || ""}{ligne.reference ? " · " + ligne.reference : ""}</div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  {alerteC && <AlertBadge date={ligne.dateFinContrat} fn={alertesContrat} />}
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontFamily: "'Lora',serif", fontSize: 16, fontWeight: 700, color: "white" }}>{fmtE(ligne.montantAutorise)}</div>
+                    <div style={{ fontFamily: "'Lora',serif", fontSize: 10, color: "rgba(255,255,255,0.55)" }}>autorisé</div>
+                  </div>
+                  <button onClick={() => setModal(ligne)} style={{ background: "rgba(255,255,255,0.15)", border: "none", borderRadius: 8, padding: "5px 10px", color: "white", cursor: "pointer", fontSize: 11, fontFamily: "'Lora',serif" }}>✏️ Modifier</button>
+                  <button onClick={() => delLigne(ligne.id)} style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 8, padding: "5px 8px", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 12 }}>×</button>
+                </div>
+              </div>
+
+              {/* Corps */}
+              <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+                {/* Infos contrat */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em", marginBottom: 8 }}>CONTRAT</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                    {[
+                      ["Date début", fmtD(ligne.dateDebutContrat)],
+                      ["Échéance contrat", fmtD(ligne.dateFinContrat)],
+                      ["Taux (%/an)", ligne.taux ? ligne.taux + " %" : "—"],
+                      ["Conditions", ligne.conditions || "—"],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: "'Lora',serif" }}>
+                        <span style={{ color: "#888" }}>{l}</span>
+                        <span style={{ fontWeight: 600, color: "#2C3E50" }}>{v}</span>
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 4 }}>
+                      <AlertBadge date={ligne.dateFinContrat} fn={alertesContrat} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Utilisation */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em", marginBottom: 8 }}>UTILISATION</div>
+                  <div style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: "'Lora',serif", marginBottom: 4 }}>
+                      <span style={{ color: "#888" }}>Tiré</span><span style={{ fontWeight: 700, color: "#0E7490" }}>{fmtE(ligne.montantTire)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontFamily: "'Lora',serif", marginBottom: 8 }}>
+                      <span style={{ color: "#888" }}>Disponible</span><span style={{ fontWeight: 700, color: "#065F46" }}>{fmtE((ligne.montantAutorise || 0) - (ligne.montantTire || 0))}</span>
+                    </div>
+                    <div style={{ background: "#F1F5F9", borderRadius: 6, height: 8, overflow: "hidden" }}>
+                      <div style={{ width: `${pctTire}%`, height: "100%", background: pctTire > 90 ? "#DC2626" : pctTire > 70 ? "#EA580C" : "#0E7490", borderRadius: 6, transition: "width 0.3s" }} />
+                    </div>
+                    <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif", textAlign: "right", marginTop: 3 }}>{pctTire}% utilisé</div>
+                  </div>
+                </div>
+
+                {/* Tirages */}
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em", marginBottom: 8 }}>
+                    TIRAGES EN COURS ({(ligne.tirages || []).filter(t => t.dateEcheance >= now).length})
+                  </div>
+                  {(ligne.tirages || []).length === 0
+                    ? <div style={{ fontSize: 11, color: "#CCC", fontFamily: "'Lora',serif" }}>Aucun tirage</div>
+                    : (ligne.tirages || []).sort((a, b) => (a.dateEcheance || "") > (b.dateEcheance || "") ? 1 : -1).map((t, ti) => {
+                        const alerteT = alertesTirage(t.dateEcheance);
+                        const isPast = t.dateEcheance < now;
+                        return (
+                          <div key={ti} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: isPast ? "#F0FDF4" : alerteT ? alerteT.bg : "#F8FAFC", borderRadius: 6, marginBottom: 4, border: `1px solid ${alerteT ? alerteT.color + "40" : "#E2E8F0"}` }}>
+                            <div>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: isPast ? "#888" : "#102A63", fontFamily: "'Lora',serif" }}>{fmtE(t.montant)}</div>
+                              <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif" }}>éch. {fmtD(t.dateEcheance)}</div>
+                            </div>
+                            {alerteT && <AlertBadge date={t.dateEcheance} fn={alertesTirage} />}
+                            {isPast && <span style={{ fontSize: 9, background: "#D1FAE5", color: "#065F46", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "'Lora',serif" }}>Remboursé</span>}
+                          </div>
+                        );
+                      })}
+                </div>
+              </div>
+
+              {/* Notes */}
+              {ligne.notes && <div style={{ padding: "0 20px 14px", fontSize: 11, color: "#888", fontFamily: "'Lora',serif", fontStyle: "italic", borderTop: "1px solid #F1F5F9", paddingTop: 10 }}>📝 {ligne.notes}</div>}
+            </div>
+          );
+        })}
+
+      {/* Modal création / édition */}
+      {modal && <RCFModal
+        ligne={modal === "new" ? null : modal}
+        onSave={(l) => {
+          const updated = modal === "new"
+            ? [...lignes, { ...l, id: "rcf_" + Date.now() }]
+            : lignes.map(x => x.id === l.id ? l : x);
+          save(updated);
+          setModal(null);
+        }}
+        onClose={() => setModal(null)}
+      />}
+    </div>
+  );
+}
+
+function RCFModal({ ligne, onSave, onClose }) {
+  const empty = { intitule: "", banque: "", reference: "", montantAutorise: "", montantTire: "", taux: "", dateDebutContrat: "", dateFinContrat: "", conditions: "", notes: "", tirages: [] };
+  const [d, setD] = React.useState(ligne ? { ...ligne } : empty);
+  const set = (k, v) => setD(p => ({ ...p, [k]: v }));
+
+  const addTirage = () => set("tirages", [...(d.tirages || []), { montant: "", dateEcheance: "", note: "" }]);
+  const updTirage = (i, k, v) => { const t = [...(d.tirages || [])]; t[i] = { ...t[i], [k]: v }; set("tirages", t); };
+  const delTirage = (i) => set("tirages", (d.tirages || []).filter((_, j) => j !== i));
+
+  const inp = { border: "1px solid #E8E8E8", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50" };
+  const lbl = (t) => <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", marginBottom: 4, letterSpacing: "0.05em" }}>{t}</div>;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+      onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ width: "min(700px,96vw)", background: "white", borderRadius: 16, overflow: "hidden", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ background: "#102A63", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontFamily: "'Lora',serif", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>Revolving Credit Facility</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>{ligne ? "Modifier le RCF" : "Nouveau RCF"}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "white", fontSize: 20, cursor: "pointer" }}>×</button>
+        </div>
+
+        <div style={{ overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {/* Infos générales */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ gridColumn: "1/-1" }}>{lbl("INTITULÉ")}<input value={d.intitule} onChange={e => set("intitule", e.target.value)} placeholder="RCF BNP 2024" style={inp} /></div>
+            <div>{lbl("BANQUE / ORGANISME")}<input value={d.banque} onChange={e => set("banque", e.target.value)} placeholder="BNP Paribas" style={inp} /></div>
+            <div>{lbl("RÉFÉRENCE")}<input value={d.reference} onChange={e => set("reference", e.target.value)} placeholder="RCF-2024-001" style={inp} /></div>
+            <div>{lbl("MONTANT AUTORISÉ (€)")}<input type="text" value={d.montantAutorise} onChange={e => set("montantAutorise", e.target.value)} placeholder="5 000 000" style={inp} /></div>
+            <div>{lbl("MONTANT TIRÉ (€)")}<input type="text" value={d.montantTire} onChange={e => set("montantTire", e.target.value)} placeholder="2 000 000" style={inp} /></div>
+            <div>{lbl("TAUX (%/AN)")}<input type="text" value={d.taux} onChange={e => set("taux", e.target.value)} placeholder="3,50" style={inp} /></div>
+            <div>{lbl("CONDITIONS")}<input value={d.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Euribor + 1,5%" style={inp} /></div>
+            <div>{lbl("DATE DÉBUT CONTRAT")}<input type="date" value={d.dateDebutContrat} onChange={e => set("dateDebutContrat", e.target.value)} style={inp} /></div>
+            <div>{lbl("ÉCHÉANCE CONTRAT")}<input type="date" value={d.dateFinContrat} onChange={e => set("dateFinContrat", e.target.value)} style={inp} /></div>
+          </div>
+
+          {/* Tirages */}
+          <div style={{ background: "#F0F5FF", borderRadius: 10, padding: "14px 16px", border: "1px solid #BFDBFE" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em" }}>TIRAGES EN COURS</div>
+              <button onClick={addTirage} style={{ fontSize: 11, fontFamily: "'Lora',serif", background: "#102A63", color: "white", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>+ Ajouter</button>
+            </div>
+            {(d.tirages || []).length === 0
+              ? <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif" }}>Aucun tirage — cliquez sur "+ Ajouter"</div>
+              : (d.tirages || []).map((t, i) => (
+                <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 2fr auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
+                  <div>{lbl("Montant (€)")}<input type="text" value={t.montant} onChange={e => updTirage(i, "montant", e.target.value)} placeholder="500 000" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
+                  <div>{lbl("Échéance")}<input type="date" value={t.dateEcheance} onChange={e => updTirage(i, "dateEcheance", e.target.value)} style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
+                  <div>{lbl("Note")}<input value={t.note || ""} onChange={e => updTirage(i, "note", e.target.value)} placeholder="Tranche A…" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
+                  <button onClick={() => delTirage(i)} style={{ border: "none", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, width: 30, height: 32, cursor: "pointer", fontSize: 14 }}>×</button>
+                </div>
+              ))}
+          </div>
+
+          {/* Notes */}
+          <div>{lbl("NOTES")}<textarea value={d.notes} onChange={e => set("notes", e.target.value)} placeholder="Observations…" rows={2} style={{ ...inp, resize: "vertical" }} /></div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+          <button onClick={onClose} style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontFamily: "'Lora',serif", cursor: "pointer" }}>Annuler</button>
+          <button onClick={() => onSave(d)} style={{ background: "#102A63", color: "white", border: "none", borderRadius: 8, padding: "8px 22px", fontSize: 12, fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer" }}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+/* ══ fin MODULE RCF ══ */
 
 function PaymentsView({ settings }) {
   const [payments, setPayments] = React.useState(() => loadPayments());
@@ -9802,6 +10098,7 @@ function App() {
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
+  { id: "rcf",           label: "RCF",               icon: "↺" },
   { id: "echeancier",    label: "Dettes",            icon: "▦" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
     { id: "dev",           label: "Dev",              icon: "⌥" },
@@ -9876,7 +10173,7 @@ function App() {
 
         {/* Section : Finance */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Finance</div>
-        {visibleNav.filter(n => ["echeancier","creditbail","payments"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["rcf","echeancier","creditbail","payments"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.id === "creditbail" ? "🧾" : n.icon}</span>
@@ -9906,7 +10203,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.367<br />08/05/26 à 13:16
+          v.0.368<br />10/05/26 à 13:27
         </div>
       </div>
 
@@ -9984,7 +10281,7 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "rcf" ? 1100 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "kanban"        && <KanbanView tasks={tasks} onEdit={openEdit} onToggle={togTask} onUpdate={updTask} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
@@ -9993,6 +10290,7 @@ function App() {
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {/* cotation view supprimée */}
+          {view === "rcf"           && <RCFView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
         </div>
