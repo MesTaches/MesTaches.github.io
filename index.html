@@ -303,6 +303,75 @@ async function fbLogout() {
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script type="text/javascript">
+/* ── Import CSV Échéancier ── */
+function parseCSVEcheancier(text) {
+  const parseNum = (s) => {
+    if (!s || s.trim() === '' || s.trim() === '0,00') return 0;
+    return parseFloat(s.replace(/\s/g, '').replace(/,/g, '.')) || 0;
+  };
+  const parseDate = (s) => {
+    if (!s) return '';
+    s = s.trim();
+    // Format JJ/MM/AAAA → AAAA-MM-JJ
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return s;
+  };
+
+  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  if (lines.length < 2) return [];
+
+  // Détecter le séparateur ; ou ,
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
+
+  const idx = {
+    n:       headers.findIndex(h => h === 'n°' || h === 'n' || h === 'rang'),
+    date:    headers.findIndex(h => h.includes('date')),
+    capAvant:headers.findIndex(h => h.includes('capital restant d') || (h.includes('capital') && h.includes('restant') && !h.includes('apr'))),
+    capRbt:  headers.findIndex(h => h.includes('remboursé') || h.includes('rembours')),
+    inter:   headers.findIndex(h => h.includes('intérêts') || h.includes('interets') || (h.includes('int') && !h.includes('cumul'))),
+    cumul:   headers.findIndex(h => h.includes('cumul')),
+    comm:    headers.findIndex(h => h.includes('commission') || h.includes('garantie')),
+    ech:     headers.findIndex(h => h.includes('échéance') || h.includes('echeance')),
+    capApres:headers.findIndex(h => h.includes('après') || h.includes('apres') || (h.includes('capital') && h.includes('apr'))),
+  };
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep);
+    if (cols.length < 3) continue;
+    const n        = parseInt(cols[idx.n] || i) || i;
+    const date     = parseDate(idx.date >= 0 ? cols[idx.date] : '');
+    const capital  = parseNum(idx.capRbt >= 0 ? cols[idx.capRbt] : '0');
+    const interets = parseNum(idx.inter >= 0 ? cols[idx.inter] : '0');
+    const cumul    = parseNum(idx.cumul >= 0 ? cols[idx.cumul] : '0');
+    const comm     = parseNum(idx.comm >= 0 ? cols[idx.comm] : '0');
+    const ech      = parseNum(idx.ech >= 0 ? cols[idx.ech] : '0');
+    const capR     = parseNum(idx.capApres >= 0 ? cols[idx.capApres] : (idx.capAvant >= 0 ? cols[idx.capAvant] : '0'));
+
+    // Détecter le type de ligne
+    const estCapita  = interets > 0 && capital === 0 && ech === 0 && i === 1;
+    const estCarence = capital === 0 && interets === 0 && ech === 0;
+    const estDiffere = capital === 0 && (interets > 0 || comm > 0) && ech > 0;
+
+    rows.push({
+      n, date,
+      echeance: ech, capital, interets,
+      cumulInterets: cumul,
+      commGarantie: comm,
+      assurance: 0,
+      echeanceGlobale: ech,
+      capitalRestant: capR,
+      estCapita,
+      estCarence,
+      estDiffere,
+      paye: false, datePaiement: '', commentaire: ''
+    });
+  }
+  return rows;
+}
+
 /* ── Export PDF Échéancier ── */
 function exportEchPDF(dos) {
   const parseNumLocal = (v) => { if(!v&&v!==0) return NaN; return parseFloat(String(v).replace(/\s/g,"").replace(/'/g,"").replace(/,/g,".")); };
@@ -7383,6 +7452,32 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
             })()}
 
             <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:12 }}>
+              {/* Import CSV */}
+              <div style={{ marginBottom:10 }}>
+                <div style={{ fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:5 }}>
+                  Ou importer directement depuis un fichier CSV :
+                </div>
+                <label style={{ cursor:"pointer" }}>
+                  <input type="file" accept=".csv" style={{ display:"none" }}
+                    onChange={e=>{
+                      const file=e.target.files[0];
+                      if(!file) return;
+                      const reader=new FileReader();
+                      reader.onload=ev=>{
+                        const rows=parseCSVEcheancier(ev.target.result);
+                        if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                        const updated={...d, lignes:rows};
+                        set("lignes",rows);
+                        alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                      };
+                      reader.readAsText(file,"UTF-8");
+                    }}
+                  />
+                  <span style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600 }}>
+                    📥 Importer un fichier CSV
+                  </span>
+                </label>
+              </div>
               <button onClick={regenerer}
                 style={{ width:"100%",background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>
                 🔄 Générer / Recalculer l'échéancier
@@ -7658,6 +7753,27 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             </div>
           )}
           <button onClick={regenererLocal} style={{background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>🔄 Recalculer l'échéancier</button>
+          <label style={{cursor:"pointer"}}>
+            <input type="file" accept=".csv" style={{display:"none"}}
+              onChange={e=>{
+                const file=e.target.files[0];
+                if(!file) return;
+                const reader=new FileReader();
+                reader.onload=ev=>{
+                  const rows=parseCSVEcheancier(ev.target.result);
+                  if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                  const updated={...localDos,lignes:rows};
+                  setLocalDos(updated);
+                  saveDossier(updated);
+                  alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                };
+                reader.readAsText(file,"UTF-8");
+              }}
+            />
+            <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600,cursor:"pointer"}}>
+              📥 Importer un fichier CSV
+            </span>
+          </label>
           <button onClick={()=>exportEchPDF(localDos)} style={{background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>📄 Exporter en PDF</button>
           <button onClick={()=>saveDossier(localDos)} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
           <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
@@ -9716,7 +9832,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.365<br />08/05/26 à 23:38
+          v.0.366<br />08/05/26 à 10:31
         </div>
       </div>
 
