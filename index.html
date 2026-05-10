@@ -352,7 +352,8 @@ function parseCSVEcheancier(text) {
 
     // Détecter le type de ligne
     const estCapita  = interets > 0 && capital === 0 && ech === 0 && i === 1;
-    const estCarence = capital === 0 && interets === 0 && ech === 0;
+    const estSansFlux = capital === 0 && interets === 0 && ech === 0 && i > 1;
+    const estCarence = false; // Dans un CSV importé, pas de vraie carence
     const estDiffere = capital === 0 && (interets > 0 || comm > 0) && ech > 0;
 
     rows.push({
@@ -366,6 +367,7 @@ function parseCSVEcheancier(text) {
       estCapita,
       estCarence,
       estDiffere,
+      estSansFlux: estSansFlux||false,
       paye: false, datePaiement: '', commentaire: ''
     });
   }
@@ -7827,8 +7829,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                   const rows=parseCSVEcheancier(ev.target.result);
                   if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
                   const updated={...localDos,lignes:rows};
-                  setLocalDos(updated);
-                  saveDossier(updated);
+                  const calc = window.calcDossierAuto ? window.calcDossierAuto(updated) : updated;
+                  setLocalDos(calc);
+                  saveDossier(calc);
                   alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
                 };
                 reader.readAsText(file,"UTF-8");
@@ -7839,7 +7842,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             </span>
           </label>
           <button onClick={()=>exportEchPDF(localDos)} style={{background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>📄 Exporter en PDF</button>
-          <button onClick={()=>saveDossier(localDos)} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
+          <button onClick={()=>{const c=window.calcDossierAuto?window.calcDossierAuto(localDos):localDos;setLocalDos(c);saveDossier(c);}} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
           <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
             <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>NOTES</div>
             <RichTextArea value={localDos.notes||""} onChange={v=>{const u={...localDos,notes:v};setLocalDos(u);saveDossier(u);}} placeholder="Observations…" rows={4}/>
@@ -7947,11 +7950,11 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                       const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
                     };
                     const inpS={border:"1px solid #BFDBFE",borderRadius:3,padding:"1px 4px",fontSize:9,fontFamily:"'Lora',serif",width:"100%",textAlign:"right",outline:"none"};
-                    const typeOpts=["Carence","Capitalisation","Différé","Amortissement","Versement"];
+                    const typeOpts=["Carence","Sans flux","Capitalisation","Différé","Amortissement","Versement"];
                     const typeVal=row.estCapita?"Capitalisation":row.estCarence?"Carence":row.estDiffere?"Différé":"Amortissement";
                     const setType=(v)=>{
                       const l=[...lignes];
-                      l[i]={...l[i],estCapita:v==="Capitalisation",estCarence:v==="Carence",estDiffere:v==="Différé"};
+                      l[i]={...l[i],estCapita:v==="Capitalisation",estCarence:v==="Carence",estDiffere:v==="Différé",estSansFlux:v==="Sans flux",estVersement:v==="Versement"};
                       const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
                     };
                     return(
@@ -8015,33 +8018,40 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
 }
 
 /* ── calcDossierAuto ── */
-function calcDossierAuto(dos) {
+window.calcDossierAuto = function calcDossierAuto(dos) {
   const lg = dos.lignes || [];
   if (!lg.length) return dos;
   const nowS = new Date().toISOString().split("T")[0];
-  // Montant initial : première ligne non-versement (seulement si non saisi)
-  const premier = lg.find(r => !r.estVersement) || lg[0];
-  const montantAuto = premier ? (premier.capitalRestant || 0) : 0;
-  // Durée amortissement : toujours recalculée depuis les lignes
-  const dureeAuto = String(lg.filter(r => (r.capital||0) > 0).length || lg.length);
-  // Date fin : toujours recalculée
-  const dates = lg.map(r => r.date||"").filter(Boolean).sort();
+  // Montant = somme des versements si renseignés, sinon somme du capital remboursé
+  const totalVers = (dos.versements||[]).reduce(function(a,v){
+    return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
+  }, 0);
+  const totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
+  const montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
+  // Durée amortissement
+  const dureeAuto = String(lg.filter(function(r){ return (r.capital||0) > 0; }).length || lg.length);
+  // Date fin
+  const dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
   const dateFin = dates.length ? dates[dates.length-1] : "";
-  // Taux : recalculé seulement si absent
-  const amort = lg.find(r => (r.capital||0) > 0);
+  // Taux : médiane des rangs d'amortissement
+  const amortsLg = lg.filter(function(r){ return (r.capital||0) > 0; });
   let tauxAuto = dos.tauxAnnuel || "";
-  if (!tauxAuto && amort && amort.capitalRestant > 0)
-    tauxAuto = ((amort.interets / amort.capitalRestant) * 12 * 100).toFixed(2);
+  if (!tauxAuto && amortsLg.length > 0) {
+    const mid = amortsLg[Math.floor(amortsLg.length / 2)];
+    if (mid && mid.capitalRestant > 0)
+      tauxAuto = ((mid.interets / mid.capitalRestant) * 12 * 100).toFixed(2);
+  }
   // Capital restant actuel
-  const payeN = lg.filter(r => r.date <= nowS).length;
-  const capitalRestantActuel = lg[payeN]?.capitalRestant || 0;
-  return { ...dos,
+  const payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
+  const capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+  return Object.assign({}, dos, {
     montant:    dos.montant || String(montantAuto),
     duree:      dureeAuto,
     tauxAnnuel: tauxAuto,
-    dateFin,
-    capitalRestantActuel,
-  };
+    dateFin:    dateFin,
+    capitalRestantActuel: capitalRestantActuel,
+    totalVersements: totalVers || montantAuto,
+  });
 }
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
@@ -10351,7 +10361,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.374<br />10/05/26 à 19:31
+          v.0.377<br />10/05/26 à 19:53
         </div>
       </div>
 
