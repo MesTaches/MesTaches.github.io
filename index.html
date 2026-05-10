@@ -7298,7 +7298,29 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
       const existing = (d.lignes||[])[i] || {};
       return { ...r, paye: existing.paye||false, datePaiement: existing.datePaiement||"", commentaire: existing.commentaire||"" };
     });
-    setD(p=>({...p, lignes: merged}));
+    // Injecter les versements de fonds dans l'échéancier
+    const versements = (d.versements||[]).filter(v=>v.date&&v.montant);
+    let final = [...merged];
+    versements.forEach(v => {
+      const dateIso = v.date; // déjà au format YYYY-MM-DD
+      // Trouver la position chronologique
+      let pos = final.findIndex(r => r.date > dateIso);
+      if (pos === -1) pos = final.length;
+      const versRow = {
+        n: 0, date: dateIso,
+        echeance: 0, capital: 0, interets: 0, cumulInterets: 0,
+        commGarantie: 0, assurance: 0, echeanceGlobale: 0,
+        capitalRestant: parseNum(v.montant),
+        versement: parseNum(v.montant),
+        estCarence: false, estCapita: false, estDiffere: false,
+        estVersement: true,
+        paye: false, datePaiement: "", commentaire: "Versement de fonds"
+      };
+      final.splice(pos, 0, versRow);
+    });
+    // Renuméroter
+    final = final.map((r,i)=>({...r,n:i+1}));
+    setD(p=>({...p, lignes: final}));
   };
   React.useEffect(() => {
     if (d.montant && d.duree && d.dateDebut && !d.lignes?.length) regenerer();
@@ -7387,6 +7409,19 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
               <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={inp} /></div>
               <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={inp} /></div>
+              <div style={{gridColumn:"1/-1"}}>
+                {lbl("DATES DE VERSEMENT DES FONDS")}
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {(d.versements||[]).map((v,vi)=>(
+                    <div key={vi} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"end"}}>
+                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Date</div><input type="date" value={v.date||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],date:e.target.value};set("versements",vs);}} style={inp}/></div>
+                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div><input type="text" value={v.montant||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],montant:e.target.value};set("versements",vs);}} placeholder="1 000 000" style={inp}/></div>
+                      <button onClick={()=>set("versements",(d.versements||[]).filter((_,j)=>j!==vi))} style={{border:"none",background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"6px 8px",cursor:"pointer",fontSize:13,height:36}}>×</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])} style={{fontSize:11,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",textAlign:"left"}}>+ Ajouter un versement</button>
+                </div>
+              </div>
               <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={inp} /></div>
               <div>{lbl("Garantie")}
                 <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={inp}>
@@ -7676,6 +7711,14 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const [localDos, setLocalDos] = React.useState(dos);
   const [editMode, setEditMode] = React.useState(false);
   React.useEffect(()=>setLocalDos(dos),[dos.id]);
+  const insertRow = (afterIdx) => {
+    const newRow={n:0,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,versement:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
+    const l=[...lignes];
+    l.splice(afterIdx+1,0,newRow);
+    const renumbered=l.map((r,i)=>({...r,n:i+1}));
+    const updated={...localDos,lignes:renumbered};
+    setLocalDos(updated); saveDossier(updated);
+  };
   const setL = (k,v) => setLocalDos(p=>({...p,[k]:v}));
   const lignes=dos.lignes||[];
   const payeAuto=lignes.filter(r=>r.date<=now).length;
@@ -7815,11 +7858,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",flexShrink:0}}>
                 <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""}</div>
                 <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <button onClick={()=>{
-                    const newRow={n:lignes.length+1,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,versement:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
-                    const updated={...localDos,lignes:[...lignes,newRow]};
-                    setLocalDos(updated); saveDossier(updated);
-                  }} style={{fontSize:10,fontFamily:"'Lora',serif",background:"#102A63",color:"white",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>+ Ajouter une ligne</button>
+
                   <button onClick={()=>setEditMode(m=>!m)}
                     style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
                     {editMode?"✓ Terminer édition":"✏️ Modifier"}
@@ -7890,11 +7929,14 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                           :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:75}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>}
-                        {editMode&&<td style={{...TD,textAlign:"center",width:24}}>
-                          <button onClick={()=>{
-                            const l=lignes.filter((_,idx)=>idx!==i).map((r,j)=>({...r,n:j+1}));
-                            const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
-                          }} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,padding:0}}>×</button>
+                        {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
+                          <div style={{display:"flex",gap:2,justifyContent:"center"}}>
+                            <button title="Insérer une ligne après" onClick={()=>insertRow(i)} style={{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",cursor:"pointer",fontSize:11,borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontWeight:700}}>+</button>
+                            <button title="Supprimer" onClick={()=>{
+                              const l=lignes.filter((_,idx2)=>idx2!==i).map((r,j)=>({...r,n:j+1}));
+                              const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
+                            }} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,padding:0,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                          </div>
                         </td>}
                       </tr>
                     );
@@ -10203,7 +10245,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.368<br />10/05/26 à 13:27
+          v.0.369<br />10/05/26 à 13:41
         </div>
       </div>
 
