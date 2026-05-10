@@ -8019,23 +8019,30 @@ function calcDossierAuto(dos) {
   const lg = dos.lignes || [];
   if (!lg.length) return dos;
   const nowS = new Date().toISOString().split("T")[0];
+  // Montant initial : première ligne non-versement (seulement si non saisi)
   const premier = lg.find(r => !r.estVersement) || lg[0];
   const montantAuto = premier ? (premier.capitalRestant || 0) : 0;
-  const dureeAuto = lg.filter(r => (r.capital||0) > 0).length || lg.length;
+  // Durée amortissement : toujours recalculée depuis les lignes
+  const dureeAuto = String(lg.filter(r => (r.capital||0) > 0).length || lg.length);
+  // Date fin : toujours recalculée
   const dates = lg.map(r => r.date||"").filter(Boolean).sort();
   const dateFin = dates.length ? dates[dates.length-1] : "";
+  // Taux : recalculé seulement si absent
   const amort = lg.find(r => (r.capital||0) > 0);
   let tauxAuto = dos.tauxAnnuel || "";
   if (!tauxAuto && amort && amort.capitalRestant > 0)
     tauxAuto = ((amort.interets / amort.capitalRestant) * 12 * 100).toFixed(2);
+  // Capital restant actuel
+  const payeN = lg.filter(r => r.date <= nowS).length;
+  const capitalRestantActuel = lg[payeN]?.capitalRestant || 0;
   return { ...dos,
-    montant:    dos.montant    || String(montantAuto),
-    duree:      dos.duree      || String(dureeAuto),
+    montant:    dos.montant || String(montantAuto),
+    duree:      dureeAuto,
     tauxAnnuel: tauxAuto,
     dateFin,
+    capitalRestantActuel,
   };
 }
-
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState(()=>loadEchDossiers());
@@ -10344,7 +10351,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.373<br />10/05/26 à 19:19
+          v.0.374<br />10/05/26 à 19:31
         </div>
       </div>
 
