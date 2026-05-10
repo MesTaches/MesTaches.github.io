@@ -8061,8 +8061,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
 
   // ── TEG : médiane sur les rangs d'amortissement stables (milieu du tableau) ──
   var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0 && (r.capitalRestant||0) > 0; });
-  var tauxAuto = dos.tauxAnnuel || "";
-  if (!tauxAuto && amortsLg.length >= 3) {
+  var tauxAuto = "";
+  if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
     var start = Math.floor(amortsLg.length * 0.25);
     var end   = Math.floor(amortsLg.length * 0.75);
     var tegs  = [];
@@ -8080,8 +8080,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   }
 
   // ── Commission garantie : médiane sur les rangs d'amortissement ──
-  var commAuto = dos.tauxGarantie || "";
-  if (!commAuto && amortsLg.length >= 3) {
+  var commAuto = "";
+  if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
     var start2 = Math.floor(amortsLg.length * 0.25);
     var end2   = Math.floor(amortsLg.length * 0.75);
     var comms  = [];
@@ -8101,11 +8101,14 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
   var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
 
+  // Fallback sur valeur saisie si pas assez de données pour calculer
+  var tauxFinal = tauxAuto || dos.tauxAnnuel || "";
+  var commFinal = commAuto || dos.tauxGarantie || "";
   return Object.assign({}, dos, {
     montant:    String(montantAuto) || dos.montant,
     duree:      dureeAuto,
-    tauxAnnuel: tauxAuto,
-    tauxGarantie: commAuto,
+    tauxAnnuel: tauxFinal,
+    tauxGarantie: commFinal,
     dateFin:    dateFin,
     capitalRestantActuel: capitalRestantActuel,
     totalVersements: totalVers || montantAuto,
@@ -8383,7 +8386,7 @@ function EcheancierView({ tasks, settings }) {
                         <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:4,overflow:"hidden" }}>
                           <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:4,transition:"width 0.3s" }} />
                         </div>
-                        <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:80 }}>{paye}/{lignes.length} versements</span>
+                        <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:80 }}>{paye}/{lignes.length} mois</span>
                       </div>
                     </div>
                   );
@@ -10469,7 +10472,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.383<br />10/05/26 à 21:32
+          v.0.384<br />10/05/26 à 21:42
         </div>
       </div>
 
