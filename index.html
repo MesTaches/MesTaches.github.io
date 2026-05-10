@@ -7718,6 +7718,25 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
             <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
             <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
           </div>
+
+          {/* Section Versements */}
+          <div style={{background:"#F0FDF4",borderRadius:8,padding:"8px 10px",border:"1px solid #BBF7D0"}}>
+            <div style={{fontSize:9,fontWeight:700,color:"#065F46",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>VERSEMENTS DE FONDS</div>
+            {(localDos.versements||[]).map((v,i)=>(
+              <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:5}}>
+                <input type="date" value={v.date||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],date:e.target.value};setL("versements",vs);}} style={{...inpL,flex:1,fontSize:10}}/>
+                <div style={{position:"relative",flex:1}}>
+                  <input type="text" value={v.montant||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],montant:e.target.value};setL("versements",vs);}} placeholder="0,00" style={{...inpL,paddingRight:16,fontSize:10}}/>
+                  <span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#AAA"}}>€</span>
+                </div>
+                <button onClick={()=>{const vs=(localDos.versements||[]).filter((_,j)=>j!==i);setL("versements",vs);}} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>setL("versements",[...(localDos.versements||[]),{date:"",montant:""}])}
+              style={{fontSize:10,fontFamily:"'Lora',serif",background:"white",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"4px 8px",cursor:"pointer",width:"100%"}}>
+              + Ajouter un versement
+            </button>
+          </div>
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
@@ -7789,12 +7808,28 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
           {lignes.length===0
             ?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#CCC",fontFamily:"'Lora',serif",flexDirection:"column",gap:10}}><div style={{fontSize:32}}>📅</div><div>Renseignez les paramètres puis cliquez sur "Recalculer"</div></div>
-            :<div style={{flex:1,overflowY:"auto"}}>
+            :<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Toolbar tableau */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",flexShrink:0}}>
+                <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""}</div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <button onClick={()=>{
+                    const newRow={n:lignes.length+1,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,versement:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
+                    const updated={...localDos,lignes:[...lignes,newRow]};
+                    setLocalDos(updated); saveDossier(updated);
+                  }} style={{fontSize:10,fontFamily:"'Lora',serif",background:"#102A63",color:"white",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>+ Ajouter une ligne</button>
+                  <button onClick={()=>setEditMode(m=>!m)}
+                    style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
+                    {editMode?"✓ Terminer édition":"✏️ Modifier"}
+                  </button>
+                </div>
+              </div>
+              <div style={{flex:1,overflowY:"auto"}}>
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
                 <thead style={{position:"sticky",top:0,zIndex:2}}>
                   <tr style={{background:"#102A63"}}>
-                    {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. garantie","Assurance","Éch. globale","Capital restant"].map(h=>(
-                      <th key={h} style={{padding:"6px 8px",color:"white",fontWeight:400,textAlign:["N°","Payé","Type"].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
+                    {["N°","Date","Type","Versement","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
+                      <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -7802,30 +7837,69 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, now, fmtE }) {
                   {lignes.map((row,i)=>{
                     const isPast=row.date<=now2;
                     const isNext=row.date>now2&&i===payeAuto;
-                    const TD={padding:"3px 6px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
+                    const TD={padding:"2px 4px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
+                    const updRow=(k,v)=>{
+                      const l=[...lignes]; l[i]={...l[i],[k]:v};
+                      const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
+                    };
+                    const inpS={border:"1px solid #BFDBFE",borderRadius:3,padding:"1px 4px",fontSize:9,fontFamily:"'Lora',serif",width:"100%",textAlign:"right",outline:"none"};
+                    const typeOpts=["Carence","Capitalisation","Différé","Amortissement","Versement"];
+                    const typeVal=row.estCapita?"Capitalisation":row.estCarence?"Carence":row.estDiffere?"Différé":"Amortissement";
+                    const setType=(v)=>{
+                      const l=[...lignes];
+                      l[i]={...l[i],estCapita:v==="Capitalisation",estCarence:v==="Carence",estDiffere:v==="Différé"};
+                      const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
+                    };
                     return(
                       <tr key={i} style={{background:isPast?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0"}}>
-                        <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600}}>{row.n}</td>
-                        <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",fontWeight:isNext?700:400}}>{row.date.split("-").reverse().join("/")}</td>
-                        <td style={{...TD,textAlign:"center"}}>
-                          {row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Capitalisation</span>
-                          :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
-                          :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
-                          :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
+                        <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600,width:26}}>{row.n}</td>
+                        <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:70}}>
+                          {editMode
+                            ?<input type="date" value={row.date||""} onChange={e=>updRow("date",e.target.value)} style={{...inpS,textAlign:"center",width:100}}/>
+                            :row.date?row.date.split("-").reverse().join("/"):"—"}
                         </td>
-                        <td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63"}}>{fmtE(row.echeance)}</td>
-                        <td style={{...TD,textAlign:"right",color:"#27AE60"}}>{fmtE(row.capital)}</td>
-                        <td style={{...TD,textAlign:"right",color:"#C0392B"}}>{fmtE(row.interets)}</td>
-                        <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic"}}>{fmtE(row.cumulInterets)}</td>
-                        <td style={{...TD,textAlign:"right",color:"#6D28D9"}}>{fmtE(row.commGarantie)}</td>
-                        <td style={{...TD,textAlign:"right",color:"#E67E22"}}>{fmtE(row.assurance)}</td>
-                        <td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490"}}>{fmtE(row.echeanceGlobale)}</td>
-                        <td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50"}}>{fmtE(row.capitalRestant)}</td>
+                        <td style={{...TD,textAlign:"center",width:80}}>
+                          {editMode
+                            ?<select value={typeVal} onChange={e=>setType(e.target.value)} style={{...inpS,textAlign:"center",width:90}}>
+                              {typeOpts.map(o=><option key={o}>{o}</option>)}
+                            </select>
+                            :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Capitalisation</span>
+                            :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
+                            :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
+                            :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
+                        </td>
+                        <td style={{...TD,textAlign:"right",color:"#16A34A",fontWeight:row.versement>0?700:400,width:70}}>
+                          {editMode
+                            ?<input value={row.versement||""} onChange={e=>updRow("versement",parseNum(e.target.value))} style={inpS} placeholder="0"/>
+                            :row.versement>0?"+"+fmtE(row.versement):"—"}
+                        </td>
+                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow("echeance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow("capital",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",color:"#27AE60",width:72}}>{fmtE(row.capital)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:68}}><input value={row.interets||""} onChange={e=>updRow("interets",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",color:"#C0392B",width:68}}>{fmtE(row.interets)}</td>}
+                        <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:68}}>{fmtE(row.cumulInterets)}</td>
+                        {editMode?<td style={{...TD,textAlign:"right",width:65}}><input value={row.commGarantie||""} onChange={e=>updRow("commGarantie",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",color:"#6D28D9",width:65}}>{fmtE(row.commGarantie)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:60}}><input value={row.assurance||""} onChange={e=>updRow("assurance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow("echeanceGlobale",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:75}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>}
+                        {editMode&&<td style={{...TD,textAlign:"center",width:24}}>
+                          <button onClick={()=>{
+                            const l=lignes.filter((_,idx)=>idx!==i).map((r,j)=>({...r,n:j+1}));
+                            const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
+                          }} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,padding:0}}>×</button>
+                        </td>}
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+              </div>
             </div>}
         </div>
       </div>
@@ -9832,7 +9906,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.366<br />08/05/26 à 10:31
+          v.0.367<br />08/05/26 à 13:16
         </div>
       </div>
 
