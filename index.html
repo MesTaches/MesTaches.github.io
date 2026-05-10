@@ -7708,12 +7708,6 @@ function EchAttachments({ attachments, onChange }) {
 /* ── EchDossierTab ── */
 function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const now = new Date().toISOString().split("T")[0];
-  const dossiersOrdres = (ordre && ordre.length === dossiers.length)
-    ? ordre.map(id => dossiers.find(d => d.id === id)).filter(Boolean)
-    : [...dossiers].sort((a,b) => {
-        const dA=a.dateFin||"", dB=b.dateFin||"";
-        return dB>dA?1:dB<dA?-1:0;
-      });
   const [localDos, setLocalDos] = React.useState(dos);
   const [editMode, setEditMode] = React.useState(false);
   React.useEffect(()=>setLocalDos(dos),[dos.id]);
@@ -8020,26 +8014,21 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   );
 }
 
-/* ── Calcul automatique des métadonnées depuis les lignes ── */
+/* ── calcDossierAuto ── */
 function calcDossierAuto(dos) {
-  const lignes = dos.lignes || [];
-  if (lignes.length === 0) return dos;
-  // Montant = capital restant première ligne non-versement
-  const premiereLigne = lignes.find(r => !r.estVersement) || lignes[0];
-  const montantAuto = premiereLigne ? (premiereLigne.capitalRestant || 0) : 0;
-  // Durée = lignes avec capital remboursé
-  const dureeAuto = lignes.filter(r => (r.capital || 0) > 0).length || lignes.length;
-  // Date fin = dernière date
-  const dates = lignes.map(r => r.date || "").filter(Boolean).sort();
-  const dateFin = dates.length ? dates[dates.length - 1] : "";
-  // Taux approx depuis premier rang d'amortissement
-  const amort = lignes.find(r => (r.capital || 0) > 0);
+  const lg = dos.lignes || [];
+  if (!lg.length) return dos;
+  const nowS = new Date().toISOString().split("T")[0];
+  const premier = lg.find(r => !r.estVersement) || lg[0];
+  const montantAuto = premier ? (premier.capitalRestant || 0) : 0;
+  const dureeAuto = lg.filter(r => (r.capital||0) > 0).length || lg.length;
+  const dates = lg.map(r => r.date||"").filter(Boolean).sort();
+  const dateFin = dates.length ? dates[dates.length-1] : "";
+  const amort = lg.find(r => (r.capital||0) > 0);
   let tauxAuto = dos.tauxAnnuel || "";
-  if (!tauxAuto && amort && amort.capitalRestant > 0) {
+  if (!tauxAuto && amort && amort.capitalRestant > 0)
     tauxAuto = ((amort.interets / amort.capitalRestant) * 12 * 100).toFixed(2);
-  }
-  return {
-    ...dos,
+  return { ...dos,
     montant:    dos.montant    || String(montantAuto),
     duree:      dos.duree      || String(dureeAuto),
     tauxAnnuel: tauxAuto,
@@ -8057,7 +8046,7 @@ function EcheancierView({ tasks, settings }) {
 
   React.useEffect(()=>{ saveEchDossiers(dossiers); },[dossiers]);
 
-  const saveDossier = dosRaw => { const dos=calcDossierAuto(dosRaw); setDossiers(p => p.find(x=>x.id===dos.id)?p.map(x=>x.id===dos.id?dos:x):[dos,...p]); };
+  const saveDossier = raw => { const d=calcDossierAuto(raw); setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]); };
   const deleteDossier = id => { if(window.confirm("Supprimer cet échéancier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
   const openNew = () => setModal({ id:uid(), reference:"ECH_"+String(dossiers.length+1).padStart(5,"0"), intitule:"", banque:"", nature:"", numContrat:"", montant:"", tauxAnnuel:"", duree:"", periodicite:"Mensuelle", dateContrat:"", dateDebut:"", assuranceMensuelle:"", garantie:"", objet:"", notes:"", attachments:[], lignes:[] });
 
@@ -8081,6 +8070,10 @@ function EcheancierView({ tasks, settings }) {
     const d30s = d30.toISOString().split("T")[0];
     return a + (d.lignes||[]).filter(r=>r.date>=now && r.date<=d30s).length;
   },0);
+
+  const dossiersOrdres = (ordre && ordre.length===dossiers.length)
+    ? ordre.map(id2=>dossiers.find(d=>d.id===id2)).filter(Boolean)
+    : [...dossiers].sort((a,b)=>{const dA=a.dateFin||"",dB=b.dateFin||"";return dB>dA?1:dB<dA?-1:0;});
 
   const TAB_BTN = (id,label) => (
     <button key={id} onClick={()=>setActiveTab(id)}
@@ -8181,46 +8174,40 @@ function EcheancierView({ tasks, settings }) {
                   </thead>
                   <tbody>
                     {dossiersOrdres.map((dos,i)=>{
-                      const lignes = dos.lignes||[];
-                      const nowT5 = new Date().toISOString().split("T")[0];
-                      const paye = lignes.filter(r=>r.date<=nowT5).length;
-                      const pct = lignes.length>0?Math.round(paye/lignes.length*100):0;
-                      const restantDu = lignes[paye]?.capitalRestant||0;
-                      const isDragging = dragIdx===i;
+                      const lignes=dos.lignes||[];
+                      const nowT5=new Date().toISOString().split("T")[0];
+                      const paye=lignes.filter(r=>r.date<=nowT5).length;
+                      const pct=lignes.length>0?Math.round(paye/lignes.length*100):0;
+                      const restantDu=lignes[paye]?.capitalRestant||0;
+                      const isD=dragIdx===i;
                       return (
                         <tr key={dos.id} draggable
                           onDragStart={()=>setDragIdx(i)}
                           onDragOver={e=>e.preventDefault()}
-                          onDrop={e=>{
-                            e.preventDefault();
-                            if(dragIdx===null||dragIdx===i) return;
-                            const arr=[...dossiersOrdres];
-                            const [m]=arr.splice(dragIdx,1); arr.splice(i,0,m);
-                            setOrdre(arr.map(d=>d.id)); setDragIdx(null);
-                          }}
+                          onDrop={e=>{e.preventDefault();if(dragIdx===null||dragIdx===i)return;const arr=[...dossiersOrdres];const[m]=arr.splice(dragIdx,1);arr.splice(i,0,m);setOrdre(arr.map(d=>d.id));setDragIdx(null);}}
                           onDragEnd={()=>setDragIdx(null)}
-                          style={{ background:isDragging?"#EFF6FF":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"grab",opacity:isDragging?0.5:1 }}
+                          style={{background:isD?"#EFF6FF":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"grab",opacity:isD?0.5:1}}
                           onClick={()=>setActiveTab(dos.id)}>
-                          <td style={{ padding:"6px 6px",textAlign:"center",color:"#CCC",fontSize:14,userSelect:"none" }}>⠿</td>
-                          <td style={{ padding:"6px 10px",color:"#888",fontSize:10 }}>{dos.reference}</td>
-                          <td style={{ padding:"6px 10px",fontWeight:600,color:"#102A63" }}>{dos.intitule||"—"}</td>
-                          <td style={{ padding:"6px 10px",color:"#555" }}>{dos.banque||"—"}</td>
-                          <td style={{ padding:"6px 10px",fontWeight:600 }}>{fmtE(parseNum(dos.montant))}</td>
-                          <td style={{ padding:"6px 10px",color:"#065F46" }}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
-                          <td style={{ padding:"6px 10px",color:"#555" }}>{dos.duree?dos.duree+" mois":"—"}</td>
-                          <td style={{ padding:"6px 10px",color:"#888",fontSize:10 }}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
-                          <td style={{ padding:"6px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60" }}>{fmtE(restantDu)}</td>
-                          <td style={{ padding:"6px 10px" }}>
-                            <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                              <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50 }}>
-                                <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3 }} />
+                          <td style={{padding:"6px 6px",textAlign:"center",color:"#CCC",fontSize:14,userSelect:"none"}}>⠿</td>
+                          <td style={{padding:"6px 10px",color:"#888",fontSize:10}}>{dos.reference}</td>
+                          <td style={{padding:"6px 10px",fontWeight:600,color:"#102A63"}}>{dos.intitule||"—"}</td>
+                          <td style={{padding:"6px 10px",color:"#555"}}>{dos.banque||"—"}</td>
+                          <td style={{padding:"6px 10px",fontWeight:600}}>{fmtE(parseNum(dos.montant))}</td>
+                          <td style={{padding:"6px 10px",color:"#065F46"}}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
+                          <td style={{padding:"6px 10px",color:"#555"}}>{dos.duree?dos.duree+" mois":"—"}</td>
+                          <td style={{padding:"6px 10px",color:"#888",fontSize:10}}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
+                          <td style={{padding:"6px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60"}}>{fmtE(restantDu)}</td>
+                          <td style={{padding:"6px 10px"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6}}>
+                              <div style={{flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50}}>
+                                <div style={{width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3}}/>
                               </div>
-                              <span style={{ fontSize:10,color:"#888",minWidth:30 }}>{pct}%</span>
+                              <span style={{fontSize:10,color:"#888",minWidth:30}}>{pct}%</span>
                             </div>
                           </td>
-                          <td style={{ padding:"6px 10px",textAlign:"center" }}>
+                          <td style={{padding:"6px 10px",textAlign:"center"}}>
                             <button onClick={e=>{e.stopPropagation();setModal(dos);}}
-                              style={{ border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#E67E22",fontFamily:"'Lora',serif" }}>✏️</button>
+                              style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#E67E22",fontFamily:"'Lora',serif"}}>✏️</button>
                           </td>
                         </tr>
                       );
@@ -10357,7 +10344,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.373<br />10/05/26 à 19:16
+          v.0.373<br />10/05/26 à 19:19
         </div>
       </div>
 
