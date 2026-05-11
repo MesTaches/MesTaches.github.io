@@ -7272,7 +7272,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
                         <div style={{ display:"flex",gap:5,flexWrap:"wrap", alignItems:"center" }}>
                           {d.typeInvestissement && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.typeInvestissement}</span>}
                           {d.site && <span style={{ fontSize:9,background:"#F5F5F5",color:"#888",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.site}</span>}
-                          {(() => { const fin0=(d.financeurs||[])[0]||{}; const c0=calcCBRow({...fin0,montantHT:d.montantHT}); const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0; const today2=new Date().toISOString().split('T')[0]; const startD=d.dateDemarrage?new Date(d.dateDemarrage):null; const jourR=startD?startD.getDate():1; let paid=0; if(startD){for(let ii=0;ii<total;ii++){const dtt=new Date(startD);dtt.setMonth(dtt.getMonth()+ii);const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();dtt.setDate(Math.min(jourR,mdd));if(dtt.toISOString().split('T')[0]<=today2)paid++;else break;}} return total>0 ? <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",border:"0.5px solid #BBF7D0", fontVariantNumeric:"tabular-nums" }}>{paid}/{total}</span> : null; })()}
+                          {(() => { const fin0=(d.financeurs||[])[0]||{}; const c0=calcCBRow({...fin0,montantHT:d.montantHT}); const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0; const today2=new Date().toISOString().split('T')[0]; const startD=d.dateDemarrage?new Date(d.dateDemarrage):null; const jourR=startD?startD.getDate():1; let paid=0; if(startD){for(let ii=0;ii<total;ii++){const dtt=new Date(startD);dtt.setMonth(dtt.getMonth()+ii);const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();dtt.setDate(Math.min(jourR,mdd));if(dtt.toISOString().split('T')[0]<=today2)paid++;else break;}} const paidFinal=paid; return total>0 ? <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",border:"0.5px solid #BBF7D0", fontVariantNumeric:"tabular-nums" }}>{paidFinal}/{total}</span> : null; })()}
                         </div>
                       )}
                     </div>
@@ -10644,7 +10644,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.398<br />11/05/26 à 18:45
+          v.0.398<br />11/05/26 à 18:52
         </div>
       </div>
 
