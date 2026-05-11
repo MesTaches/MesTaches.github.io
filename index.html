@@ -6349,8 +6349,10 @@ function genEcheancier(montantTTC, loyerTTC, nbLoyers, tauxMensuel) {
 }
 
 /* ── Composant ligne document (hook useState isolé) ── */
-function CBDocRow({ dt, files, onAdd, onDelete, onNote, onDownload }) {
+function CBDocRow({ dt, files, onAdd, onDelete, onNote, onDownload, onRename }) {
   const [isDragOver, setIsDragOver] = React.useState(false);
+  const [editingId, setEditingId] = React.useState(null);
+  const [editingName, setEditingName] = React.useState("");
   const inputId = 'fileinput_' + dt.id;
   return (
     <div style={{ borderRadius:10, border:"1px solid #ECEAE5", overflow:"hidden" }}>
@@ -6389,8 +6391,21 @@ function CBDocRow({ dt, files, onAdd, onDelete, onNote, onDownload }) {
                 {(f.name||"").endsWith('.pdf')?"📄":(f.name||"").match(/\.(doc|docx)$/)?"📝":(f.name||"").match(/\.(xls|xlsx)$/)?"📊":"📎"}
               </div>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:11, fontWeight:600, color:"#2C3E50", fontFamily:"'Lora',serif",
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</div>
+                {editingId===(f.id||i)
+                  ? <input autoFocus type="text" value={editingName}
+                      onChange={e=>setEditingName(e.target.value)}
+                      onBlur={()=>{ if(editingName.trim()) onRename(f.id||i, editingName.trim()); setEditingId(null); }}
+                      onKeyDown={e=>{ if(e.key==="Enter"){ if(editingName.trim()) onRename(f.id||i, editingName.trim()); setEditingId(null); } if(e.key==="Escape") setEditingId(null); }}
+                      style={{ fontSize:11, fontWeight:600, fontFamily:"'Lora',serif", color:"#2C3E50",
+                        border:"1px solid #102A63", borderRadius:4, padding:"1px 5px", width:"100%", outline:"none" }} />
+                  : <div
+                      title="Double-cliquer pour renommer"
+                      onDoubleClick={()=>{ setEditingId(f.id||i); setEditingName(f.name||""); }}
+                      style={{ fontSize:11, fontWeight:600, color:"#2C3E50", fontFamily:"'Lora',serif",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", cursor:"text" }}>{f.name}
+                      <span style={{ fontSize:8, color:"#CCC", marginLeft:6, fontStyle:"italic" }}>✎</span>
+                    </div>
+                }
                 <div style={{ fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:4 }}>
                   {f.date||""}{f.size>0?" · "+(f.size/1024).toFixed(0)+" KB":""}
                 </div>
@@ -6493,6 +6508,8 @@ function exportCBPDF(d) {
       <div class="field"><label>Type investissement</label><div class="val">${d.typeInvestissement||"—"}</div></div>
       <div class="field"><label>Fournisseur</label><div class="val">${d.fournisseur||"—"}</div></div>
       <div class="field"><label>Site</label><div class="val">${d.site||"—"}</div></div>
+      <div class="field"><label>Type de financement</label><div class="val">${d.typeFinancement||"—"}</div></div>
+      <div class="field"><label>N° contrat</label><div class="val">${d.numeroContrat||"—"}</div></div>
     </div>
   </div>
 
@@ -6604,7 +6621,7 @@ function sendCBEmail(d) {
 function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFinanceurs }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
-  const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
+  const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
   const [d, setD] = useState({ ...empty, ...dossier });
   const [tab, setTab] = useState("financeurs");
   const [newFinanceur, setNewFinanceur] = useState("");
@@ -6704,7 +6721,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
             <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={inp} /></div>
           </div>
 
-          {/* Ligne 3 : Type (1fr) + Fournisseur (2fr) — même proportions */}
+          {/* Ligne 3 : Type invest + Fournisseur */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
             <div>{lbl("TYPE D'INVESTISSEMENT")}
               <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={inp}>
@@ -6714,6 +6731,20 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
             </div>
             <div>{lbl("FOURNISSEUR")}
               <input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+            </div>
+          </div>
+
+          {/* Ligne 3b : Type de financement + N° contrat */}
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("TYPE DE FINANCEMENT")}
+              <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={inp}>
+                <option value="">— Choisir —</option>
+                <option value="Crédit-bail">Crédit-bail</option>
+                <option value="Lease back">Lease back</option>
+              </select>
+            </div>
+            <div>{lbl("N° CONTRAT")}
+              <input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="Ex: CB-2024-00123" style={inp} />
             </div>
           </div>
 
@@ -6993,6 +7024,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                         onDelete={id=>delDoc(dt.id,id)}
                         onNote={(id,note)=>updateDocNote(dt.id,id,note)}
                         onDownload={downloadDoc}
+                        onRename={(id,name)=>setD(p=>{const cur=((p.documents||{})[dt.id]||[]).map(x=>(x.id===id||x===id)?{...x,name}:x);return {...p,documents:{...(p.documents||{}),[dt.id]:cur}};})}
                       />
                     );
                   })}
@@ -10603,7 +10635,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.395<br />11/05/26 à 17:57
+          v.0.396<br />11/05/26 à 18:26
         </div>
       </div>
 
