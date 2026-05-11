@@ -59,7 +59,14 @@ input::placeholder, textarea::placeholder {
   font-style: italic;
 }
 </style>
-  <script>if('serviceWorker'in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js'));</script>
+  <script>
+    // Désinstalle tout Service Worker existant (évite les ERR_CACHE_READ_FAILURE)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+    }
+  </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
@@ -10475,7 +10482,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.392<br />11/05/26 à 17:12
+          v.0.393<br />11/05/26 à 17:25
         </div>
       </div>
 
