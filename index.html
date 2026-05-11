@@ -6667,6 +6667,11 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   const ech     = calc0.taux12 !== null
     ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, (calc0.taux12/100)/12)
     : [];
+  const cbPaidCount = Math.min((d.paiements||[]).filter(p=>String(p.effectuePar||'').toLowerCase()==='banque' && parseNum(p.montant)>0).length, ech.length);
+  const cbTotalCount = ech.length;
+  const cbRemainCount = Math.max(0, cbTotalCount-cbPaidCount);
+  const cbPct = cbTotalCount>0 ? Math.round(cbPaidCount/cbTotalCount*100) : 0;
+  const compactInp = { ...inp, padding:"4px 10px", minHeight:30, lineHeight:1.2 };
 
   const fmtN = (v,dec=2) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
   const fmtE = (v,dec=0) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
@@ -6715,36 +6720,36 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
 
           {/* Lignes 1+2 : grille 1fr 2fr alignée sur 4 champs */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
-            <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={inp} /></div>
-            <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={inp} /></div>
-            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...inp,background:"#F5F5F5",color:"#888",userSelect:"none" }}>{d.reference||"—"}</div></div>
-            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={inp} /></div>
+            <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={compactInp} /></div>
+            <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={compactInp} /></div>
+            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...compactInp,background:"#F5F5F5",color:"#888",userSelect:"none" }}>{d.reference||"—"}</div></div>
+            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={compactInp} /></div>
           </div>
 
           {/* Ligne 3 : Type invest + Fournisseur */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
             <div>{lbl("TYPE D'INVESTISSEMENT")}
-              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={inp}>
+              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={compactInp}>
                 <option value="">— Choisir —</option>
                 {INVEST_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
             <div>{lbl("FOURNISSEUR")}
-              <input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={inp} />
+              <input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={compactInp} />
             </div>
           </div>
 
           {/* Ligne 3b : Type de financement + N° contrat */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
             <div>{lbl("TYPE DE FINANCEMENT")}
-              <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={inp}>
+              <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={compactInp}>
                 <option value="">— Choisir —</option>
                 <option value="Crédit-bail">Crédit-bail</option>
                 <option value="Lease back">Lease back</option>
               </select>
             </div>
             <div>{lbl("N° CONTRAT")}
-              <input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="Ex: CB-2024-00123" style={inp} />
+              <input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="Ex: CB-2024-00123" style={compactInp} />
             </div>
           </div>
 
@@ -6760,13 +6765,13 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                     if(!isNaN(n)) set("montantHT", n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));
                   }}
                   placeholder="0 000,00"
-                  style={{ ...inp, paddingRight:22 }} />
+                  style={{ ...compactInp, paddingRight:22 }} />
                 <span style={{ position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none" }}>€</span>
               </div>
             </div>
-            <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={inp} /></div>
+            <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={compactInp} /></div>
             <div>{lbl("MONTANT TTC (auto)")}
-              <div style={{ ...inp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
+              <div style={{ ...compactInp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
             </div>
             
           </div>
@@ -6774,29 +6779,29 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
           {/* Ligne 4 : Durée + Périodicité + VR % */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
             <div>{lbl("DURÉE (MOIS)")}
-              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={inp}>
+              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={compactInp}>
                 {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
               </select>
             </div>
             <div>{lbl("PÉRIODICITÉ")}
-              <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={inp}>
+              <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={compactInp}>
                 <option>Mensuelle</option>
                 <option>Trimestrielle</option>
               </select>
             </div>
-            <div>{lbl("VALEUR RÉSIDUELLE (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={inp} /></div>
+            <div>{lbl("VALEUR RÉSIDUELLE (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={compactInp} /></div>
           </div>
 
           {/* Dates */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
             <div>{lbl("DATE DE SIGNATURE")}
-              <input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={inp} />
+              <input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={compactInp} />
             </div>
             <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}
-              <input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={inp} />
+              <input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={compactInp} />
             </div>
             <div>{lbl("DATE DE FIN")}
-              <input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={inp} />
+              <input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={compactInp} />
             </div>
           </div>
 
@@ -7040,7 +7045,20 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                       Renseignez les données du financeur (coeff, loyers) pour générer l'échéancier automatiquement.
                     </div>
                   : (
-                    <div style={{ overflowX:"auto" }}>
+                    <div>
+                      <div style={{ marginBottom:12, background:"#F8FAFC", border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px" }}>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:8 }}>
+                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>ÉCHÉANCES PAYÉES</div><div style={{ fontSize:16,fontWeight:700,color:"#27AE60",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbPaidCount}<span style={{ fontSize:11,color:"#94A3B8",fontWeight:400 }}> / {cbTotalCount}</span></div></div>
+                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>RESTANTES</div><div style={{ fontSize:16,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbRemainCount}</div></div>
+                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>AVANCEMENT</div><div style={{ fontSize:16,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbPct} %</div></div>
+                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>PROCHAINE</div><div style={{ fontSize:11,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{ech[cbPaidCount] ? (()=>{ const d2=new Date(d.dateDemarrage||new Date()); d2.setMonth(d2.getMonth()+cbPaidCount); const md=new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate(); d2.setDate(Math.min((new Date(d.dateDemarrage||new Date())).getDate(), md)); return d2.toLocaleDateString("fr-FR"); })() : "Terminé"}</div></div>
+                        </div>
+                        <div style={{ display:"flex", height:16, borderRadius:8, overflow:"hidden", background:"#F1F5F9", boxShadow:"inset 0 0 0 1px #E2E8F0" }}>
+                          <div title={`Payées : ${cbPaidCount}`} style={{ width:`${cbTotalCount?cbPaidCount/cbTotalCount*100:0}%`, background:"linear-gradient(90deg,#22C55E,#16A34A)", transition:"width 0.3s" }} />
+                          <div title={`Restantes : ${cbRemainCount}`} style={{ width:`${cbTotalCount?cbRemainCount/cbTotalCount*100:0}%`, background:"linear-gradient(90deg,#F87171,#DC2626)", transition:"width 0.3s" }} />
+                        </div>
+                      </div>
+                      <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>
                         <thead>
                           <tr style={{ background:"#102A63" }}>
@@ -7084,6 +7102,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                         </tfoot>
                       </table>
                     </div>
+                  </div>
                   )}
               </div>
             )}
@@ -7260,10 +7279,11 @@ function CreditBailView({ tasks, onEdit, settings }) {
                         {parseNum(d.montantHT)>0 && <span style={{ fontSize:11,fontWeight:500,color:col.color,fontFamily:"'Lora',serif" }}>{fmtE(parseNum(d.montantHT))}</span>}
                       </div>
                       {/* Site + type */}
-                      {(d.site||d.typeInvestissement) && (
-                        <div style={{ display:"flex",gap:5,flexWrap:"wrap" }}>
+                      {(d.site||d.typeInvestissement||((d.paiements||[]).length>0)) && (
+                        <div style={{ display:"flex",gap:5,flexWrap:"wrap", alignItems:"center" }}>
                           {d.typeInvestissement && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.typeInvestissement}</span>}
                           {d.site && <span style={{ fontSize:9,background:"#F5F5F5",color:"#888",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.site}</span>}
+                          {(() => { const fin0=(d.financeurs||[])[0]||{}; const c0=calcCBRow({...fin0,montantHT:d.montantHT}); const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0; const paid=Math.min((d.paiements||[]).filter(p=>String(p.effectuePar||'').toLowerCase()==='banque' && parseNum(p.montant)>0).length,total); return total>0 ? <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",border:"0.5px solid #BBF7D0", fontVariantNumeric:"tabular-nums" }}>{paid}/{total}</span> : null; })()}
                         </div>
                       )}
                     </div>
@@ -7572,21 +7592,21 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
 
             {/* Infos prêt */}
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={inp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={inp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={inp} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={compactInp} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={compactInp} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={compactInp} /></div>
               <div>{lbl("TYPE D'AMORTISSEMENT")}
-                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={inp}>
+                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={compactInp}>
                   <option value="annuites">Annuités constantes</option>
                   <option value="capital">Capital constant</option>
                 </select>
               </div>
-              <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={inp} /></div>
+              <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={compactInp} /></div>
               <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={inp} /></div>
-              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
-              <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={inp} /></div>
-              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={inp} /></div>
+              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={compactInp} /></div>
+              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={compactInp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
+              <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={compactInp} /></div>
+              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={compactInp} /></div>
               <div style={{gridColumn:"1/-1"}}>
                 {lbl("DATES DE VERSEMENT DES FONDS")}
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -7600,9 +7620,9 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                   <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])} style={{fontSize:11,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",textAlign:"left"}}>+ Ajouter un versement</button>
                 </div>
               </div>
-              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={inp} /></div>
+              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={compactInp} /></div>
               <div>{lbl("Garantie")}
-                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={inp}>
+                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={compactInp}>
                   <option value="">—</option>
                   {ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}
                 </select>
@@ -7610,23 +7630,23 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={inp} /></div>
-                  <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={inp} /></div>
-                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inp} /></div>
-                  <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={inp} /></div>
-                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={inp} /></div>
-                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inp} /></div>
+                  <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={compactInp} /></div>
+                  <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={compactInp} /></div>
+                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={compactInp} /></div>
+                  <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={compactInp} /></div>
+                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={compactInp} /></div>
+                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={compactInp} /></div>
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
                   <div>{lbl("Carence (mois) — aucun paiement")}
-                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={inp} />
+                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={compactInp} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
                   </div>
                   <div>{lbl("Différé add. (mois) — intérêts seuls")}
-                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={inp} />
+                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={compactInp} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
                   </div>
                 </div>
@@ -8824,15 +8844,15 @@ function RCFModal({ ligne, onSave, onClose }) {
         <div style={{ overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
           {/* Infos générales */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ gridColumn: "1/-1" }}>{lbl("INTITULÉ")}<input value={d.intitule} onChange={e => set("intitule", e.target.value)} placeholder="RCF BNP 2024" style={inp} /></div>
-            <div>{lbl("BANQUE / ORGANISME")}<input value={d.banque} onChange={e => set("banque", e.target.value)} placeholder="BNP Paribas" style={inp} /></div>
-            <div>{lbl("RÉFÉRENCE")}<input value={d.reference} onChange={e => set("reference", e.target.value)} placeholder="RCF-2024-001" style={inp} /></div>
-            <div>{lbl("MONTANT AUTORISÉ (€)")}<input type="text" value={d.montantAutorise} onChange={e => set("montantAutorise", e.target.value)} placeholder="5 000 000" style={inp} /></div>
-            <div>{lbl("MONTANT TIRÉ (€)")}<input type="text" value={d.montantTire} onChange={e => set("montantTire", e.target.value)} placeholder="2 000 000" style={inp} /></div>
-            <div>{lbl("TAUX (%/AN)")}<input type="text" value={d.taux} onChange={e => set("taux", e.target.value)} placeholder="3,50" style={inp} /></div>
-            <div>{lbl("CONDITIONS")}<input value={d.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Euribor + 1,5%" style={inp} /></div>
-            <div>{lbl("DATE DÉBUT CONTRAT")}<input type="date" value={d.dateDebutContrat} onChange={e => set("dateDebutContrat", e.target.value)} style={inp} /></div>
-            <div>{lbl("ÉCHÉANCE CONTRAT")}<input type="date" value={d.dateFinContrat} onChange={e => set("dateFinContrat", e.target.value)} style={inp} /></div>
+            <div style={{ gridColumn: "1/-1" }}>{lbl("INTITULÉ")}<input value={d.intitule} onChange={e => set("intitule", e.target.value)} placeholder="RCF BNP 2024" style={compactInp} /></div>
+            <div>{lbl("BANQUE / ORGANISME")}<input value={d.banque} onChange={e => set("banque", e.target.value)} placeholder="BNP Paribas" style={compactInp} /></div>
+            <div>{lbl("RÉFÉRENCE")}<input value={d.reference} onChange={e => set("reference", e.target.value)} placeholder="RCF-2024-001" style={compactInp} /></div>
+            <div>{lbl("MONTANT AUTORISÉ (€)")}<input type="text" value={d.montantAutorise} onChange={e => set("montantAutorise", e.target.value)} placeholder="5 000 000" style={compactInp} /></div>
+            <div>{lbl("MONTANT TIRÉ (€)")}<input type="text" value={d.montantTire} onChange={e => set("montantTire", e.target.value)} placeholder="2 000 000" style={compactInp} /></div>
+            <div>{lbl("TAUX (%/AN)")}<input type="text" value={d.taux} onChange={e => set("taux", e.target.value)} placeholder="3,50" style={compactInp} /></div>
+            <div>{lbl("CONDITIONS")}<input value={d.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Euribor + 1,5%" style={compactInp} /></div>
+            <div>{lbl("DATE DÉBUT CONTRAT")}<input type="date" value={d.dateDebutContrat} onChange={e => set("dateDebutContrat", e.target.value)} style={compactInp} /></div>
+            <div>{lbl("ÉCHÉANCE CONTRAT")}<input type="date" value={d.dateFinContrat} onChange={e => set("dateFinContrat", e.target.value)} style={compactInp} /></div>
           </div>
 
           {/* Tirages */}
@@ -9493,8 +9513,8 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
                 {(suiviTypes||[]).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={inp} /></div>
-            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={inp} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={compactInp} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={compactInp} /></div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, paddingTop:4 }}>
             <input type="checkbox" id="sc-closed" checked={!!d.closed} onChange={e=>set("closed",e.target.checked)} style={{ width:15, height:15, cursor:"pointer" }} />
@@ -10635,7 +10655,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.396<br />11/05/26 à 18:26
+          v.0.397<br />11/05/26 à 18:35
         </div>
       </div>
 
