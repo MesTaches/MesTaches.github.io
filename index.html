@@ -6553,11 +6553,21 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   const addFinRow = () => setD(p=>({...p,financeurs:[...(p.financeurs||[]),{id:uid(),financeur:"",statut:"a_faire",coeff:"",loyerHT:"",nbLoyers:"",valeurRes:"",fraisAnn:"",montantHT:d.montantHT}]}));
   const delFinRow = (id) => setD(p=>({...p,financeurs:(p.financeurs||[]).filter(r=>r.id!==id)}));
 
-  // Docs
-  const setDoc = (type, files) => {
-    const arr = Array.from(files).map(f=>({ name:f.name, size:f.size }));
-    setD(p=>({...p,documents:{...(p.documents||{}),[type]:arr}}));
+  // Docs — base64 storage with note
+  const addDocs = (type, files) => {
+    Array.from(files).forEach(f => {
+      if (f.size > 900000) { alert(f.name + ' dépasse 900 KB — fichier ignoré. Compressez-le avant de le joindre.'); return; }
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const newDoc = { id: uid(), name: f.name, size: f.size, type: f.type, data: ev.target.result, note: '', date: new Date().toISOString().split('T')[0] };
+        setD(p => { const cur = (p.documents||{})[type]||[]; return {...p, documents:{...(p.documents||{}),[type]:[...cur,newDoc]}}; });
+      };
+      reader.readAsDataURL(f);
+    });
   };
+  const delDoc = (type, id) => setD(p=>{ const cur=((p.documents||{})[type]||[]).filter(x=>x.id!==id); return {...p,documents:{...(p.documents||{}),[type]:cur}}; });
+  const updateDocNote = (type, id, note) => setD(p=>{ const cur=((p.documents||{})[type]||[]).map(x=>x.id===id?{...x,note}:x); return {...p,documents:{...(p.documents||{}),[type]:cur}}; });
+  const downloadDoc = (doc) => { const a=document.createElement('a'); a.href=doc.data; a.download=doc.name; a.click(); };
   const docsComplete = CB_DOC_TYPES.every(dt => (d.documents||{})[dt.id]?.length>0);
 
   // Echéancier (from first financeur with enough data)
@@ -6888,6 +6898,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
             {/* ── DOCUMENTS ── */}
             {tab==="documents" && (
               <div style={{ marginTop:12 }}>
+                {/* Statut */}
                 <div style={{ marginBottom:12, display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ fontSize:11, fontFamily:"'Lora',serif", color:"#888" }}>Statut :</span>
                   <span style={{ fontSize:11, fontWeight:700, fontFamily:"'Lora',serif",
@@ -6897,31 +6908,85 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                     borderRadius:4, padding:"2px 10px" }}>
                     {docsComplete?"✓ Complet":"⚠ Incomplet"}
                   </span>
+                  <span style={{ fontSize:9, color:"#AAA", fontFamily:"'Lora',serif", fontStyle:"italic" }}>Max 900 KB par fichier</span>
                 </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
                   {CB_DOC_TYPES.map(dt => {
                     const files = (d.documents||{})[dt.id]||[];
+                    const [isDragOver, setIsDragOver] = React.useState(false);
                     return (
-                      <div key={dt.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"8px 12px",
-                        background:"#FAFAFA", borderRadius:8, border:"1px solid #ECEAE5" }}>
-                        <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", width:140, flexShrink:0 }}>{dt.name}</div>
-                        <div style={{ flex:1 }}>
-                          {files.length>0
-                            ? <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                                {files.map((f,i)=>(
-                                  <span key={i} style={{ fontSize:10, fontFamily:"'Lora',serif", background:"#E0F7FA", color:"#0E7490",
-                                    borderRadius:4, padding:"2px 8px", border:"0.5px solid #0E7490" }}>{f.name}</span>
-                                ))}
-                              </div>
-                            : <span style={{ fontSize:11, color:"#CCC", fontFamily:"'Lora',serif", fontStyle:"italic" }}>Aucun fichier</span>}
+                      <div key={dt.id} style={{ borderRadius:10, border:"1px solid #ECEAE5", overflow:"hidden" }}>
+                        {/* En-tête catégorie */}
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                          padding:"8px 12px", background:"#F8F9FB", borderBottom: files.length>0?"1px solid #ECEAE5":"none" }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif" }}>
+                            {dt.name}
+                            {files.length>0 && <span style={{ marginLeft:6, fontSize:9, background:"#102A63", color:"white",
+                              borderRadius:10, padding:"1px 6px" }}>{files.length}</span>}
+                          </div>
+                          {/* Zone drag & drop + bouton joindre */}
+                          <div
+                            onDragOver={e=>{e.preventDefault();setIsDragOver(true);}}
+                            onDragLeave={()=>setIsDragOver(false)}
+                            onDrop={e=>{e.preventDefault();setIsDragOver(false);addDocs(dt.id,e.dataTransfer.files);}}
+                            style={{ display:"flex", alignItems:"center", gap:8,
+                              border:`1.5px dashed ${isDragOver?"#102A63":"#D0D5DD"}`,
+                              borderRadius:7, padding:"5px 12px", background:isDragOver?"#EFF6FF":"white",
+                              transition:"all 0.15s", cursor:"pointer" }}
+                            onClick={()=>document.getElementById('fileinput_'+dt.id)?.click()}>
+                            <span style={{ fontSize:10, color:isDragOver?"#102A63":"#888", fontFamily:"'Lora',serif" }}>
+                              {isDragOver?"📂 Déposez ici":"📎 Glisser / Joindre"}
+                            </span>
+                          </div>
+                          <input id={'fileinput_'+dt.id} type="file" multiple style={{ display:"none" }}
+                            onChange={e=>addDocs(dt.id,e.target.files)} />
                         </div>
-                        <label style={{ cursor:"pointer" }}>
-                          <input type="file" multiple style={{ display:"none" }} onChange={e=>setDoc(dt.id,e.target.files)} />
-                          <span style={{ ...S.btn("#102A63"), fontSize:10, padding:"4px 10px" }}>📎 Joindre</span>
-                        </label>
+                        {/* Liste des fichiers */}
                         {files.length>0 && (
-                          <button onClick={()=>setD(p=>({...p,documents:{...(p.documents||{}),[dt.id]:[]}}))
-                          } style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14 }}>×</button>
+                          <div style={{ display:"flex", flexDirection:"column", gap:0 }}>
+                            {files.map((f,i)=>(
+                              <div key={f.id||i} style={{ display:"flex", alignItems:"flex-start", gap:10,
+                                padding:"8px 12px", background:i%2===0?"white":"#FAFAFA",
+                                borderBottom: i<files.length-1?"1px solid #F5F5F5":"none" }}>
+                                {/* Icône type */}
+                                <div style={{ fontSize:16, flexShrink:0, marginTop:1 }}>
+                                  {f.name?.endsWith('.pdf')?"📄":f.name?.match(/\.(doc|docx)$/)?"📝":f.name?.match(/\.(xls|xlsx)$/)?"📊":"📎"}
+                                </div>
+                                {/* Nom + note */}
+                                <div style={{ flex:1, minWidth:0 }}>
+                                  <div style={{ fontSize:11, fontWeight:600, color:"#2C3E50", fontFamily:"'Lora',serif",
+                                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</div>
+                                  <div style={{ fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace", marginBottom:4 }}>
+                                    {f.date||""} · {f.size>0?(f.size/1024).toFixed(0)+' KB':""}
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={f.note||""}
+                                    onChange={e=>updateDocNote(dt.id,f.id,e.target.value)}
+                                    placeholder="Ajouter une note…"
+                                    style={{ width:"100%", fontSize:10, fontFamily:"'Lora',serif", color:"#555",
+                                      border:"1px solid #ECEAE5", borderRadius:5, padding:"3px 7px",
+                                      outline:"none", background:"#FAFAFA", fontStyle: f.note?"normal":"italic" }}
+                                  />
+                                </div>
+                                {/* Boutons actions */}
+                                <div style={{ display:"flex", gap:4, flexShrink:0 }}>
+                                  {f.data && (
+                                    <button onClick={()=>downloadDoc(f)} title="Télécharger"
+                                      style={{ border:"1px solid #BFDBFE", background:"#EFF6FF", color:"#1D4ED8",
+                                        borderRadius:6, padding:"4px 8px", cursor:"pointer", fontSize:12 }}>⬇</button>
+                                  )}
+                                  <button onClick={()=>delDoc(dt.id,f.id||i)} title="Supprimer"
+                                    style={{ border:"1px solid #FECACA", background:"#FEF2F2", color:"#B91C1C",
+                                      borderRadius:6, padding:"4px 8px", cursor:"pointer", fontSize:12 }}>×</button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {files.length===0 && (
+                          <div style={{ padding:"10px 12px", fontSize:10, color:"#CCC",
+                            fontFamily:"'Lora',serif", fontStyle:"italic" }}>Aucun document joint</div>
                         )}
                       </div>
                     );
@@ -6939,11 +7004,11 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                     </div>
                   : (
                     <div style={{ overflowX:"auto" }}>
-                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>
                         <thead>
                           <tr style={{ background:"#102A63" }}>
-                            {["N°","Date échéance","Loyer","Intérêts","Amortissement","Capital restant dû"].map(h=>(
-                              <th key={h} style={{ padding:"6px 10px", color:"white", fontWeight:700, textAlign:"right", fontSize:10 }}>{h}</th>
+                            {[["N°","center"],["Date échéance","left"],["Loyer","right"],["Intérêts","right"],["Amortissement","right"],["Capital restant dû","right"]].map(([h,align])=>(
+                              <th key={h} style={{ padding:"6px 10px", color:"white", fontWeight:600, textAlign:align, fontSize:10, fontFamily:"'Lora',serif", letterSpacing:"0.04em" }}>{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -6951,6 +7016,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                           {(() => {
                             const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
                             const jourRef   = startDate.getDate();
+                            const tdNum = (color, bold=false) => ({ padding:"5px 10px", textAlign:"right", color, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:bold?700:400 });
                             return ech.map((row,i)=>{
                               const d2 = new Date(startDate);
                               d2.setMonth(d2.getMonth() + i);
@@ -6958,25 +7024,25 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                               d2.setDate(Math.min(jourRef, maxDay));
                               const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
                               return (
-                                <tr key={i} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
-                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#888" }}>{row.n}</td>
-                                  <td style={{ padding:"5px 10px",textAlign:"right" }}>{dateStr}</td>
-                                  <td style={{ padding:"5px 10px",textAlign:"right",fontWeight:700,color:"#102A63" }}>{fmtE(row.loyer,2)}</td>
-                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#E67E22" }}>{fmtE(row.interets,2)}</td>
-                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#27AE60" }}>{fmtE(row.amort,2)}</td>
-                                  <td style={{ padding:"5px 10px",textAlign:"right",color:"#C0392B" }}>{fmtE(row.capitalRestant,2)}</td>
+                                <tr key={i} style={{ background:i%2===0?"white":"#FAFAFA", borderBottom:"1px solid #F0F0F0" }}>
+                                  <td style={{ padding:"5px 10px", textAlign:"center", color:"#AAA", fontFamily:"'DM Mono',monospace", fontSize:10 }}>{row.n}</td>
+                                  <td style={{ padding:"5px 10px", textAlign:"left", fontFamily:"'Lora',serif", color:"#555" }}>{dateStr}</td>
+                                  <td style={tdNum("#102A63", true)}>{fmtE(row.loyer,2)}</td>
+                                  <td style={tdNum("#E67E22")}>{fmtE(row.interets,2)}</td>
+                                  <td style={tdNum("#27AE60")}>{fmtE(row.amort,2)}</td>
+                                  <td style={tdNum("#C0392B")}>{fmtE(row.capitalRestant,2)}</td>
                                 </tr>
                               );
                             });
                           })()}
                         </tbody>
                         <tfoot>
-                          <tr style={{ background:"#F8F9FB", borderTop:"2px solid #ECEAE5", fontWeight:700 }}>
-                            <td colSpan={2} style={{ padding:"6px 10px",fontFamily:"'Lora',serif",fontSize:11 }}>TOTAL</td>
-                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#102A63" }}>{fmtE(ech.reduce((a,r)=>a+r.loyer,0),2)}</td>
-                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#E67E22" }}>{fmtE(ech.reduce((a,r)=>a+r.interets,0),2)}</td>
-                            <td style={{ padding:"6px 10px",textAlign:"right",color:"#27AE60" }}>{fmtE(ech.reduce((a,r)=>a+r.amort,0),2)}</td>
-                            <td></td>
+                          <tr style={{ background:"#F0F4FF", borderTop:"2px solid #102A63", fontWeight:700 }}>
+                            <td colSpan={2} style={{ padding:"7px 10px", fontFamily:"'Lora',serif", fontSize:11, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL</td>
+                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.loyer,0),2)}</td>
+                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.interets,0),2)}</td>
+                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#27AE60", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.amort,0),2)}</td>
+                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>—</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -10532,7 +10598,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.394<br />11/05/26 à 17:32
+          v.0.395<br />11/05/26 à 17:47
         </div>
       </div>
 
