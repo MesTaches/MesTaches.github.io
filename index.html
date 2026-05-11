@@ -6712,7 +6712,14 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
             <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
               {CB_KANBAN_STATUSES.map(s=>(
                 <button key={s.id} onClick={()=>set("statut",s.id)}
-                  style={{ border:`1p{/* Formulaire compact — 2 lignes principales + montants + dates */}
+                  style={{ border:`1px solid ${s.border||s.color}`,background:d.statut===s.id?s.bg:"white",color:d.statut===s.id?s.color:"#888",borderRadius:20,padding:"3px 12px",fontSize:10,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:d.statut===s.id?700:400 }}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Formulaire compact — 2 lignes principales + montants + dates */}
           {/* Ligne A : 5 champs sur 1 ligne */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr 1fr 1fr", gap:8, marginBottom:8 }}>
             <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={compactInp} /></div>
@@ -6799,15 +6806,6 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
 
           {/* Notes */}
           <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
-            {lbl("DESCRIPTION / NOTES")}
-            <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Description du projet, contexte, observations…" rows={4} />
-          </div>
-
-           </div>
-          </div>
-
-          {/* Notes */}
-          <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:14,marginBottom:14 }}>
             {lbl("DESCRIPTION / NOTES")}
             <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Description du projet, contexte, observations…" rows={4} />
           </div>
@@ -10644,7 +10642,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.398<br />11/05/26 à 18:52
+          v.0.399<br />11/05/26 à 21:39
         </div>
       </div>
 
