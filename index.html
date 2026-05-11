@@ -6450,7 +6450,57 @@ function exportCBPDF(d) {
     </table>
   </div>`:""}
 
-  ${d.notes?`<div class="notes"><strong style="font-size:10px;color:#102A63;text-transform:uppercase;letter-spacing:0.06em">Notes</strong><br/><br/>${d.notes}</div>`:""}
+  \${(()=>{
+    const finRow0 = (d.financeurs||[])[0]||{};
+    const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
+    if (calc0.taux12 === null) return '';
+    const nbL = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+    const echRows = genEcheancier(calc0.mttc, calc0.loyerTTC, nbL, (calc0.taux12/100)/12);
+    if (!echRows.length) return '';
+    const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
+    const jourRef = startDate.getDate();
+    const totalLoyer = echRows.reduce((a,r)=>a+r.loyer,0);
+    const totalInt   = echRows.reduce((a,r)=>a+r.interets,0);
+    const totalAmort = echRows.reduce((a,r)=>a+r.amort,0);
+    const lignesHtml = echRows.map((row,i)=>{
+      const dt = new Date(startDate);
+      dt.setMonth(dt.getMonth()+i);
+      const maxDay = new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
+      dt.setDate(Math.min(jourRef,maxDay));
+      const dateStr = dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const bg = i%2===0?'white':'#F8F9FB';
+      return '<tr style="background:'+bg+'">'
+        +'<td style="padding:4px 8px;text-align:right;color:#888">'+row.n+'</td>'
+        +'<td style="padding:4px 8px">'+dateStr+'</td>'
+        +'<td style="padding:4px 8px;text-align:right;font-weight:700;color:#102A63">'+fmtN(row.loyer)+'</td>'
+        +'<td style="padding:4px 8px;text-align:right;color:#E67E22">'+fmtN(row.interets)+'</td>'
+        +'<td style="padding:4px 8px;text-align:right;color:#27AE60">'+fmtN(row.amort)+'</td>'
+        +'<td style="padding:4px 8px;text-align:right;color:#C0392B">'+fmtN(row.capitalRestant)+'</td>'
+        +'</tr>';
+    }).join('');
+    return '<div class="section" style="page-break-before:always">'
+      +'<h2>Échéancier des loyers</h2>'
+      +'<table>'
+      +'<thead><tr>'
+      +'<th style="text-align:right">N°</th><th>Date</th>'
+      +'<th style="text-align:right">Loyer TTC</th>'
+      +'<th style="text-align:right">Intérêts</th>'
+      +'<th style="text-align:right">Amortissement</th>'
+      +'<th style="text-align:right">Capital restant</th>'
+      +'</tr></thead>'
+      +'<tbody>'+lignesHtml+'</tbody>'
+      +'<tfoot><tr style="background:#F0F0F0;font-weight:700;border-top:2px solid #ECEAE5">'
+      +'<td colspan="2" style="padding:5px 8px">TOTAL</td>'
+      +'<td style="padding:5px 8px;text-align:right;color:#102A63">'+fmtN(totalLoyer)+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;color:#E67E22">'+fmtN(totalInt)+'</td>'
+      +'<td style="padding:5px 8px;text-align:right;color:#27AE60">'+fmtN(totalAmort)+'</td>'
+      +'<td></td>'
+      +'</tr></tfoot>'
+      +'</table>'
+      +'</div>';
+  })()}
+
+  \${d.notes?`<div class="notes"><strong style="font-size:10px;color:#102A63;text-transform:uppercase;letter-spacing:0.06em">Notes</strong><br/><br/>\${d.notes}</div>`:""}
 
   <div class="footer">
     <span>${d.reference||""} — ${d.intitule||""}</span>
@@ -7073,7 +7123,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
                 <span style={{ fontSize:10,background:"white",color:pal.nameColor,borderRadius:20,padding:"1px 9px",fontFamily:"'Lora',serif",border:`0.5px solid ${pal.border}` }}>{col.items.length}</span>
               </div>
               <div style={{ fontSize:10,color:pal.amtColor,fontFamily:"'Lora',serif" }}>
-                {fmtE(col.items.reduce((a,d)=>a+(parseFloat(d.montantHT)||0),0))} HT
+                {fmtE(col.items.reduce((a,d)=>a+(parseNum(d.montantHT)||0),0))} HT
               </div>
             </div>
             <div style={{ background:dragOver===col.id?"#F8FAFF":"#F7F7F5",
@@ -7104,7 +7154,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
                       {/* Fournisseur + montant */}
                       <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:d.site||d.typeInvestissement?4:0 }}>
                         <span style={{ fontSize:10,color:"#888",fontFamily:"'Lora',serif" }}>{d.fournisseur||"—"}</span>
-                        {d.montantHT && <span style={{ fontSize:11,fontWeight:500,color:col.color,fontFamily:"'Lora',serif" }}>{fmtE(d.montantHT)}</span>}
+                        {parseNum(d.montantHT)>0 && <span style={{ fontSize:11,fontWeight:500,color:col.color,fontFamily:"'Lora',serif" }}>{fmtE(parseNum(d.montantHT))}</span>}
                       </div>
                       {/* Site + type */}
                       {(d.site||d.typeInvestissement) && (
@@ -10482,7 +10532,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.393<br />11/05/26 à 17:25
+          v.0.394<br />11/05/26 à 17:32
         </div>
       </div>
 
