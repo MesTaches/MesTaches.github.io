@@ -1940,6 +1940,13 @@ function RecurrenceModule({ value, dueDate, onChange }) {
 
 /* ─── TASK MODAL ─── */
 function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
+  // Masquer Corbeille et Déconnexion quand le panneau est ouvert
+  React.useEffect(() => {
+    const hide = (id) => { const el=document.getElementById(id); if(el) el.style.display='none'; };
+    const show = (id) => { const el=document.getElementById(id); if(el) el.style.display=''; };
+    hide('fb-logout-btn'); hide('fb-trash-btn');
+    return () => { show('fb-logout-btn'); show('fb-trash-btn'); };
+  }, []);
   const isNew = !task.title;
   const [d, setD] = useState({ ...task, category: task.category || "", type: task.type || "", status: task.status || "todo", recurrence: task.recurrence || "none", totalTime: task.totalTime || 0, inMyDay: task.inMyDay || false, labels: task.labels || [] });
   const [newLabel, setNewLabel] = useState("");
@@ -1983,31 +1990,29 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
   const statusObj = settings.statuses.find(s => s.id === d.status) || settings.statuses[0];
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 1000, display: "flex", alignItems: "stretch", justifyContent: "flex-end", backdropFilter: "blur(4px)" }} onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
       onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
-      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 580, maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", borderTop: `4px solid ${catAccent}`, transition: "border-color 0.2s" }}>
-        <div className="task-modal-form" style={{ padding: "20px 24px 0" }}>
-          {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-            <h2 style={{ margin: 0, fontSize: 18, fontFamily: "'Lora',serif", color: "#2C3E50" }}>{isNew ? "Nouvelle tâche" : "Modifier la tâche"}</h2>
-            <div style={{ display: "flex", gap: 6 }}>
-              {!isNew && <button onMouseDown={(e) => { e.preventDefault(); exportSingleTaskPDF(d, settings); }} title="Exporter en PDF"
-                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: "#102A63" }}>🖨</button>}
-              {/* 9) Add to My Day */}
-              {!isNew && <button onClick={() => { window.__pinTask && window.__pinTask(d.id); setD(prev => ({...prev, pinned: !prev.pinned})); }}
-                title={d.pinned ? "Désépingler" : "Épingler en haut du tableau"}
-                style={{ border: `1px solid ${d.pinned ? "#E8A020" : "#E0E0E0"}`, background: d.pinned ? "#FFF8E1" : "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: d.pinned ? "#E8A020" : "#BDC3C7" }}>📌</button>}
-              <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} title={d.inMyDay ? "Retirer de Ma journée" : "Ajouter à Ma journée"}
-                style={{ border: `1px solid ${d.inMyDay ? "#E67E22" : "#E0E0E0"}`, background: d.inMyDay ? "#FEF9E7" : "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: d.inMyDay ? "#E67E22" : "#BDC3C7" }}>☀</button>
-              {/* 7) Stopwatch */}
-              {!isNew && <button onClick={() => setStopwatch(true)} title="Chronomètre"
-                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 8px", fontSize: 14, cursor: "pointer", color: "#BDC3C7" }}>⏱</button>}
-              {/* 5) Send mail */}
-              <button onClick={sendMail} title="Envoyer par mail"
-                style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "4px 10px", fontSize: 12, cursor: "pointer", color: "#BDC3C7", fontFamily: "'DM Mono',monospace" }}>@</button>
-              <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+      <div style={{ background: "white", width: "min(580px,97vw)", height: "100vh", display: "flex", flexDirection: "column", boxShadow: "-8px 0 40px rgba(0,0,0,0.2)" }}>
+        {/* Header bleu */}
+        <div style={{ background: "#102A63", padding: "14px 20px", borderBottom: "3px solid " + catAccent, flexShrink: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,0.5)", fontFamily: "'DM Mono',monospace", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>{isNew ? "Nouvelle tâche" : (d.category || "Tâche")}</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 380 }}>{isNew ? "Renseignez le titre…" : (d.title || "Sans titre")}</div>
+              {!isNew && d.dueDate && <div style={{ fontSize: 9, color: d.dueDate < new Date().toISOString().split("T")[0] ? "#FCA5A5" : "rgba(255,255,255,0.6)", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>📅 {d.dueDate.split("-").reverse().join("/")} · {d.priority}</div>}
+            </div>
+            <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+              {!isNew && <button onMouseDown={(e) => { e.preventDefault(); exportSingleTaskPDF(d, settings); }} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "5px 8px", fontSize: 13, cursor: "pointer", color: "white" }}>🖨</button>}
+              {!isNew && <button onClick={() => { window.__pinTask && window.__pinTask(d.id); setD(prev => ({...prev, pinned: !prev.pinned})); }} style={{ background: d.pinned ? "rgba(232,160,32,0.25)" : "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "5px 8px", fontSize: 13, cursor: "pointer", color: d.pinned ? "#FCD34D" : "rgba(255,255,255,0.5)" }}>📌</button>}
+              <button onClick={() => setD({ ...d, inMyDay: !d.inMyDay })} style={{ background: d.inMyDay ? "rgba(230,126,34,0.25)" : "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "5px 8px", fontSize: 13, cursor: "pointer", color: d.inMyDay ? "#FCD34D" : "rgba(255,255,255,0.5)" }}>☀</button>
+              {!isNew && <button onClick={() => setStopwatch(true)} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "5px 8px", fontSize: 13, cursor: "pointer", color: "rgba(255,255,255,0.5)" }}>⏱</button>}
+              <button onClick={sendMail} style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 7, padding: "5px 9px", fontSize: 11, cursor: "pointer", color: "rgba(255,255,255,0.5)", fontFamily: "'DM Mono',monospace" }}>@</button>
+              <button onClick={onClose} style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 7, padding: "4px 9px", fontSize: 18, cursor: "pointer", color: "rgba(255,255,255,0.4)", lineHeight: 1 }}>×</button>
             </div>
           </div>
+        </div>
+        <div style={{ overflowY: "auto", flex: 1 }}>
+        <div className="task-modal-form" style={{ padding: "20px 24px 0" }}>
 
           {/* Time tracked */}
           {d.totalTime > 0 && (
@@ -2130,7 +2135,9 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
           </div>
         </div>
 
-        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        </div>{/* fin scroll */}
+
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 8, flexShrink: 0 }}>
           <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), fontFamily: 'Lora' }}>Annuler</button>
           <button onClick={() => { if (d.title.trim()) { onSave(d); onClose(); } }} style={{ ...S.btn(catAccent), opacity: d.title.trim() ? 1 : 0.5, fontFamily: 'Lora' }} >
             {isNew ? "Créer la tâche" : "Enregistrer"}
@@ -10465,7 +10472,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.387<br />10/05/26 à 21:57
+          v.0.391<br />11/05/26 à 08:53
         </div>
       </div>
 
