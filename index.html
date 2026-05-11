@@ -7338,128 +7338,228 @@ function CreditBailView({ tasks, onEdit, settings }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ÉCHÉANCIER — Storage
+   ÉCHÉANCIER — Storage & constantes
    ═══════════════════════════════════════════════════════════════ */
 const ECH_KEY = "echeancier_dossiers_v1";
 function loadEchDossiers()  { try { const s=localStorage.getItem(ECH_KEY); return s?JSON.parse(s):[]; } catch { return []; } }
 function saveEchDossiers(v) { try { localStorage.setItem(ECH_KEY, JSON.stringify(v)); } catch {} }
 
-const ECH_NATURE_OPTIONS = ["Prêt amortissable","Prêt in fine","Crédit-bail","Découvert","Affacturage","Prêt d'honneur","Autre"];
-const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement","Gage","Caution bancaire","Aucune","Autre"];
+const ECH_TYPE_CREDIT = ["PGE Covid","PGE Résilience","Prêt Capex","BDR / Capex","Prêt immobilier","Ligne de trésorerie","Découvert","Affacturage","Crédit-bail","Prêt d'honneur","Autre"];
+const ECH_MODALITE    = ["Annuités constantes","Capital constant","In fine","Différé total puis in fine","Différé puis annuités","Différé puis capital constant"];
+const ECH_GARANTIE_OPTIONS = ["Garantie État (PGE)","Caution personnelle","Caution société","Nantissement","Hypothèque","Gage","Caution bancaire","Aucune","Autre"];
+const ECH_PERIODICITE = ["Mensuelle","Trimestrielle","Semestrielle","Annuelle"];
 
-/* ── Calcul échéancier avec structure réelle
-   CARENCE    = aucun paiement (ni capital, ni intérêts)
-   DIFFÉRÉ    = paiement des intérêts seulement (pas de capital)
-   AMORTISSMT = capital + intérêts (mensualité constante)
-   CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
-── */
-function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0) {
-  if (!montant || !dureeM) return [];
-  // dureeM = durée de remboursement du capital uniquement
-  // dureeTotal = durée complète incluant toutes les périodes
-  const _avecCap = tauxCapita > 0;
-  const dureeTotal = dureeM + carenceMois + (_avecCap ? 1 : 0) + differeMois;
+/* ─── Helpers date ─── */
+function addPeriods(dateStr, n, periodicite) {
+  const d = new Date(dateStr);
+  const mois = periodicite === "Trimestrielle" ? 3 : periodicite === "Semestrielle" ? 6 : periodicite === "Annuelle" ? 12 : 1;
+  d.setMonth(d.getMonth() + n * mois);
+  return d.toISOString().split("T")[0];
+}
 
-  const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
-  const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r; // taux pendant différé
-  const rG1  = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
-  const rG2  = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
-  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999; // si pas de durée saisie → taux 1 toujours
-  const ass  = parseNum(assuranceMensuelle) || 0;
+/* ═══════════════════════════════════════════════════════════════
+   MOTEUR calcEcheancier v2
+   ═══════════════════════════════════════════════════════════════
+   Paramètres :
+     montant          : capital initial (nombre)
+     tauxAnnuel       : taux nominal annuel en %
+     dureeAmort       : nombre de PÉRIODES d'amortissement (hors différé/carence)
+     dateDebut        : date ISO 1ère échéance (ou date versement)
+     opts {
+       periodicite    : "Mensuelle"|"Trimestrielle"|"Semestrielle"|"Annuelle"
+       modalite       : "Annuités constantes"|"Capital constant"|"In fine"|
+                        "Différé total puis in fine"|"Différé puis annuités"|"Différé puis capital constant"
+       differeMois    : nombre de PÉRIODES de différé (intérêts seulement)
+       carenceMois    : nombre de PÉRIODES de carence (aucun paiement)
+       assurancePeriode : assurance par période (nombre)
+       tauxGarantie   : commission de garantie annuelle en %
+       tauxGarantie2  : commission de garantie 2 annuelle (après dureeGarantie1 périodes)
+       dureeGarantie1 : nb de périodes pendant lesquelles tauxGarantie s'applique
+       tauxDiffere    : taux pendant la période de différé (si différent)
+     }
+   Retourne tableau de lignes (une ligne = une période)
+═══════════════════════════════════════════════════════════════ */
+function calcEcheancier(montant, tauxAnnuel, dureeAmort, dateDebut, assurancePeriode, carenceMois, tauxGarantieAnnuel, tauxDiffere, _unused, differeMois, modalite, tauxGarantie2, dureeGarantie1, periodicite) {
+  if (!montant || !dureeAmort) return [];
 
-  // Structure chronologique :
-  // Rangs 1..carenceMois          → Carence (aucun paiement, capital = montant)
-  // Rang  carenceMois+1           → Capitalisation (si avecCapita, capital += intérêts)
-  // Rangs carenceMois+2..+differ  → Différé (intérêts seulement)
-  // Rangs suivants                → Amortissement
-  const avecCapita  = tauxCapita > 0;
-  const rangCapita  = avecCapita ? carenceMois + 1 : -1;
-  const offsetAmort = avecCapita ? 1 : 0;
+  // Compatibilité ancienne signature (typeAmort → modalite)
+  if (modalite === "annuites") modalite = "Annuités constantes";
+  if (modalite === "capital")  modalite = "Capital constant";
+  if (!modalite) modalite = "Annuités constantes";
+  if (!periodicite) periodicite = "Mensuelle";
 
-  // Capital AVANT capitalisation = montant initial
-  // Capital APRÈS capitalisation = montant * (1 + tauxCapita/100)
-  let capital = montant; // démarre au montant initial
+  const periodeMois = periodicite === "Trimestrielle" ? 3 : periodicite === "Semestrielle" ? 6 : periodicite === "Annuelle" ? 12 : 1;
+  const nbPerAn     = 12 / periodeMois;
 
-  // Durée amortissement = total - carence - (1 si capita) - différé
-  const capitalCapitalise = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
-  const dureeAmort = dureeM; // dureeM = durée amortissement saisie directement
-  const pmtBase    = r > 0 && dureeAmort > 0
-    ? capitalCapitalise * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
-    : (dureeAmort > 0 ? capitalCapitalise / dureeAmort : 0);
+  // Taux par période
+  const r   = tauxAnnuel > 0 ? tauxAnnuel / 100 / nbPerAn : 0;
+  const rD  = tauxDiffere != null && tauxDiffere > 0 ? tauxDiffere / 100 / nbPerAn : r;
+  const rG1 = tauxGarantieAnnuel > 0 ? tauxGarantieAnnuel / 100 / nbPerAn : 0;
+  const rG2 = tauxGarantie2 > 0 ? tauxGarantie2 / 100 / nbPerAn : rG1;
+  const limG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999;
 
+  const ass = parseNum(assurancePeriode) || 0;
+  const car = parseInt(carenceMois) || 0;
+  const dif = parseInt(differeMois) || 0;
+
+  // Déterminer si c'est "in fine"
+  const isInFine = modalite === "In fine" || modalite === "Différé total puis in fine";
+  const isCapConst = modalite === "Capital constant" || modalite === "Différé puis capital constant";
+
+  // Calcul mensualité pour annuités constantes
+  const capitalAmort = montant;
+  let pmt = 0;
+  if (!isInFine && !isCapConst && r > 0 && dureeAmort > 0) {
+    pmt = capitalAmort * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1);
+  } else if (!isInFine && !isCapConst && r === 0 && dureeAmort > 0) {
+    pmt = capitalAmort / dureeAmort;
+  }
+
+  const totalPeriodes = car + dif + dureeAmort;
   const rows = [];
+  let capital = montant;
   let cumulInterets = 0;
-  const d0 = dateDebut ? new Date(dateDebut) : new Date();
+  let periodN = 0; // compteur de périodes depuis dateDebut
 
-  for (let i = 1; i <= dureeTotal; i++) {
-    // Dates strictement chronologiques
-    const date = new Date(d0);
-    date.setMonth(date.getMonth() + i - 1);
-    const dateStr = date.toISOString().split("T")[0];
+  for (let i = 1; i <= totalPeriodes; i++) {
+    const dateStr = dateDebut ? addPeriods(dateDebut, periodN, periodicite) : "";
+    periodN++;
+
+    const estCarence = i <= car;
+    const estDiffere = !estCarence && i <= car + dif;
 
     let interets = 0, amort = 0, commGar = 0, echeance = 0;
-    let estCapita = false, estCarence = false, estDiffere = false;
 
-    estCarence = i <= carenceMois;
-    estCapita  = avecCapita && i === rangCapita;
-    estDiffere = !estCarence && !estCapita && i <= carenceMois + offsetAmort + differeMois;
+    const rGCur = i <= limG1 ? rG1 : rG2;
+    commGar = capital * rGCur;
 
     if (estCarence) {
-      // Carence : aucun paiement, capital reste à montant initial
+      // Aucun flux
       interets = 0; amort = 0; echeance = 0; commGar = 0;
-      // capital inchangé (= montant)
-    } else if (estCapita) {
-      // Capitalisation : les intérêts s'ajoutent au capital, aucun flux sortant
-      interets = montant * (tauxCapita / 100);
-      amort = 0; echeance = 0; commGar = 0;
-      capital = capitalCapitalise; // capital passe à montant + intérêts capitalisés
-      cumulInterets += interets;
     } else if (estDiffere) {
-      interets = capital * rD;
-      amort    = 0;
-      const rGd = i <= _dG1 ? rG1 : rG2;
-      commGar  = capital * rGd;
+      // Intérêts seulement (ou 0 si différé total = aucun paiement pendant le différé)
+      const rCur = modalite === "Différé total puis in fine" ? 0 : rD;
+      interets = capital * rCur;
+      amort = 0;
       echeance = interets + commGar + ass;
       cumulInterets += interets;
     } else {
+      // Phase d'amortissement
       interets = capital * r;
-      const rGa = i <= _dG1 ? rG1 : rG2;
-      commGar  = capital * rGa;
-      if (typeAmort === "capital") {
-        amort    = Math.min(capitalCapitalise / dureeAmort, capital);
-      } else {
-        amort    = Math.min(pmtBase - interets, capital);
-      }
-      echeance = amort + interets + commGar + ass;
       cumulInterets += interets;
+
+      if (isInFine) {
+        // Remboursement in fine : le capital est remboursé en une fois à la dernière échéance
+        if (i === totalPeriodes) {
+          amort = capital;
+          echeance = amort + interets + commGar + ass;
+        } else {
+          amort = 0;
+          echeance = interets + commGar + ass;
+        }
+      } else if (isCapConst) {
+        amort = Math.min(capitalAmort / dureeAmort, capital);
+        echeance = amort + interets + commGar + ass;
+      } else {
+        // Annuités constantes
+        amort = Math.min(pmt - interets, capital);
+        amort = Math.max(0, amort);
+        echeance = amort + interets + commGar + ass;
+        // Correction dernière échéance : solder le capital
+        if (i === totalPeriodes && capital - amort > 0.01) {
+          amort = capital;
+          echeance = amort + interets + commGar + ass;
+        }
+      }
       capital = Math.max(0, capital - amort);
     }
 
-    const echeanceGlobale = echeance; // = tout inclus
     rows.push({
-      n: i, date: dateStr,
-      echeance, capital: amort, interets, cumulInterets,
-      commGarantie: commGar, assurance: ass,
-      echeanceGlobale, capitalRestant: capital,
-      estCapita, estCarence, estDiffere,
-      paye: false, datePaiement:"", commentaire:""
+      n: i,
+      date: dateStr,
+      echeance: echeance,
+      capital: amort,
+      interets,
+      cumulInterets,
+      commGarantie: commGar,
+      assurance: ass,
+      echeanceGlobale: echeance,
+      capitalRestant: capital,
+      estCapita: false,
+      estCarence,
+      estDiffere,
+      paye: false,
+      datePaiement: "",
+      commentaire: ""
     });
   }
   return rows;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ECHEANCIER DOSSIER MODAL (panneau latéral)
+   calcDossierAuto — recalcul auto des méta-données depuis les lignes
+   ═══════════════════════════════════════════════════════════════ */
+window.calcDossierAuto = function calcDossierAuto(dos) {
+  var lg = dos.lignes || [];
+  if (!lg.length) return dos;
+  var nowS = new Date().toISOString().split("T")[0];
+
+  var totalVers = (dos.versements||[]).reduce(function(a,v){
+    return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
+  }, 0);
+  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
+  var montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
+
+  var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
+  var dateFin = dates.length ? dates[dates.length-1] : "";
+
+  // Détection périodicité
+  var rangsFlux = lg.filter(function(r){ return (r.interets||0) > 0 || (r.capital||0) > 0; });
+  var periodicite = dos.periodicite || "Mensuelle";
+  if (rangsFlux.length >= 2 && !dos.periodicite) {
+    var d1 = new Date(rangsFlux[0].date||"2000-01-01");
+    var d2 = new Date(rangsFlux[1].date||"2000-01-01");
+    var diffM = Math.round((d2 - d1) / (1000*60*60*24*30));
+    if (diffM >= 10 && diffM <= 14) periodicite = "Mensuelle";
+    else if (diffM >= 2 && diffM <= 4) periodicite = "Trimestrielle";
+    else if (diffM >= 5 && diffM <= 7) periodicite = "Semestrielle";
+    else if (diffM >= 11 && diffM <= 13) periodicite = "Annuelle";
+  }
+  var periodeMois = periodicite === "Trimestrielle" ? 3 : periodicite === "Semestrielle" ? 6 : periodicite === "Annuelle" ? 12 : 1;
+  var nbPerAn = 12 / periodeMois;
+
+  // TEG réel
+  var tauxAuto = "";
+  var totalInterets = lg.reduce(function(a,r){ return a + (r.interets||0); }, 0);
+  var dureeAn = lg.length / nbPerAn / nbPerAn; // en années
+  var montantBase = parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",",".")) || montantAuto;
+  if (totalInterets > 0 && montantBase > 0 && dureeAn > 0) {
+    tauxAuto = (totalInterets / montantBase / (lg.length / nbPerAn) * 100).toFixed(3);
+  }
+
+  var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
+  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+
+  return Object.assign({}, dos, {
+    montant:    dos.montant || String(montantAuto),
+    duree:      String(lg.length),
+    dateFin:    dateFin,
+    capitalRestantActuel: capitalRestantActuel,
+    totalVersements: totalVers || montantAuto,
+  });
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   COMPOSANT EchDossierPanel — panneau de création/édition
+   (ouverture depuis bouton "+ Nouvel échéancier" ou ✏️ d'un dossier)
    ═══════════════════════════════════════════════════════════════ */
 function EchDossierPanel({ dossier, onSave, onClose }) {
-  const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => {
     document.body.classList.add("cb-modal-open");
     return () => document.body.classList.remove("cb-modal-open");
   }, []);
 
-  const [d, setD] = React.useState({ ...dossier });
+  const [d, setD] = React.useState({ periodicite:"Mensuelle", modalite:"Annuités constantes", ...dossier });
   const [echTab, setEchTab] = React.useState("echeancier");
   const set = (k,v) => setD(p=>({...p,[k]:v}));
 
@@ -7467,48 +7567,59 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white" };
   const lbl = (t) => <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",
     marginBottom:3,letterSpacing:"0.06em",textTransform:"uppercase" }}>{t}</div>;
+  const sect = (t,color="#102A63",bg="#F0F5FF",bd="#BFDBFE") => (
+    <div style={{fontSize:9,fontWeight:700,color,fontFamily:"'Lora',serif",letterSpacing:"0.06em",
+      background:bg,borderRadius:"6px 6px 0 0",padding:"5px 10px",border:`1px solid ${bd}`,borderBottom:"none",marginBottom:0}}>{t}</div>
+  );
 
-  /* Calcul de l'échéancier */
+  const fmtE = (v,dec=2) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
+
   const regenerer = () => {
+    const montant = parseNum(d.montant);
+    const taux    = parseNum(d.tauxAnnuel);
+    const duree   = parseInt(d.duree)||0;
+    const dateDebut = d.dateDebut || d.dateVersement || "";
+    if (!montant || !duree || !dateDebut) {
+      alert("Renseignez au minimum : montant, durée d'amortissement et date de début.");
+      return;
+    }
     const rows = calcEcheancier(
-      parseNum(d.montant), parseNum(d.tauxAnnuel), parseInt(d.duree)||0,
-      d.dateDebut, parseNum(d.assuranceMensuelle)||0,
-      parseInt(d.carence)||0, parseNum(d.tauxGarantie)||0,
+      montant, taux, duree, dateDebut,
+      parseNum(d.assurancePeriode)||0,
+      parseInt(d.carence)||0,
+      parseNum(d.tauxGarantie)||0,
       d.tauxDiffere ? parseNum(d.tauxDiffere) : null,
-      parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites",
-      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0
+      0, // unused
+      parseInt(d.differe)||0,
+      d.modalite||"Annuités constantes",
+      parseNum(d.tauxGarantie2)||0,
+      parseInt(d.dureeGarantie1)||0,
+      d.periodicite||"Mensuelle"
     );
-    // Préserver les données de paiement si déjà saisies
+    // Préserver les données de paiement existantes
     const merged = rows.map((r,i) => {
       const existing = (d.lignes||[])[i] || {};
       return { ...r, paye: existing.paye||false, datePaiement: existing.datePaiement||"", commentaire: existing.commentaire||"" };
     });
-    // Injecter les versements de fonds dans l'échéancier
+    // Injecter les versements de fonds
     const versements = (d.versements||[]).filter(v=>v.date&&v.montant);
     let final = [...merged];
     versements.forEach(v => {
-      const dateIso = v.date; // déjà au format YYYY-MM-DD
-      // Trouver la position chronologique
-      let pos = final.findIndex(r => r.date > dateIso);
+      let pos = final.findIndex(r => r.date > v.date);
       if (pos === -1) pos = final.length;
-      const versRow = {
-        n: 0, date: dateIso,
-        echeance: 0, capital: 0, interets: 0, cumulInterets: 0,
-        commGarantie: 0, assurance: 0, echeanceGlobale: 0,
-        capitalRestant: parseNum(v.montant),
-        versement: parseNum(v.montant),
-        estCarence: false, estCapita: false, estDiffere: false,
-        estVersement: true,
-        paye: false, datePaiement: "", commentaire: "Versement de fonds"
-      };
-      final.splice(pos, 0, versRow);
+      final.splice(pos, 0, {
+        n: 0, date: v.date, echeance: 0, capital: 0, interets: 0, cumulInterets: 0,
+        commGarantie: 0, assurance: 0, echeanceGlobale: 0, capitalRestant: parseNum(v.montant),
+        versement: parseNum(v.montant), estCarence: false, estCapita: false, estDiffere: false,
+        estVersement: true, paye: false, datePaiement: "", commentaire: "Versement de fonds"
+      });
     });
-    // Renuméroter
     final = final.map((r,i)=>({...r,n:i+1}));
     setD(p=>({...p, lignes: final}));
   };
+
   React.useEffect(() => {
-    if (d.montant && d.duree && d.dateDebut && !d.lignes?.length) regenerer();
+    if (d.montant && d.duree && (d.dateDebut||d.dateVersement) && !d.lignes?.length) regenerer();
   }, []);
 
   const updLigne = (idx,k,v) => {
@@ -7516,9 +7627,6 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
     lignes[idx] = {...lignes[idx],[k]:v};
     setD(p=>({...p,lignes}));
   };
-
-  const fmtE = (v,dec=2) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
-  const fmtP = (v) => isNaN(Number(v))?"—":Number(v).toFixed(4)+" %";
 
   const lignes = d.lignes||[];
   const totalEch = lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0);
@@ -7530,190 +7638,238 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
   const restant  = lignes.length - paye;
   const prochaine = lignes.find(r=>r.date>nowPanel);
 
+  const isInFine = (d.modalite||"").includes("in fine") || (d.modalite||"").includes("In fine");
+
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
       onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }}>
-      <div style={{ width:"min(1050px,97vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
+      <div style={{ width:"min(1100px,97vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
 
         {/* Header */}
-        <div style={{ background:"#102A63",padding:"14px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
+        <div style={{ background:"#102A63",padding:"14px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,borderBottom:"3px solid #E67E22" }}>
           <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:2 }}>
-              <div style={{ fontSize:11,color:"rgba(255,255,255,0.5)",fontFamily:"'Lora',serif",letterSpacing:"0.06em" }}>ÉCHÉANCIER</div>
-              {d.reference && <span style={{ fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"'Lora',serif",background:"rgba(255,255,255,0.1)",borderRadius:4,padding:"1px 7px" }}>{d.reference}</span>}
-            </div>
+            <div style={{ fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",marginBottom:2 }}>ÉCHÉANCIER DE PRÊT</div>
             <div style={{ fontSize:17,fontWeight:700,color:"white",fontFamily:"'Lora',serif" }}>{d.intitule||"Nouvel échéancier"}</div>
           </div>
-          <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+            <button onClick={()=>{ onSave(d); onClose(); }}
+              style={{ background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:11,fontFamily:"'DM Mono',monospace",letterSpacing:"0.04em" }}>
+              ✓ Enregistrer
+            </button>
             <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center" }}>×</button>
           </div>
         </div>
 
-        {/* Corps : 2 colonnes */}
+        {/* Corps 2 colonnes */}
         <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"row" }}>
 
-          {/* ── Colonne gauche : infos générales ── */}
-          <div style={{ width:340,flexShrink:0,overflowY:"auto",borderRight:"1px solid #ECEAE5",padding:"18px 20px",display:"flex",flexDirection:"column",gap:12 }}>
+          {/* ── Colonne gauche : formulaire ── */}
+          <div style={{ width:350,flexShrink:0,overflowY:"auto",borderRight:"1px solid #ECEAE5",padding:"18px 20px",display:"flex",flexDirection:"column",gap:10 }}>
 
             {/* Statut rapide */}
-            <div style={{ background:"#F0F5FF",borderRadius:10,padding:"12px 14px",border:"1px solid #BFDBFE" }}>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10 }}>
-                <div>
-                  <div style={{ fontSize:9,color:"#AAA",letterSpacing:"0.06em",fontFamily:"'Lora',serif",marginBottom:2 }}>VERSEMENTS EFFECTUÉS</div>
-                  <div style={{ fontSize:18,fontWeight:700,color:"#1D4ED8",fontFamily:"'Lora',serif" }}>{paye}<span style={{ fontSize:11,fontWeight:400,color:"#60A5FA" }}>/{lignes.length}</span></div>
-                </div>
-                <div>
-                  <div style={{ fontSize:9,color:"#AAA",letterSpacing:"0.06em",fontFamily:"'Lora',serif",marginBottom:2 }}>PROCHAINE ÉCHÉANCE</div>
-                  <div style={{ fontSize:11,fontWeight:700,color:"#1D4ED8",fontFamily:"'Lora',serif" }}>{prochaine?prochaine.date.split("-").reverse().join("/"):"—"}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize:9,color:"#AAA",letterSpacing:"0.06em",fontFamily:"'Lora',serif",marginBottom:2 }}>CAPITAL RESTANT DÛ</div>
-                  <div style={{ fontSize:12,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif" }}>{fmtE(lignes[paye]?.capitalRestant||0)}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize:9,color:"#AAA",letterSpacing:"0.06em",fontFamily:"'Lora',serif",marginBottom:2 }}>RESTANT</div>
-                  <div style={{ fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{restant} mois</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Infos prêt */}
-            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={compactInp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={compactInp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={compactInp} /></div>
-              <div>{lbl("TYPE D'AMORTISSEMENT")}
-                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={compactInp}>
-                  <option value="annuites">Annuités constantes</option>
-                  <option value="capital">Capital constant</option>
-                </select>
-              </div>
-              <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={compactInp} /></div>
-              <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={compactInp} /></div>
-              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={compactInp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
-              <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={compactInp} /></div>
-              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={compactInp} /></div>
-              <div style={{gridColumn:"1/-1"}}>
-                {lbl("DATES DE VERSEMENT DES FONDS")}
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {(d.versements||[]).map((v,vi)=>(
-                    <div key={vi} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"end"}}>
-                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Date</div><input type="date" value={v.date||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],date:e.target.value};set("versements",vs);}} style={inp}/></div>
-                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div><input type="text" value={v.montant||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],montant:e.target.value};set("versements",vs);}} placeholder="1 000 000" style={inp}/></div>
-                      <button onClick={()=>set("versements",(d.versements||[]).filter((_,j)=>j!==vi))} style={{border:"none",background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"6px 8px",cursor:"pointer",fontSize:13,height:36}}>×</button>
+            {lignes.length > 0 && (
+              <div style={{ background:"#F0F5FF",borderRadius:10,padding:"10px 14px",border:"1px solid #BFDBFE" }}>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+                  {[
+                    {lbl:"Échéances passées",val:`${paye}/${lignes.length}`,color:"#1D4ED8"},
+                    {lbl:"Prochaine",val:prochaine?prochaine.date.split("-").reverse().join("/"):"Terminé",color:"#A16207"},
+                    {lbl:"Capital restant dû",val:fmtE(lignes[paye]?.capitalRestant||0),color:"#C0392B"},
+                    {lbl:"Total intérêts",val:fmtE(totalInt),color:"#C0392B"},
+                  ].map(k=>(
+                    <div key={k.lbl}>
+                      <div style={{ fontSize:8,color:"#AAA",letterSpacing:"0.06em",fontFamily:"'Lora',serif",marginBottom:1 }}>{k.lbl.toUpperCase()}</div>
+                      <div style={{ fontSize:11,fontWeight:700,color:k.color,fontFamily:"'Lora',serif" }}>{k.val}</div>
                     </div>
                   ))}
-                  <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])} style={{fontSize:11,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",textAlign:"left"}}>+ Ajouter un versement</button>
                 </div>
               </div>
-              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={compactInp} /></div>
-              <div>{lbl("Garantie")}
-                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={compactInp}>
-                  <option value="">—</option>
-                  {ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}
-                </select>
-              </div>
-              <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
-                <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={compactInp} /></div>
-                  <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={compactInp} /></div>
-                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={compactInp} /></div>
-                  <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={compactInp} /></div>
-                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={compactInp} /></div>
-                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={compactInp} /></div>
+            )}
+
+            {/* ─ Section 1 : Identité du contrat ─ */}
+            {sect("1 — Identité du contrat","#102A63","#F0F5FF","#BFDBFE")}
+            <div style={{ border:"1px solid #BFDBFE",borderRadius:"0 0 8px 8px",padding:"10px 12px",display:"flex",flexDirection:"column",gap:7 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
+                <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : PGE Résilience CEPAC" style={inp} /></div>
+                <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="Caisse d'Epargne CEPAC…" style={inp} /></div>
+                <div style={{ gridColumn:"1/-1" }}>{lbl("Emprunteur")}<input value={d.emprunteur||""} onChange={e=>set("emprunteur",e.target.value)} placeholder="KP1 SAS…" style={inp} /></div>
+                <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="PGE-RES-001" style={inp} /></div>
+                <div>{lbl("Type de crédit")}
+                  <select value={d.typeCredit||""} onChange={e=>set("typeCredit",e.target.value)} style={inp}>
+                    <option value="">—</option>
+                    {ECH_TYPE_CREDIT.map(o=><option key={o}>{o}</option>)}
+                  </select>
                 </div>
+                <div>{lbl("Date de signature")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={inp} /></div>
+                <div>{lbl("Date de versement")}<input type="date" value={d.dateVersement||""} onChange={e=>set("dateVersement",e.target.value)} style={inp} /></div>
+                <div style={{ gridColumn:"1/-1" }}>{lbl("Objet / Destination")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Trésorerie, Capex matériel…" style={inp} /></div>
+                <div>{lbl("Garantie")}<select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={inp}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
+                <div>{lbl("Caution")}<input value={d.caution||""} onChange={e=>set("caution",e.target.value)} placeholder="JAV Investissement…" style={inp} /></div>
               </div>
-              <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
-                <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("Carence (mois) — aucun paiement")}
-                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={compactInp} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
+            </div>
+
+            {/* ─ Section 2 : Structure financière ─ */}
+            {sect("2 — Structure financière","#065F46","#F0FDF4","#BBF7D0")}
+            <div style={{ border:"1px solid #BBF7D0",borderRadius:"0 0 8px 8px",padding:"10px 12px",display:"flex",flexDirection:"column",gap:7 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
+                <div>
+                  {lbl("Montant (€)")}
+                  <div style={{position:"relative"}}>
+                    <input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)}
+                      onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n)&&n>0)set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}}
+                      placeholder="10 000 000,00" style={{...inp,paddingRight:20}}/>
+                    <span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span>
                   </div>
-                  <div>{lbl("Différé add. (mois) — intérêts seuls")}
-                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={compactInp} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
+                </div>
+                <div>{lbl("Taux nominal (%/an)")}
+                  <input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="2,99" style={inp} />
+                </div>
+                <div>{lbl("Modalité de remboursement")}
+                  <select value={d.modalite||"Annuités constantes"} onChange={e=>set("modalite",e.target.value)} style={inp}>
+                    {ECH_MODALITE.map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>{lbl("Périodicité")}
+                  <select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={inp}>
+                    {ECH_PERIODICITE.map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>{lbl("Durée amortissement (nb périodes)")}
+                  <input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="20" style={inp} />
+                  <div style={{fontSize:8,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2}}>
+                    Ex : trimestriel 5 ans = 20 périodes
                   </div>
+                </div>
+                <div>{lbl("1ère date d'échéance")}
+                  <input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={inp} />
+                </div>
+                <div>{lbl("TEG indicatif (%/an)")}
+                  <input type="text" inputMode="decimal" value={d.tegIndicatif||""} onChange={e=>set("tegIndicatif",e.target.value)} placeholder="3,40" style={inp} />
+                </div>
+                <div>{lbl("Assurance / période (€)")}
+                  <input type="text" inputMode="decimal" value={d.assurancePeriode||""} onChange={e=>set("assurancePeriode",e.target.value)} placeholder="0,00" style={inp} />
                 </div>
               </div>
             </div>
 
+            {/* ─ Section 3 : Périodes particulières ─ */}
+            {sect("3 — Périodes particulières","#92400E","#FFFBEB","#FDE68A")}
+            <div style={{ border:"1px solid #FDE68A",borderRadius:"0 0 8px 8px",padding:"10px 12px",display:"flex",flexDirection:"column",gap:7 }}>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
+                <div>
+                  {lbl("Carence (nb périodes)")}
+                  <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="0" style={inp} />
+                  <div style={{fontSize:8,color:"#888",fontFamily:"'Lora',serif",marginTop:2}}>Ni capital ni intérêts</div>
+                </div>
+                <div>
+                  {lbl("Différé (nb périodes)")}
+                  <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="0" style={inp} />
+                  <div style={{fontSize:8,color:"#888",fontFamily:"'Lora',serif",marginTop:2}}>Intérêts seuls (ou 0 si différé total)</div>
+                </div>
+                <div>
+                  {lbl("Taux pendant différé (%/an)")}
+                  <input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={inp} />
+                </div>
+                <div>
+                  {lbl("Com. garantie (%/an)")}
+                  <input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="0,50" style={inp} />
+                </div>
+                <div>
+                  {lbl("Com. garantie 2 (%/an)")}
+                  <input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Si différent" style={inp} />
+                </div>
+                <div>
+                  {lbl("Durée taux gar. 1 (nb périodes)")}
+                  <input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 16" style={inp} />
+                </div>
+              </div>
+              {/* Frais */}
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,paddingTop:6,borderTop:"1px solid #FDE68A" }}>
+                <div>{lbl("Frais de dossier (€)")}<input type="text" value={d.fraisDossier||""} onChange={e=>set("fraisDossier",e.target.value)} placeholder="3 000" style={inp} /></div>
+                <div>{lbl("Prime / commission garantie (€)")}<input type="text" value={d.fraisGarantie||""} onChange={e=>set("fraisGarantie",e.target.value)} placeholder="50 000" style={inp} /></div>
+              </div>
+            </div>
 
-            {/* Timeline structure */}
-            {(parseInt(d.carence)||0) + (parseInt(d.differe)||0) + (d.tauxCapita?1:0) > 0 && (() => {
-              const hasCap = parseNum(d.tauxCapita) > 0;
-              const car = parseInt(d.carence)||0;
-              const dif = parseInt(d.differe)||0;
-              const dur = parseInt(d.duree)||0;
-              const amort = dur; // dur = durée amortissement saisie directement
-              const total = (hasCap?1:0) + car + dif + amort;
-              const pctCap   = hasCap ? Math.round(1/total*100) : 0;
-              const pctCar   = Math.round(car/total*100);
-              const pctDif   = Math.round(dif/total*100);
-              const pctAmort = 100 - pctCap - pctCar - pctDif;
-              return (
-                <div style={{ marginTop:4 }}>
-                  <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6 }}>STRUCTURE DU PRÊT</div>
-                  <div style={{ display:"flex",height:16,borderRadius:6,overflow:"hidden",gap:1 }}>
-                    {car>0 && <div style={{ width:`${pctCar}%`,background:"#FCA5A5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white",fontFamily:"'Lora',serif",minWidth:20 }} title={`Carence ${car} mois`}>{car}m</div>}
-                    {hasCap && <div style={{ width:`${pctCap}%`,background:"#6D28D9",display:"flex",alignItems:"center",justifyContent:"center",minWidth:4 }} title="Capitalisation" />}
-                    {dif>0 && <div style={{ width:`${pctDif}%`,background:"#FCD34D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#92400E",fontFamily:"'Lora',serif",minWidth:20 }} title={`Différé ${dif} mois`}>{dif}m</div>}
-                    {amort>0 && <div style={{ flex:1,background:"#6EE7B7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#065F46",fontFamily:"'Lora',serif",minWidth:30 }} title={`Amortissement ${amort} mois`}>{amort}m</div>}
+            {/* ─ Versements de fonds ─ */}
+            <div style={{ background:"#F0FDF4",borderRadius:8,padding:"10px 12px",border:"1px solid #BBF7D0" }}>
+              <div style={{ fontSize:9,fontWeight:700,color:"#065F46",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>VERSEMENTS DE FONDS</div>
+              {(d.versements||[]).map((v,vi)=>(
+                <div key={vi} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"end",marginBottom:6}}>
+                  <div><div style={{fontSize:8,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Date</div>
+                    <input type="date" value={v.date||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],date:e.target.value};set("versements",vs);}} style={inp}/>
                   </div>
-                  <div style={{ display:"flex",gap:8,marginTop:5,flexWrap:"wrap" }}>
-                    {car>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#B91C1C" }}><span style={{ width:8,height:8,borderRadius:2,background:"#FCA5A5",display:"inline-block" }}/> Carence ({car} mois)</div>}
-                    {hasCap && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#6D28D9" }}><span style={{ width:8,height:8,borderRadius:2,background:"#6D28D9",display:"inline-block" }}/> Capitalisation</div>}
-                    {dif>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#A16207" }}><span style={{ width:8,height:8,borderRadius:2,background:"#FCD34D",display:"inline-block" }}/> Différé ({dif} mois)</div>}
-                    {amort>0 && <div style={{ display:"flex",alignItems:"center",gap:3,fontSize:9,fontFamily:"'Lora',serif",color:"#065F46" }}><span style={{ width:8,height:8,borderRadius:2,background:"#6EE7B7",display:"inline-block" }}/> Amortissement ({amort} mois)</div>}
+                  <div><div style={{fontSize:8,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div>
+                    <input type="text" value={v.montant||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],montant:e.target.value};set("versements",vs);}} placeholder="1 000 000" style={inp}/>
+                  </div>
+                  <button onClick={()=>set("versements",(d.versements||[]).filter((_,j)=>j!==vi))} style={{border:"none",background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:13,height:32}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])}
+                style={{fontSize:11,fontFamily:"'Lora',serif",background:"white",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",width:"100%"}}>
+                + Ajouter un versement
+              </button>
+            </div>
+
+            {/* Visualisation timeline */}
+            {(() => {
+              const hasDif = parseInt(d.differe)||0;
+              const hasCar = parseInt(d.carence)||0;
+              const dur    = parseInt(d.duree)||0;
+              const total  = hasCar + hasDif + dur;
+              if (!total) return null;
+              return (
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:5}}>STRUCTURE DU PRÊT</div>
+                  <div style={{display:"flex",height:14,borderRadius:6,overflow:"hidden",gap:1}}>
+                    {hasCar>0&&<div style={{width:`${hasCar/total*100}%`,background:"#FCA5A5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white",minWidth:20}}>{hasCar}p</div>}
+                    {hasDif>0&&<div style={{width:`${hasDif/total*100}%`,background:"#FCD34D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#92400E",minWidth:20}}>{hasDif}p</div>}
+                    {dur>0&&<div style={{flex:1,background:"#6EE7B7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"#065F46",minWidth:30}}>{dur}p {d.periodicite&&d.periodicite!=="Mensuelle"?`(${d.periodicite.toLowerCase()})`:""}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:10,marginTop:4,flexWrap:"wrap"}}>
+                    {hasCar>0&&<span style={{fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif"}}>● Carence {hasCar}p</span>}
+                    {hasDif>0&&<span style={{fontSize:9,color:"#A16207",fontFamily:"'Lora',serif"}}>● Différé {hasDif}p</span>}
+                    {dur>0&&<span style={{fontSize:9,color:"#065F46",fontFamily:"'Lora',serif"}}>● Amort. {dur}p = {Math.round(dur*(d.periodicite==="Trimestrielle"?3:d.periodicite==="Semestrielle"?6:d.periodicite==="Annuelle"?12:1)/12*10)/10} ans</span>}
                   </div>
                 </div>
               );
             })()}
 
-            <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:12 }}>
-              {/* Import CSV */}
-              <div style={{ marginBottom:10 }}>
-                <div style={{ fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:5 }}>
-                  Ou importer directement depuis un fichier CSV :
-                </div>
-                <label style={{ cursor:"pointer" }}>
-                  <input type="file" accept=".csv" style={{ display:"none" }}
-                    onChange={e=>{
-                      const file=e.target.files[0];
-                      if(!file) return;
-                      const reader=new FileReader();
-                      reader.onload=ev=>{
-                        const rows=parseCSVEcheancier(ev.target.result);
-                        if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
-                        const updated={...d, lignes:rows};
-                        set("lignes",rows);
-                        alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                      };
-                      reader.readAsText(file,"UTF-8");
-                    }}
-                  />
-                  <span style={{ display:"flex",alignItems:"center",gap:6,padding:"7px 12px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600 }}>
-                    📥 Importer un fichier CSV
-                  </span>
-                </label>
-              </div>
-              <button onClick={regenerer}
-                style={{ width:"100%",background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>
-                🔄 Générer / Recalculer l'échéancier
-              </button>
+            {/* Import CSV */}
+            <div>
+              <div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:5}}>Ou importer directement depuis un fichier CSV (tableau d'amortissement banque) :</div>
+              <label style={{ cursor:"pointer" }}>
+                <input type="file" accept=".csv" style={{ display:"none" }}
+                  onChange={e=>{
+                    const file=e.target.files[0]; if(!file) return;
+                    const reader=new FileReader();
+                    reader.onload=ev=>{
+                      const rows=parseCSVEcheancier(ev.target.result);
+                      if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                      setD(p=>({...p, lignes:rows}));
+                      alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                    };
+                    reader.readAsText(file,"UTF-8");
+                  }}
+                />
+                <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px 12px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600}}>
+                  📥 Importer un fichier CSV
+                </span>
+              </label>
             </div>
 
+            <button onClick={regenerer}
+              style={{ background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"9px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>
+              🔄 Générer / Recalculer l'échéancier
+            </button>
+
             {/* Notes */}
-            <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:12 }}>
-              <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em" }}>NOTES</div>
-              <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Observations, conditions particulières…" rows={5} />
+            <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:10 }}>
+              <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:5 }}>NOTES</div>
+              <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Observations, conditions particulières…" rows={4} />
             </div>
 
             {/* PJ */}
-            <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:12 }}>
-              <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em" }}>PIÈCES JOINTES</div>
+            <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:10 }}>
+              <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:5 }}>PIÈCES JOINTES</div>
               <AttachmentZone attachments={d.attachments||[]} onChange={v=>set("attachments",v)} />
             </div>
           </div>
@@ -7722,16 +7878,16 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
           <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column" }}>
 
             {/* Résumé financier */}
-            <div style={{ background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 16px",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,flexShrink:0 }}>
+            <div style={{ background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 16px",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,flexShrink:0 }}>
               {[
-                { label:"Total échéances",       val:fmtE(totalEch),   color:"#102A63" },
-                { label:"Total intérêts",         val:fmtE(totalInt),   color:"#C0392B" },
-                { label:"Total garantie",         val:fmtE(totalGar),   color:"#6D28D9" },
-                { label:"Total assurances",       val:fmtE(totalAss),   color:"#E67E22" },
-                { label:"Coût total crédit",      val:fmtE(totalInt+totalAss+totalGar), color:"#B91C1C" },
+                { label:"Total échéances",   val:fmtE(totalEch),             color:"#102A63" },
+                { label:"Total intérêts",    val:fmtE(totalInt),             color:"#C0392B" },
+                { label:"Total garantie",    val:fmtE(totalGar),             color:"#6D28D9" },
+                { label:"Total assurances",  val:fmtE(totalAss),             color:"#E67E22" },
+                { label:"Coût total crédit", val:fmtE(totalInt+totalAss+totalGar), color:"#B91C1C" },
               ].map(item=>(
                 <div key={item.label} style={{ textAlign:"center" }}>
-                  <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{item.label}</div>
+                  <div style={{ fontSize:8,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{item.label.toUpperCase()}</div>
                   <div style={{ fontSize:13,fontWeight:700,color:item.color,fontFamily:"'Lora',serif" }}>{item.val}</div>
                 </div>
               ))}
@@ -7742,68 +7898,59 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               ? <div style={{ flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:13,gap:12 }}>
                   <div style={{ fontSize:32 }}>📅</div>
                   <div>Renseignez les informations du prêt puis cliquez sur "Générer l'échéancier"</div>
+                  <div style={{fontSize:11,color:"#BDC3C7",fontFamily:"'DM Mono',monospace"}}>ou importez un CSV depuis votre banque</div>
                 </div>
               : <div style={{ flex:1,overflowY:"auto" }}>
-                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif" }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>
                     <thead style={{ position:"sticky",top:0,zIndex:2 }}>
                       <tr style={{ background:"#102A63" }}>
-                        {["N°","Date","Type","Échéance","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Échéance globale","Capital restant dû"].map(h=>(
-                          <th key={h} style={{ padding:"7px 8px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:h==="N°"||h==="Payé"||h==="Type"?"center":"right",fontSize:10 }}>{h}</th>
+                        {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant"].map(h=>(
+                          <th key={h} style={{ padding:"6px 7px",color:"white",fontWeight:400,textAlign:["N°","Type"].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap",fontFamily:"'DM Mono',monospace" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {lignes.map((row,i)=>{
-                        const isPast = row.date < new Date().toISOString().split("T")[0];
-                        const isNext = !row.paye && i === paye;
+                        const isPast=row.date<=new Date().toISOString().split("T")[0];
+                        const isNext=row.date>new Date().toISOString().split("T")[0]&&i===paye;
+                        const TD={padding:"3px 7px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
                         return (
-                          <tr key={i} style={{ background: row.paye?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",
-                            borderBottom:"1px solid #F0F0F0",
-                            outline: isNext ? "1px solid #FDE68A" : "none" }}>
-                            <td style={{ padding:"5px 8px",textAlign:"center",color:"#888",fontWeight:600 }}>{row.n}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400 }}>
-                              {row.date.split("-").reverse().join("/")}
+                          <tr key={i} style={{ background:isPast?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",outline:isNext?"1px solid #FDE68A":"none" }}>
+                            <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600,width:26}}>{row.n}</td>
+                            <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:70}}>{row.date?row.date.split("-").reverse().join("/"):"—"}</td>
+                            <td style={{...TD,textAlign:"center",width:82}}>
+                              {row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Carence</span>
+                              :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Différé</span>
+                              :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Versement</span>
+                              :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700}}>—</span>
+                              :row.capital===0&&row.echeance>0?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700}}>In fine int.</span>
+                              :row.capital>0&&row.capitalRestant<0.01?<span style={{fontSize:8,background:"#FEF3C7",color:"#D97706",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Solde</span>
+                              :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Amort.</span>}
                             </td>
-                            <td style={{ padding:"5px 8px",textAlign:"center" }}>
-                              {row.estCapita
-                                ? <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Capitalisation</span>
-                                : row.estCarence
-                                  ? <span style={{ fontSize:9,background:"#FEE2E2",color:"#B91C1C",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Carence</span>
-                                  : row.estDiffere
-                                    ? <span style={{ fontSize:9,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Différé</span>
-                                    : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
-                            </td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#27AE60" }}>{fmtE(row.capital)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#C0392B" }}>{fmtE(row.interets)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#888",fontStyle:"italic" }}>{fmtE(row.cumulInterets)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#6D28D9" }}>{fmtE(row.commGarantie)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#E67E22" }}>{fmtE(row.assurance)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#0E7490" }}>{fmtE(row.echeanceGlobale)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#2C3E50",fontWeight:600 }}>{fmtE(row.capitalRestant)}</td>
-
+                            <td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>
+                            <td style={{...TD,textAlign:"right",color:"#27AE60",width:72}}>{fmtE(row.capital)}</td>
+                            <td style={{...TD,textAlign:"right",color:"#C0392B",width:68}}>{fmtE(row.interets)}</td>
+                            <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:68}}>{fmtE(row.cumulInterets)}</td>
+                            <td style={{...TD,textAlign:"right",color:"#6D28D9",width:65}}>{fmtE(row.commGarantie)}</td>
+                            <td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>
+                            <td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>
+                            <td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                     <tfoot>
-                      <tr style={{ background:"#F8F9FB",borderTop:"2px solid #ECEAE5",fontWeight:700 }}>
-                        <td colSpan={2} style={{ padding:"6px 8px",fontSize:10,fontFamily:"'Lora',serif" }}>TOTAL</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#102A63" }}>{fmtE(totalEch)}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#27AE60" }}>{fmtE(lignes.reduce((a,r)=>a+r.capital,0))}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#C0392B" }}>{fmtE(totalInt)}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#E67E22" }}>{fmtE(totalAss)}</td>
+                      <tr style={{ background:"#F0F5FF",borderTop:"2px solid #BFDBFE",fontWeight:700 }}>
+                        <td colSpan={3} style={{ padding:"6px 8px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63" }}>TOTAL</td>
+                        <td style={{ padding:"6px 7px",textAlign:"right",color:"#102A63" }}>{fmtE(totalEch)}</td>
+                        <td style={{ padding:"6px 7px",textAlign:"right",color:"#27AE60" }}>{fmtE(lignes.reduce((a,r)=>a+(r.capital||0),0))}</td>
+                        <td style={{ padding:"6px 7px",textAlign:"right",color:"#C0392B" }}>{fmtE(totalInt)}</td>
+                        <td colSpan={5}></td>
                       </tr>
                     </tfoot>
                   </table>
                 </div>}
           </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding:"12px 22px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
-          <button onClick={()=>{ onSave(d); onClose(); }} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
         </div>
       </div>
     </div>
@@ -7811,9 +7958,284 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   ECHEANCIER VIEW — Vue principale avec sous-onglets
+   EchDossierTab — vue d'un dossier individuel (onglet latéral)
    ═══════════════════════════════════════════════════════════════ */
-/* ── EchKpisFiscaux ── */
+function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
+  const now = new Date().toISOString().split("T")[0];
+  const [localDos, setLocalDos] = React.useState(dos);
+  const [editMode, setEditMode] = React.useState(false);
+  React.useEffect(()=>setLocalDos(dos),[dos.id]);
+
+  const setL = (k,v) => setLocalDos(p=>({...p,[k]:v}));
+  const lignes = localDos.lignes||[];
+  const payeAuto = lignes.filter(r=>r.date<=now).length;
+  const pct = lignes.length>0?Math.round(payeAuto/lignes.length*100):0;
+  const restantDu = lignes[payeAuto]?.capitalRestant||(lignes.length>0?lignes[lignes.length-1].capitalRestant:0);
+  const totalInt = lignes.reduce((a,r)=>a+(r.interets||0),0);
+  const totalGar = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
+  const prochaine = lignes.find(r=>r.date>now);
+
+  const inpL = {border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
+  const lblL = (t) => <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t.toUpperCase()}</div>;
+
+  const regenererLocal = () => {
+    const montant = parseNum(localDos.montant);
+    const taux    = parseNum(localDos.tauxAnnuel);
+    const duree   = parseInt(localDos.duree)||0;
+    const dateDebut = localDos.dateDebut || localDos.dateVersement || "";
+    if (!montant || !duree || !dateDebut) { alert("Montant, durée et date début requis."); return; }
+    const rows = calcEcheancier(
+      montant, taux, duree, dateDebut,
+      parseNum(localDos.assurancePeriode)||0,
+      parseInt(localDos.carence)||0,
+      parseNum(localDos.tauxGarantie)||0,
+      localDos.tauxDiffere ? parseNum(localDos.tauxDiffere) : null,
+      0,
+      parseInt(localDos.differe)||0,
+      localDos.modalite||"Annuités constantes",
+      parseNum(localDos.tauxGarantie2)||0,
+      parseInt(localDos.dureeGarantie1)||0,
+      localDos.periodicite||"Mensuelle"
+    );
+    const merged = rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
+    const updated = {...localDos, lignes: merged};
+    setLocalDos(updated);
+    saveDossier(updated);
+  };
+
+  const insertRow = (afterIdx) => {
+    const newRow={n:0,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
+    const l=[...lignes]; l.splice(afterIdx+1,0,newRow);
+    const updated={...localDos,lignes:l.map((r,i)=>({...r,n:i+1}))};
+    setLocalDos(updated); saveDossier(updated);
+  };
+
+  const updRow = (i,k,v) => {
+    const l=[...lignes]; l[i]={...l[i],[k]:v};
+    const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
+  };
+
+  const typeOpts = ["Carence","Différé","Amortissement","In fine int.","Solde","Versement","—"];
+  const getTypeVal = (row) => row.estCarence?"Carence":row.estDiffere?"Différé":row.estVersement?"Versement":row.capital===0&&row.echeance>0?"In fine int.":row.capital>0&&row.capitalRestant<0.01?"Solde":"Amortissement";
+
+  return (
+    <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+      {/* KPI bar */}
+      <div style={{background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,flexShrink:0}}>
+        {[
+          {label:"Capital restant dû", val:fmtE(restantDu), color:"#C0392B"},
+          {label:"Avancement", val:`${pct}% (${payeAuto}/${lignes.length})`, color:"#1D4ED8"},
+          {label:"Prochaine échéance", val:prochaine?`${fmtE(prochaine.echeanceGlobale||prochaine.echeance||0)} — ${prochaine.date.split("-").reverse().join("/")}` : "Terminé", color:"#A16207"},
+          {label:"Total intérêts", val:fmtE(totalInt), color:"#C0392B"},
+          {label:"Total garanties", val:fmtE(totalGar), color:"#6D28D9"},
+        ].map(k=>(
+          <div key={k.label} style={{textAlign:"center"}}>
+            <div style={{fontSize:8,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:1}}>{k.label.toUpperCase()}</div>
+            <div style={{fontSize:11,fontWeight:700,color:k.color,fontFamily:"'Lora',serif"}}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"row"}}>
+        {/* ── Panneau gauche infos ── */}
+        <div style={{width:480,flexShrink:0,overflowY:"auto",borderRight:"1px solid #ECEAE5",padding:"14px 16px",display:"flex",flexDirection:"column",gap:8,background:"white"}}>
+          
+          {/* Infos contrat */}
+          <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em"}}>INFORMATIONS DU CONTRAT</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            <div style={{gridColumn:"1/-1"}}>{lblL("Intitulé")}<input value={localDos.intitule||""} onChange={e=>setL("intitule",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Banque")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Type de crédit")}<select value={localDos.typeCredit||""} onChange={e=>setL("typeCredit",e.target.value)} style={inpL}><option value="">—</option>{ECH_TYPE_CREDIT.map(o=><option key={o}>{o}</option>)}</select></div>
+            <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} style={inpL}/></div>
+          </div>
+
+          {/* Paramètres financiers */}
+          <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginTop:4}}>PARAMÈTRES FINANCIERS</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            <div>{lblL("Montant (€)")}
+              <div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} style={{...inpL,paddingRight:18}}/><span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#AAA"}}>€</span></div>
+            </div>
+            <div>{lblL("Taux nominal (%/an)")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Modalité")}<select value={localDos.modalite||"Annuités constantes"} onChange={e=>setL("modalite",e.target.value)} style={inpL}>{ECH_MODALITE.map(o=><option key={o}>{o}</option>)}</select></div>
+            <div>{lblL("Périodicité")}<select value={localDos.periodicite||"Mensuelle"} onChange={e=>setL("periodicite",e.target.value)} style={inpL}>{ECH_PERIODICITE.map(o=><option key={o}>{o}</option>)}</select></div>
+            <div>{lblL("Durée amort. (nb périodes)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Date 1ère échéance")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Assurance / période (€)")}<input type="text" value={localDos.assurancePeriode||""} onChange={e=>setL("assurancePeriode",e.target.value)} style={inpL}/></div>
+            <div>{lblL("TEG indicatif (%/an)")}<input type="text" value={localDos.tegIndicatif||""} onChange={e=>setL("tegIndicatif",e.target.value)} style={inpL}/></div>
+          </div>
+
+          {/* Périodes particulières */}
+          <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
+            <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PÉRIODES PARTICULIÈRES</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+              <div>{lblL("Carence (nb périodes)")}<input type="text" value={localDos.carence||""} onChange={e=>setL("carence",e.target.value)} placeholder="0" style={inpL}/></div>
+              <div>{lblL("Différé (nb périodes)")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="0" style={inpL}/></div>
+              <div>{lblL("Taux différé (%/an)")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
+              <div>{lblL("Com. gar. (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Com. gar. 2 (%/an)")}<input type="text" value={localDos.tauxGarantie2||""} onChange={e=>setL("tauxGarantie2",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Durée taux gar. 1 (périodes)")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} style={inpL}/></div>
+            </div>
+          </div>
+
+          {/* Versements de fonds */}
+          <div style={{background:"#F0FDF4",borderRadius:8,padding:"8px 10px",border:"1px solid #BBF7D0"}}>
+            <div style={{fontSize:9,fontWeight:700,color:"#065F46",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>VERSEMENTS DE FONDS</div>
+            {(localDos.versements||[]).map((v,i)=>(
+              <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:5}}>
+                <input type="date" value={v.date||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],date:e.target.value};setL("versements",vs);}} style={{...inpL,flex:1,fontSize:10}}/>
+                <div style={{position:"relative",flex:1}}><input type="text" value={v.montant||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],montant:e.target.value};setL("versements",vs);}} placeholder="0,00" style={{...inpL,paddingRight:16,fontSize:10}}/><span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#AAA"}}>€</span></div>
+                <button onClick={()=>{const vs=(localDos.versements||[]).filter((_,j)=>j!==i);setL("versements",vs);}} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>setL("versements",[...(localDos.versements||[]),{date:"",montant:""}])}
+              style={{fontSize:10,fontFamily:"'Lora',serif",background:"white",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"4px 8px",cursor:"pointer",width:"100%"}}>
+              + Ajouter un versement
+            </button>
+          </div>
+
+          {/* Actions */}
+          <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6,borderTop:"1px solid #ECEAE5"}}>
+            <button onClick={regenererLocal} style={{background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>🔄 Recalculer l'échéancier</button>
+            <label style={{cursor:"pointer"}}>
+              <input type="file" accept=".csv" style={{display:"none"}} onChange={e=>{
+                const file=e.target.files[0]; if(!file) return;
+                const reader=new FileReader();
+                reader.onload=ev=>{
+                  const rows=parseCSVEcheancier(ev.target.result);
+                  if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                  const updated={...localDos,lignes:rows};
+                  const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
+                  setLocalDos(calc); saveDossier(calc);
+                  alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                };
+                reader.readAsText(file,"UTF-8");
+              }}/>
+              <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600,cursor:"pointer"}}>📥 Importer un CSV</span>
+            </label>
+            <button onClick={()=>exportEchPDF(localDos)} style={{background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>📄 Exporter en PDF</button>
+            <button onClick={()=>{const c=window.calcDossierAuto?window.calcDossierAuto(localDos):localDos;setLocalDos(c);saveDossier(c);}} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer</button>
+          </div>
+
+          {/* Notes */}
+          <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>NOTES</div>
+            <RichTextArea value={localDos.notes||""} onChange={v=>{const u={...localDos,notes:v};setLocalDos(u);saveDossier(u);}} placeholder="Observations…" rows={4}/>
+          </div>
+
+          {/* PJ */}
+          <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PIÈCES JOINTES</div>
+            <EchAttachments attachments={localDos.attachments||[]} onChange={v=>{const u={...localDos,attachments:v};setLocalDos(u);saveDossier(u);}}/>
+          </div>
+          <button onClick={()=>deleteDossier(dos.id)} style={{border:"1px solid #ECEAE5",background:"white",color:"#AAA",borderRadius:8,padding:"6px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",marginTop:4}}>🗑 Supprimer</button>
+        </div>
+
+        {/* ── Tableau échéancier ── */}
+        <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          {lignes.length===0
+            ?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#CCC",fontFamily:"'Lora',serif",flexDirection:"column",gap:10}}><div style={{fontSize:32}}>📅</div><div>Renseignez les paramètres puis cliquez sur "Recalculer"</div></div>
+            :<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+              {/* Sous-tableau versements */}
+              {(localDos.versements||[]).filter(v=>v.date&&v.montant).length > 0 && (() => {
+                const vs = (localDos.versements||[]).filter(v=>v.date&&v.montant).sort((a,b)=>a.date>b.date?1:-1);
+                const totalV = vs.reduce((a,v)=>a+(parseNum(v.montant)||0),0);
+                return (
+                  <div style={{flexShrink:0,borderBottom:"1px solid #ECEAE5",background:"#F0FDF4"}}>
+                    <div style={{padding:"7px 14px 5px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <span style={{fontSize:11,fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif"}}>VERSEMENTS DE FONDS</span>
+                      <span style={{fontSize:11,fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif"}}>Total : {totalV.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})} €</span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Toolbar tableau */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 12px",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",flexShrink:0}}>
+                <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""} · Périodicité : {localDos.periodicite||"Mensuelle"}</div>
+                <button onClick={()=>setEditMode(m=>!m)}
+                  style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
+                  {editMode?"✓ Terminer édition":"✏️ Modifier"}
+                </button>
+              </div>
+
+              <div style={{flex:1,overflowY:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
+                  <thead style={{position:"sticky",top:0,zIndex:2}}>
+                    <tr style={{background:"#102A63"}}>
+                      {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
+                        <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap",fontFamily:"'DM Mono',monospace"}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lignes.map((row,i)=>{
+                      const isPast=row.date<=now;
+                      const isNext=row.date>now&&i===payeAuto;
+                      const TD={padding:"2px 4px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
+                      const inpS={border:"1px solid #BFDBFE",borderRadius:3,padding:"1px 4px",fontSize:9,fontFamily:"'Lora',serif",width:"100%",textAlign:"right",outline:"none"};
+                      return (
+                        <tr key={i} style={{background:isPast?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0"}}>
+                          <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600,width:26}}>{row.n}</td>
+                          <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:70}}>
+                            {editMode?<input type="date" value={row.date||""} onChange={e=>updRow(i,"date",e.target.value)} style={{...inpS,textAlign:"center",width:100}}/>
+                              :row.date?row.date.split("-").reverse().join("/"):"—"}
+                          </td>
+                          <td style={{...TD,textAlign:"center",width:80}}>
+                            {editMode
+                              ?<select value={getTypeVal(row)} onChange={e=>{const v=e.target.value;updRow(i,"estCarence",v==="Carence");updRow(i,"estDiffere",v==="Différé");updRow(i,"estVersement",v==="Versement");}} style={{...inpS,textAlign:"center",width:90}}>{typeOpts.map(o=><option key={o}>{o}</option>)}</select>
+                              :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Carence</span>
+                              :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Différé</span>
+                              :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Versement</span>
+                              :row.capital===0&&row.echeance>0?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700}}>In fine</span>
+                              :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700}}>Amort.</span>}
+                          </td>
+                          {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow(i,"echeance",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>}
+                          {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow(i,"capital",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",color:"#27AE60",width:72}}>{fmtE(row.capital)}</td>}
+                          {editMode?<td style={{...TD,textAlign:"right",width:68}}><input value={row.interets||""} onChange={e=>updRow(i,"interets",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",color:"#C0392B",width:68}}>{fmtE(row.interets)}</td>}
+                          <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:68}}>{fmtE(row.cumulInterets)}</td>
+                          {editMode?<td style={{...TD,textAlign:"right",width:65}}><input value={row.commGarantie||""} onChange={e=>updRow(i,"commGarantie",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",color:"#6D28D9",width:65}}>{fmtE(row.commGarantie)}</td>}
+                          {editMode?<td style={{...TD,textAlign:"right",width:60}}><input value={row.assurance||""} onChange={e=>updRow(i,"assurance",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>}
+                          {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow(i,"echeanceGlobale",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
+                          {editMode?<td style={{...TD,textAlign:"right",width:75}}><input value={row.capitalRestant||""} onChange={e=>updRow(i,"capitalRestant",parseNum(e.target.value))} style={inpS}/></td>
+                            :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>}
+                          {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
+                            <div style={{display:"flex",gap:2,justifyContent:"center"}}>
+                              <button title="Insérer après" onClick={()=>insertRow(i)} style={{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",cursor:"pointer",fontSize:11,borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontWeight:700}}>+</button>
+                              <button title="Supprimer" onClick={()=>{const l=lignes.filter((_,idx2)=>idx2!==i).map((r,j)=>({...r,n:j+1}));const updated={...localDos,lignes:l};setLocalDos(updated);saveDossier(updated);}} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,padding:0,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                            </div>
+                          </td>}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{background:"#F0F5FF",borderTop:"2px solid #BFDBFE",fontWeight:700}}>
+                      <td colSpan={3} style={{padding:"5px 4px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63"}}>TOTAL</td>
+                      <td style={{padding:"5px 4px",textAlign:"right",color:"#102A63",fontSize:10}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0))}</td>
+                      <td style={{padding:"5px 4px",textAlign:"right",color:"#27AE60",fontSize:10}}>{fmtE(lignes.reduce((a,r)=>a+(r.capital||0),0))}</td>
+                      <td style={{padding:"5px 4px",textAlign:"right",color:"#C0392B",fontSize:10}}>{fmtE(lignes.reduce((a,r)=>a+(r.interets||0),0))}</td>
+                      <td colSpan={editMode?6:5}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EchKpisFiscaux — KPIs par période fiscale
+   ═══════════════════════════════════════════════════════════════ */
 function EchKpisFiscaux({ dossiers }) {
   const fmtE = (v) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €";
   const now = new Date();
@@ -7822,7 +8244,7 @@ function EchKpisFiscaux({ dossiers }) {
   const nextMonthS = nextM.getFullYear()+"-"+String(nextM.getMonth()+1).padStart(2,"0");
   const fy = now.getMonth()>=9 ? now.getFullYear()+1 : now.getFullYear();
   const fNS=`${fy-1}-10-01`, fNE=`${fy}-09-30`;
-  const fN1S=`${fy}-10-01`,  fN1E=`${fy+1}-09-30`;
+  const fN1S=`${fy}-10-01`, fN1E=`${fy+1}-09-30`;
   let mC=0,mN=0,fN=0,fN1=0;
   dossiers.forEach(dos=>{
     (dos.lignes||[]).forEach(r=>{
@@ -7838,10 +8260,10 @@ function EchKpisFiscaux({ dossiers }) {
       {[
         {icon:"📅",label:"Ce mois",val:fmtE(mC),color:"#102A63",bg:"#EFF6FF",bd:"#BFDBFE"},
         {icon:"🔜",label:"Mois suivant",val:fmtE(mN),color:"#1D4ED8",bg:"#EFF6FF",bd:"#BFDBFE"},
-        {icon:"📊",label:"Exercice N (oct."+String(fy-1)+"-sept."+String(fy)+")",val:fmtE(fN),color:"#065F46",bg:"#F0FDF4",bd:"#BBF7D0"},
-        {icon:"📈",label:"Exercice N+1 (oct."+String(fy)+"-sept."+String(fy+1)+")",val:fmtE(fN1),color:"#0E7490",bg:"#ECFEFF",bd:"#A5F3FC"},
+        {icon:"📊",label:`Exercice N (oct.${fy-1}-sept.${fy})`,val:fmtE(fN),color:"#065F46",bg:"#F0FDF4",bd:"#BBF7D0"},
+        {icon:"📈",label:`Exercice N+1 (oct.${fy}-sept.${fy+1})`,val:fmtE(fN1),color:"#0E7490",bg:"#ECFEFF",bd:"#A5F3FC"},
       ].map(k=>(
-        <div key={k.label} style={{background:k.bg,borderRadius:10,padding:"12px 14px",border:"1px solid "+k.bd}}>
+        <div key={k.label} style={{background:k.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${k.bd}`}}>
           <div style={{fontSize:16,marginBottom:4}}>{k.icon}</div>
           <div style={{fontSize:16,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:2}}>{k.val}</div>
           <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{k.label}</div>
@@ -7851,9 +8273,7 @@ function EchKpisFiscaux({ dossiers }) {
   );
 }
 
-
-
-/* ── EchAttachments : PJ avec type de document ── */
+/* ── EchAttachments — PJ avec type ── */
 const ECH_DOC_TYPES = ["Contrat","Échéancier","Tableau d'amortissement","Avenant","Garantie","Assurance","Autre"];
 function EchAttachments({ attachments, onChange }) {
   const [selType, setSelType] = React.useState("Contrat");
@@ -7868,9 +8288,8 @@ function EchAttachments({ attachments, onChange }) {
         <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:8}}>
           {(attachments||[]).map((a,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",background:"#F8F9FB",borderRadius:6,border:"1px solid #ECEAE5"}}>
-              <span style={{fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700,flexShrink:0}}>{a.type||"—"}</span>
-              <span style={{flex:1,fontSize:10,fontFamily:"'Lora',serif",color:"#2C3E50",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
-              <span style={{fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",flexShrink:0}}>{a.date||""}</span>
+              <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",background:"#E0E7FF",color:"#4338CA",borderRadius:4,padding:"1px 6px"}}>{a.type}</span>
+              <span style={{flex:1,fontSize:10,fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
               <button onClick={()=>remove(i)} style={{border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
             </div>
           ))}
@@ -7890,400 +8309,9 @@ function EchAttachments({ attachments, onChange }) {
   );
 }
 
-/* ── EchDossierTab ── */
-function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
-  const now = new Date().toISOString().split("T")[0];
-  const [localDos, setLocalDos] = React.useState(dos);
-  const [editMode, setEditMode] = React.useState(false);
-  React.useEffect(()=>setLocalDos(dos),[dos.id]);
-  const insertRow = (afterIdx) => {
-    const newRow={n:0,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,versement:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
-    const l=[...lignes];
-    l.splice(afterIdx+1,0,newRow);
-    const renumbered=l.map((r,i)=>({...r,n:i+1}));
-    const updated={...localDos,lignes:renumbered};
-    setLocalDos(updated); saveDossier(updated);
-  };
-  const setL = (k,v) => setLocalDos(p=>({...p,[k]:v}));
-  const lignes=dos.lignes||[];
-  const payeAuto=lignes.filter(r=>r.date<=now).length;
-  const pct=lignes.length>0?Math.round(payeAuto/lignes.length*100):0;
-  const restantDu=lignes[payeAuto]?.capitalRestant||(lignes.length>0?lignes[lignes.length-1].capitalRestant:0);
-  const totalInt=lignes.reduce((a,r)=>a+(r.interets||0),0);
-  const prochaine=lignes.find(r=>r.date>now);
-  const hasCap=parseNum(localDos.tauxCapita)>0;
-  const car=parseInt(localDos.carence)||0;
-  const dif=parseInt(localDos.differe)||0;
-  const dur=parseInt(localDos.duree)||0;
-  const amort=dur; // dur = durée amortissement saisie directement
-  const total=(hasCap?1:0)+car+dif+amort;
-  const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
-  const lblL=(t)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t}</div>;
-  const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0);
-    const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
-    const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
-  };
-  return (
-    <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      <div style={{background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,flexShrink:0}}>
-        {[{label:"Capital restant dû",val:fmtE(restantDu),color:"#C0392B"},{label:"Avancement",val:`${pct}% (${payeAuto}/${lignes.length})`,color:"#1D4ED8"},{label:"Prochaine échéance",val:prochaine?`${fmtE(prochaine.echeanceGlobale||prochaine.echeance)} (${prochaine.date.split("-").reverse().join("/")})`:"Terminé",color:"#A16207"},{label:"Total intérêts",val:fmtE(totalInt),color:"#C0392B"}].map(k=>(
-          <div key={k.label} style={{textAlign:"center"}}><div style={{fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2}}>{k.label}</div><div style={{fontSize:12,fontWeight:700,color:k.color,fontFamily:"'Lora',serif"}}>{k.val}</div></div>
-        ))}
-      </div>
-      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"row"}}>
-        <div style={{width:500,flexShrink:0,overflowY:"auto",borderRight:"1px solid #ECEAE5",padding:"16px",display:"flex",flexDirection:"column",gap:10,background:"white"}}>
-          <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em"}}>INFORMATIONS DU PRÊT</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
-            <div>{lblL("Intitulé")}<input value={localDos.intitule||""} onChange={e=>setL("intitule",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
-            <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux…" style={inpL}/></div>
-            <div>{lblL("Type amortissement")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités constantes</option><option value="capital">Capital constant</option></select></div>
-            <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-            <div>{lblL("Durée remboursement (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
-
-            <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
-          </div>
-
-          {/* Section Versements */}
-          <div style={{background:"#F0FDF4",borderRadius:8,padding:"8px 10px",border:"1px solid #BBF7D0"}}>
-            <div style={{fontSize:9,fontWeight:700,color:"#065F46",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>VERSEMENTS DE FONDS</div>
-            {(localDos.versements||[]).map((v,i)=>(
-              <div key={i} style={{display:"flex",gap:6,alignItems:"center",marginBottom:5}}>
-                <input type="date" value={v.date||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],date:e.target.value};setL("versements",vs);}} style={{...inpL,flex:1,fontSize:10}}/>
-                <div style={{position:"relative",flex:1}}>
-                  <input type="text" value={v.montant||""} onChange={e=>{const vs=[...(localDos.versements||[])];vs[i]={...vs[i],montant:e.target.value};setL("versements",vs);}} placeholder="0,00" style={{...inpL,paddingRight:16,fontSize:10}}/>
-                  <span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#AAA"}}>€</span>
-                </div>
-                <button onClick={()=>{const vs=(localDos.versements||[]).filter((_,j)=>j!==i);setL("versements",vs);}} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
-              </div>
-            ))}
-            <button onClick={()=>setL("versements",[...(localDos.versements||[]),{date:"",montant:""}])}
-              style={{fontSize:10,fontFamily:"'Lora',serif",background:"white",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"4px 8px",cursor:"pointer",width:"100%"}}>
-              + Ajouter un versement
-            </button>
-          </div>
-          <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
-            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-              <div>{lblL("TEG net (%/an)")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="0,73" style={inpL}/></div>
-              <div>{lblL("TEG différé (%/an)")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
-              <div>{lblL("Com. gar. 1 (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="1,00" style={inpL}/></div>
-              <div>{lblL("Com. gar. 2 (%/an)")}<input type="text" value={localDos.tauxGarantie2||""} onChange={e=>setL("tauxGarantie2",e.target.value)} placeholder="2,00" style={inpL}/></div>
-              <div style={{gridColumn:"1/-1"}}>{lblL("Durée taux gar. 1 (mois)")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inpL}/></div>
-              <div>{lblL("Taux capita. (%/an)")}<input type="text" value={localDos.tauxCapita||""} onChange={e=>setL("tauxCapita",e.target.value)} placeholder="0,5" style={inpL}/></div>
-            </div>
-          </div>
-          <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
-            <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PÉRIODES</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-              <div>{lblL("Carence (mois)")}<input type="text" value={localDos.carence||""} onChange={e=>setL("carence",e.target.value)} placeholder="0" style={inpL}/></div>
-              <div>{lblL("Différé (mois)")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="12" style={inpL}/></div>
-            </div>
-          </div>
-          {total>0 && (
-            <div>
-              <div style={{display:"flex",height:12,borderRadius:6,overflow:"hidden",gap:1,marginBottom:4}}>
-                {car>0&&<div style={{width:`${car/total*100}%`,background:"#FCA5A5",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"white",minWidth:16}}>{car}m</div>}
-                {hasCap&&<div style={{width:`${1/total*100}%`,background:"#6D28D9",minWidth:4}}/>}
-                {dif>0&&<div style={{width:`${dif/total*100}%`,background:"#FCD34D",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"#92400E",minWidth:16}}>{dif}m</div>}
-                {amort>0&&<div style={{flex:1,background:"#6EE7B7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,color:"#065F46",minWidth:24}}>{amort}m</div>}
-              </div>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                {car>0&&<span style={{fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif"}}>● Carence {car}m</span>}
-                {hasCap&&<span style={{fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif"}}>● Capitalisation</span>}
-                {dif>0&&<span style={{fontSize:9,color:"#A16207",fontFamily:"'Lora',serif"}}>● Différé {dif}m</span>}
-                {amort>0&&<span style={{fontSize:9,color:"#065F46",fontFamily:"'Lora',serif"}}>● Amort. {amort}m</span>}
-              </div>
-            </div>
-          )}
-          <button onClick={regenererLocal} style={{background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>🔄 Recalculer l'échéancier</button>
-          <label style={{cursor:"pointer"}}>
-            <input type="file" accept=".csv" style={{display:"none"}}
-              onChange={e=>{
-                const file=e.target.files[0];
-                if(!file) return;
-                const reader=new FileReader();
-                reader.onload=ev=>{
-                  const rows=parseCSVEcheancier(ev.target.result);
-                  if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
-                  const updated={...localDos,lignes:rows};
-                  const calc = window.calcDossierAuto ? window.calcDossierAuto(updated) : updated;
-                  setLocalDos(calc);
-                  saveDossier(calc);
-                  alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                };
-                reader.readAsText(file,"UTF-8");
-              }}
-            />
-            <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600,cursor:"pointer"}}>
-              📥 Importer un fichier CSV
-            </span>
-          </label>
-          <button onClick={()=>exportEchPDF(localDos)} style={{background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>📄 Exporter en PDF</button>
-          <button onClick={()=>{const c=window.calcDossierAuto?window.calcDossierAuto(localDos):localDos;setLocalDos(c);saveDossier(c);}} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
-          <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>NOTES</div>
-            <RichTextArea value={localDos.notes||""} onChange={v=>{const u={...localDos,notes:v};setLocalDos(u);saveDossier(u);}} placeholder="Observations…" rows={4}/>
-          </div>
-          <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
-            <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PIÈCES JOINTES</div>
-            <EchAttachments attachments={localDos.attachments||[]} onChange={v=>{const u={...localDos,attachments:v};setLocalDos(u);saveDossier(u);}}/>
-          </div>
-          <button onClick={()=>deleteDossier(dos.id)} style={{border:"1px solid #ECEAE5",background:"white",color:"#AAA",borderRadius:8,padding:"6px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",marginTop:4}}>🗑 Supprimer</button>
-        </div>
-        <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          {lignes.length===0
-            ?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#CCC",fontFamily:"'Lora',serif",flexDirection:"column",gap:10}}><div style={{fontSize:32}}>📅</div><div>Renseignez les paramètres puis cliquez sur "Recalculer"</div></div>
-            :<div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-              {/* Sous-tableau versements */}
-              {(localDos.versements||[]).filter(v=>v.date&&v.montant).length > 0 && (() => {
-                const vs = (localDos.versements||[]).filter(v=>v.date&&v.montant)
-                  .sort((a,b)=>a.date>b.date?1:-1);
-                const totalV = vs.reduce((a,v)=>a+(parseNum(v.montant)||0),0);
-                return (
-                  <div style={{flexShrink:0,borderBottom:"1px solid #ECEAE5",background:"#F0FDF4"}}>
-                    <div style={{padding:"8px 16px 6px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif",letterSpacing:"0.04em"}}>VERSEMENTS DE FONDS</span>
-                        <span style={{fontSize:9,background:"#DCFCE7",color:"#15803D",borderRadius:10,padding:"1px 8px",fontWeight:700,fontFamily:"'Lora',serif"}}>{vs.length} versement{vs.length>1?"s":""}</span>
-                      </div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif"}}>
-                        Total : {totalV.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})} €
-                      </div>
-                    </div>
-                    <div style={{overflowX:"auto",paddingBottom:8}}>
-                      <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif"}}>
-                        <thead>
-                          <tr style={{background:"#15803D"}}>
-                            {["#","Date de versement","Montant versé","Capital mobilisé","Note"].map(h=>(
-                              <th key={h} style={{padding:"5px 12px",color:"white",fontWeight:400,textAlign:h==="Montant versé"||h==="Capital mobilisé"?"right":"left",fontSize:9,whiteSpace:"nowrap",letterSpacing:"0.04em"}}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {vs.map((v,i)=>{
-                            const cumul = vs.slice(0,i+1).reduce((a,x)=>a+(parseNum(x.montant)||0),0);
-                            return (
-                              <tr key={i} style={{background:i%2===0?"white":"#F0FDF4",borderBottom:"1px solid #DCFCE7"}}>
-                                <td style={{padding:"5px 12px",color:"#888",fontWeight:600,width:28}}>{i+1}</td>
-                                <td style={{padding:"5px 12px",color:"#15803D",fontWeight:700}}>
-                                  <span style={{display:"inline-flex",alignItems:"center",gap:6}}>
-                                    <span style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",display:"inline-block",flexShrink:0}}/>
-                                    {v.date.split("-").reverse().join("/")}
-                                  </span>
-                                </td>
-                                <td style={{padding:"5px 12px",textAlign:"right",fontWeight:700,color:"#15803D",fontVariantNumeric:"tabular-nums"}}>
-                                  +{(parseNum(v.montant)||0).toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})} €
-                                </td>
-                                <td style={{padding:"5px 12px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums"}}>
-                                  {cumul.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})} €
-                                </td>
-                                <td style={{padding:"5px 12px",color:"#888",fontSize:9,fontStyle:"italic"}}>{v.note||"—"}</td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                        <tfoot>
-                          <tr style={{background:"#DCFCE7",borderTop:"2px solid #22C55E"}}>
-                            <td colSpan={2} style={{padding:"5px 12px",fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif",fontSize:10}}>TOTAL</td>
-                            <td style={{padding:"5px 12px",textAlign:"right",fontWeight:700,color:"#15803D",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
-                              +{totalV.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})} €
-                            </td>
-                            <td colSpan={2}></td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Toolbar tableau */}
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",flexShrink:0}}>
-                <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""}</div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-
-                  <button onClick={()=>setEditMode(m=>!m)}
-                    style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
-                    {editMode?"✓ Terminer édition":"✏️ Modifier"}
-                  </button>
-                </div>
-              </div>
-              <div style={{flex:1,overflowY:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
-                <thead style={{position:"sticky",top:0,zIndex:2}}>
-                  <tr style={{background:"#102A63"}}>
-                    {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
-                      <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {lignes.map((row,i)=>{
-                    const isPast=row.date<=now;
-                    const isNext=row.date>now&&i===payeAuto;
-                    const TD={padding:"2px 4px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
-                    const updRow=(k,v)=>{
-                      const l=[...lignes]; l[i]={...l[i],[k]:v};
-                      const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
-                    };
-                    const inpS={border:"1px solid #BFDBFE",borderRadius:3,padding:"1px 4px",fontSize:9,fontFamily:"'Lora',serif",width:"100%",textAlign:"right",outline:"none"};
-                    const typeOpts=["Carence","Sans flux","Capitalisation","Différé","Amortissement","Versement"];
-                    const typeVal=row.estCapita?"Capitalisation":row.estCarence?"Carence":row.estDiffere?"Différé":"Amortissement";
-                    const setType=(v)=>{
-                      const l=[...lignes];
-                      l[i]={...l[i],estCapita:v==="Capitalisation",estCarence:v==="Carence",estDiffere:v==="Différé",estSansFlux:v==="Sans flux",estVersement:v==="Versement"};
-                      const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
-                    };
-                    return(
-                      <tr key={i} style={{background:isPast?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0"}}>
-                        <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600,width:26}}>{row.n}</td>
-                        <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:70}}>
-                          {editMode
-                            ?<input type="date" value={row.date||""} onChange={e=>updRow("date",e.target.value)} style={{...inpS,textAlign:"center",width:100}}/>
-                            :row.date?row.date.split("-").reverse().join("/"):"—"}
-                        </td>
-                        <td style={{...TD,textAlign:"center",width:80}}>
-                          {editMode
-                            ?<select value={typeVal} onChange={e=>setType(e.target.value)} style={{...inpS,textAlign:"center",width:90}}>
-                              {typeOpts.map(o=><option key={o}>{o}</option>)}
-                            </select>
-                            :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Capitalisation</span>
-                            :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
-                            :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
-                            :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Versement</span>
-                            :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
-                            :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
-                        </td>
-
-                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow("echeance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow("capital",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#27AE60",width:72}}>{fmtE(row.capital)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:68}}><input value={row.interets||""} onChange={e=>updRow("interets",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#C0392B",width:68}}>{fmtE(row.interets)}</td>}
-                        <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:68}}>{fmtE(row.cumulInterets)}</td>
-                        {editMode?<td style={{...TD,textAlign:"right",width:65}}><input value={row.commGarantie||""} onChange={e=>updRow("commGarantie",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#6D28D9",width:65}}>{fmtE(row.commGarantie)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:60}}><input value={row.assurance||""} onChange={e=>updRow("assurance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow("echeanceGlobale",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:75}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>}
-                        {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
-                          <div style={{display:"flex",gap:2,justifyContent:"center"}}>
-                            <button title="Insérer une ligne après" onClick={()=>insertRow(i)} style={{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",cursor:"pointer",fontSize:11,borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontWeight:700}}>+</button>
-                            <button title="Supprimer" onClick={()=>{
-                              const l=lignes.filter((_,idx2)=>idx2!==i).map((r,j)=>({...r,n:j+1}));
-                              const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
-                            }} style={{border:"none",background:"none",color:"#FCA5A5",cursor:"pointer",fontSize:14,padding:0,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                          </div>
-                        </td>}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              </div>
-            </div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── calcDossierAuto ── */
-window.calcDossierAuto = function calcDossierAuto(dos) {
-  var lg = dos.lignes || [];
-  if (!lg.length) return dos;
-  var nowS = new Date().toISOString().split("T")[0];
-
-  // ── Montant = somme versements ou somme capital remboursé ──
-  var totalVers = (dos.versements||[]).reduce(function(a,v){
-    return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
-  }, 0);
-  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
-  var montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
-
-  // ── Durée totale ──
-  var dureeAuto = String(lg.length);
-
-  // ── Date fin ──
-  var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
-  var dateFin = dates.length ? dates[dates.length-1] : "";
-
-  // ── Détecter la périodicité (en mois) depuis l'écart entre rangs avec flux ──
-  var rangsFlux = lg.filter(function(r){ return (r.interets||0) > 0 || (r.capital||0) > 0; });
-  var periodicite = 1; // mensuelle par défaut
-  if (rangsFlux.length >= 2) {
-    var ecarts = [];
-    for (var i = 1; i < Math.min(rangsFlux.length, 5); i++) {
-      var d1 = new Date(rangsFlux[i-1].date||"2000-01-01");
-      var d2 = new Date(rangsFlux[i].date||"2000-01-01");
-      var diff = Math.round((d2 - d1) / (1000*60*60*24*30));
-      if (diff > 0) ecarts.push(diff);
-    }
-    if (ecarts.length > 0) {
-      ecarts.sort(function(a,b){return a-b;});
-      periodicite = ecarts[Math.floor(ecarts.length/2)] || 1;
-    }
-  }
-  var nbPeriodesAn = Math.round(12 / periodicite);
-
-  // ── TEG réel = total intérêts payés / montant initial / durée (années) × 100 ──
-  var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0; });
-  var tauxAuto = "";
-  if (lg.length > 0) {
-    var totalInterets = lg.reduce(function(a,r){ return a + (r.interets||0); }, 0);
-    var dureeAn = lg.length / 12;
-    var montantBase = parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",",".")) || montantAuto;
-    if (totalInterets > 0 && montantBase > 0 && dureeAn > 0) {
-      tauxAuto = (totalInterets / montantBase / dureeAn * 100).toFixed(2);
-    }
-  }
-
-  // ── Commission garantie : médiane sur les rangs d'amortissement ──
-  var commAuto = "";
-  if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
-    var start2 = Math.floor(amortsLg.length * 0.25);
-    var end2   = Math.floor(amortsLg.length * 0.75);
-    var comms  = [];
-    for (var k = start2; k <= end2; k++) {
-      var rc = amortsLg[k];
-      var capAvantC = (rc.capitalRestant||0) + (rc.capital||0);
-      if (rc && capAvantC > 0 && (rc.commGarantie||0) > 0) {
-        comms.push((rc.commGarantie / capAvantC) * nbPeriodesAn * 100);
-      }
-    }
-    if (comms.length > 0) {
-      comms.sort(function(a,b){return a-b;});
-      commAuto = comms[Math.floor(comms.length/2)].toFixed(2);
-    }
-  }
-
-  // ── Capital restant actuel ──
-  var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
-  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
-
-  // Fallback sur valeur saisie si pas assez de données pour calculer
-  var tauxFinal = tauxAuto || dos.tauxAnnuel || "";
-  var commFinal = commAuto || dos.tauxGarantie || "";
-  return Object.assign({}, dos, {
-    montant:    String(montantAuto) || dos.montant,
-    duree:      dureeAuto,
-    tauxAnnuel: tauxFinal,
-    tauxGarantie: commFinal,
-    dateFin:    dateFin,
-    capitalRestantActuel: capitalRestantActuel,
-    totalVersements: totalVers || montantAuto,
-  });
-};
+/* ═══════════════════════════════════════════════════════════════
+   EcheancierView — Vue principale avec onglets latéraux
+   ═══════════════════════════════════════════════════════════════ */
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState(()=>loadEchDossiers());
@@ -8294,74 +8322,75 @@ function EcheancierView({ tasks, settings }) {
 
   React.useEffect(()=>{ saveEchDossiers(dossiers); },[dossiers]);
 
-  const saveDossier = raw => { const d=calcDossierAuto(raw); setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]); };
+  const saveDossier = raw => {
+    const d = window.calcDossierAuto ? window.calcDossierAuto(raw) : raw;
+    setDossiers(p => p.find(x=>x.id===d.id) ? p.map(x=>x.id===d.id?d:x) : [d,...p]);
+  };
   const deleteDossier = id => { if(window.confirm("Supprimer cet échéancier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
-  const openNew = () => setModal({ id:uid(), reference:"ECH_"+String(dossiers.length+1).padStart(5,"0"), intitule:"", banque:"", nature:"", numContrat:"", montant:"", tauxAnnuel:"", duree:"", periodicite:"Mensuelle", dateContrat:"", dateDebut:"", assuranceMensuelle:"", garantie:"", objet:"", notes:"", attachments:[], lignes:[] });
+  const openNew = () => setModal({
+    id: uid(),
+    reference: "ECH_"+String(dossiers.length+1).padStart(5,"0"),
+    intitule:"", banque:"", typeCredit:"", emprunteur:"", caution:"", numContrat:"",
+    montant:"", tauxAnnuel:"", tegIndicatif:"", duree:"", periodicite:"Mensuelle",
+    modalite:"Annuités constantes", dateContrat:"", dateVersement:"", dateDebut:"",
+    assurancePeriode:"", garantie:"", objet:"", notes:"", attachments:[], lignes:[],
+    carence:"", differe:"", tauxDiffere:"", tauxGarantie:"", tauxGarantie2:"", dureeGarantie1:"",
+    fraisDossier:"", fraisGarantie:"", versements:[]
+  });
 
   const fmtE = (v,dec=0) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
+  const now = new Date().toISOString().split("T")[0];
 
   /* KPIs globaux */
-  const now = new Date().toISOString().split("T")[0];
   const totalEncours = dossiers.reduce((a,d)=>{
-    const lignes = d.lignes||[];
-    const nowT=new Date().toISOString().split("T")[0];
-    const payeT = lignes.filter(r=>r.date<=nowT).length;
-    return a + (lignes[payeT]?.capitalRestant||0);
+    const lg=d.lignes||[]; const payeT=lg.filter(r=>r.date<=now).length;
+    return a+(lg[payeT]?.capitalRestant||0);
   },0);
   const totalEcheancesAnnee = dossiers.reduce((a,d)=>{
-    const annee = new Date().getFullYear();
-    return a + (d.lignes||[]).filter(r=>r.date?.startsWith(String(annee))).reduce((s,r)=>s+(r.echeance||0),0);
+    const annee=new Date().getFullYear();
+    return a+(d.lignes||[]).filter(r=>r.date?.startsWith(String(annee))).reduce((s,r)=>s+(r.echeance||0),0);
   },0);
-  const pretsEnCours = dossiers.filter(d=>{ const lg=d.lignes||[]; return lg.length>0 && lg[lg.length-1].date > now; }).length;
+  const pretsEnCours = dossiers.filter(d=>{ const lg=d.lignes||[]; return lg.length>0&&lg[lg.length-1].date>now; }).length;
   const prochaines30 = dossiers.reduce((a,d)=>{
-    const d30 = new Date(); d30.setDate(d30.getDate()+30);
-    const d30s = d30.toISOString().split("T")[0];
-    return a + (d.lignes||[]).filter(r=>r.date>=now && r.date<=d30s).length;
+    const d30=new Date(); d30.setDate(d30.getDate()+30);
+    const d30s=d30.toISOString().split("T")[0];
+    return a+(d.lignes||[]).filter(r=>r.date>=now&&r.date<=d30s).length;
   },0);
 
-  const dossiersOrdres = (ordre && ordre.length===dossiers.length)
+  const dossiersOrdres = (ordre&&ordre.length===dossiers.length)
     ? ordre.map(id2=>dossiers.find(d=>d.id===id2)).filter(Boolean)
     : [...dossiers].sort((a,b)=>{const dA=a.dateFin||"",dB=b.dateFin||"";return dB>dA?1:dB<dA?-1:0;});
-
-  const TAB_BTN = (id,label) => (
-    <button key={id} onClick={()=>setActiveTab(id)}
-      style={{ padding:"8px 16px",fontSize:11,fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
-        fontWeight:activeTab===id?700:400,color:activeTab===id?"#102A63":"#888",
-        background:"transparent",borderBottom:activeTab===id?"2px solid #102A63":"2px solid transparent",
-        whiteSpace:"nowrap" }}>
-      {label}
-    </button>
-  );
 
   return (
     <div style={{ display:"flex",flexDirection:"row",background:"#F7F6F3",minHeight:"100vh" }}>
 
-      {/* Sidebar verticale */}
-      <div style={{ width:200,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
-        <div style={{ padding:"12px 14px",borderBottom:"1px solid #ECEAE5",flexShrink:0 }}>
-          <button onClick={openNew} style={{ ...S.btn("#102A63"),padding:"6px 10px",fontSize:11,width:"100%" }}>+ Nouvel échéancier</button>
+      {/* Sidebar gauche */}
+      <div style={{ width:220,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",overflow:"hidden" }}>
+        <div style={{ background:"#102A63",padding:"14px 16px",borderBottom:"3px solid #E67E22",flexShrink:0 }}>
+          <div style={{ fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",marginBottom:4 }}>GESTION DETTES</div>
+          <button onClick={openNew} style={{ width:"100%",background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"8px 12px",fontSize:11,cursor:"pointer",fontFamily:"'DM Mono',monospace",letterSpacing:"0.04em",fontWeight:700 }}>
+            + Nouvel échéancier
+          </button>
         </div>
-        <div style={{ overflowY:"auto",flex:1,padding:"8px 0" }}>
+        <div style={{ padding:"8px 0",flexShrink:0,borderBottom:"1px solid #ECEAE5" }}>
           {[
-            {id:"dashboard", label:"📊 Tableau de bord"},
-            {id:"synthese",  label:"📋 Synthèse"},
-          ].map(({id,label})=>(
-            <button key={id} onClick={()=>setActiveTab(id)}
-              style={{ display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:11,fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
-                fontWeight:activeTab===id?700:400,
-                color:activeTab===id?"white":"#555",
-                background:activeTab===id?"#102A63":"transparent",
-                borderLeft:activeTab===id?"3px solid #E67E22":"3px solid transparent" }}>
-              {label}
+            { id:"dashboard", icon:"📊", label:"Tableau de bord" },
+            { id:"synthese",  icon:"📋", label:"Synthèse" },
+          ].map(item=>(
+            <button key={item.id} onClick={()=>setActiveTab(item.id)}
+              style={{ display:"block",width:"100%",textAlign:"left",padding:"7px 16px",fontSize:11,fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
+                fontWeight:activeTab===item.id?700:400,
+                color:activeTab===item.id?"white":"#555",
+                background:activeTab===item.id?"#102A63":"transparent",
+                borderLeft:activeTab===item.id?"3px solid #E67E22":"3px solid transparent" }}>
+              <span style={{ marginRight:6 }}>{item.icon}</span>{item.label}
             </button>
           ))}
-          {dossiers.length>0 && (
-            <div style={{ fontSize:9,color:"#AAA",padding:"10px 14px 4px",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase" }}>Échéanciers</div>
-          )}
-          {dossiers.map(d=>{
-            const nowT=new Date().toISOString().split("T")[0];
+        </div>
+        <div style={{ flex:1,overflowY:"auto",padding:"6px 0" }}>
+          {dossiersOrdres.map(d=>{
             const lg=d.lignes||[];
-            const fin=lg.length>0&&lg[lg.length-1].date<=nowT;
+            const fin=lg.length>0&&lg[lg.length-1].date<=now;
             return (
               <button key={d.id} onClick={()=>setActiveTab(d.id)}
                 style={{ display:"block",width:"100%",textAlign:"left",padding:"8px 14px",fontSize:11,fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
@@ -8370,10 +8399,14 @@ function EcheancierView({ tasks, settings }) {
                   background:activeTab===d.id?"#102A63":"transparent",
                   borderLeft:activeTab===d.id?"3px solid #E67E22":"3px solid transparent" }}>
                 <div style={{ display:"flex",alignItems:"center",gap:5 }}>
-                  <span style={{ fontSize:10 }}>{fin?"✓":"🏦"}</span>
-                  <span style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.intitule||d.reference}</span>
+                  <span style={{ fontSize:10,flexShrink:0 }}>{fin?"✓":"🏦"}</span>
+                  <span style={{ overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1 }}>{d.intitule||d.reference}</span>
                 </div>
-                {d.reference && <div style={{ fontSize:9,color:activeTab===d.id?"rgba(255,255,255,0.6)":"#AAA",fontFamily:"'DM Mono',monospace",marginTop:1 }}>{d.reference}</div>}
+                <div style={{ display:"flex",gap:6,marginTop:2 }}>
+                  {d.banque&&<div style={{ fontSize:9,color:activeTab===d.id?"rgba(255,255,255,0.6)":"#AAA",fontFamily:"'DM Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.banque}</div>}
+                  {d.typeCredit&&<div style={{ fontSize:8,color:activeTab===d.id?"rgba(255,255,255,0.5)":"#CCC",fontFamily:"'Lora',serif" }}>· {d.typeCredit}</div>}
+                </div>
+                {d.reference&&<div style={{ fontSize:8,color:activeTab===d.id?"rgba(255,255,255,0.45)":"#CCC",fontFamily:"'DM Mono',monospace",marginTop:1 }}>{d.reference}</div>}
               </button>
             );
           })}
@@ -8383,197 +8416,151 @@ function EcheancierView({ tasks, settings }) {
       {/* Contenu principal */}
       <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
 
-      {/* ── TABLEAU DE BORD ── */}
-      {activeTab==="dashboard" && (
-        <div style={{ padding:"20px 24px",display:"flex",flexDirection:"column",gap:16 }}>
-          {/* KPIs */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16 }}>
-            {[
-              { label:"Capital restant dû",    val:fmtE(totalEncours),          color:"#C0392B", bg:"#FEE2E2", icon:"💶" },
-              { label:"Échéances cette année",  val:fmtE(totalEcheancesAnnee),   color:"#1D4ED8", bg:"#DBEAFE", icon:"📅" },
-              { label:"Prêts en cours",           val:String(pretsEnCours),        color:"#1D4ED8", bg:"#DBEAFE", icon:"🏦" },
-              { label:"Dans les 30 prochains j",val:String(prochaines30),        color:"#A16207", bg:"#FEF9C3", icon:"🔔" },
-            ].map(k=>(
-              <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 20px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-                <div style={{ fontSize:20,marginBottom:8 }}>{k.icon}</div>
-                <div style={{ fontSize:22,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:4 }}>{k.val}</div>
-                <div style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif" }}>{k.label}</div>
-              </div>
-            ))}
-          </div>
-
-          <EchKpisFiscaux dossiers={dossiers} />
-
-          {/* Liste des emprunts */}
-          <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden" }}>
-            <div style={{ padding:"14px 20px",borderBottom:"1px solid #ECEAE5",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-              <div style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63" }}>Emprunts en cours</div>
-              <div style={{ fontSize:11,color:"#AAA",fontFamily:"'Lora',serif" }}>{dossiers.length} échéancier{dossiers.length>1?"s":""}</div>
+        {/* TABLEAU DE BORD */}
+        {activeTab==="dashboard" && (
+          <div style={{ padding:"20px 24px",display:"flex",flexDirection:"column",gap:16,overflowY:"auto",flex:1 }}>
+            <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16 }}>
+              {[
+                { label:"Capital restant dû",    val:fmtE(totalEncours),       color:"#C0392B", bg:"#FEE2E2", icon:"💶" },
+                { label:"Échéances cette année",  val:fmtE(totalEcheancesAnnee),color:"#1D4ED8", bg:"#DBEAFE", icon:"📅" },
+                { label:"Prêts en cours",          val:String(pretsEnCours),     color:"#1D4ED8", bg:"#DBEAFE", icon:"🏦" },
+                { label:"Échéances 30 prochains j",val:String(prochaines30),    color:"#A16207", bg:"#FEF9C3", icon:"🔔" },
+              ].map(k=>(
+                <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 20px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+                  <div style={{ fontSize:20,marginBottom:8 }}>{k.icon}</div>
+                  <div style={{ fontSize:22,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:4 }}>{k.val}</div>
+                  <div style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif" }}>{k.label}</div>
+                </div>
+              ))}
             </div>
-            {dossiers.length===0
-              ? <div style={{ padding:"32px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif" }}>Aucun échéancier — cliquez sur "+ Nouvel échéancier"</div>
-              : <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
-                  <thead>
-                    <tr style={{ background:"#102A63" }}>
-                      {["","Référence","Intitulé","Banque","Montant","Taux","Durée","Date fin","Capital restant","Avancement",""].map(h=>(
-                        <th key={h} style={{ padding:"7px 12px",color:"white",fontWeight:400,textAlign:h==="Avancement"||h===""?"center":"left",fontSize:10 }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dossiersOrdres.map((dos,i)=>{
-                      const lignes=dos.lignes||[];
-                      const nowT5=new Date().toISOString().split("T")[0];
-                      const paye=lignes.filter(r=>r.date<=nowT5).length;
-                      const pct=lignes.length>0?Math.round(paye/lignes.length*100):0;
-                      const restantDu=lignes[paye]?.capitalRestant||0;
-                      const isD=dragIdx===i;
-                      return (
-                        <tr key={dos.id} draggable
-                          onDragStart={()=>setDragIdx(i)}
-                          onDragOver={e=>e.preventDefault()}
-                          onDrop={e=>{e.preventDefault();if(dragIdx===null||dragIdx===i)return;const arr=[...dossiersOrdres];const[m]=arr.splice(dragIdx,1);arr.splice(i,0,m);setOrdre(arr.map(d=>d.id));setDragIdx(null);}}
-                          onDragEnd={()=>setDragIdx(null)}
-                          style={{background:isD?"#EFF6FF":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"grab",opacity:isD?0.5:1}}
-                          onClick={()=>setActiveTab(dos.id)}>
-                          <td style={{padding:"6px 6px",textAlign:"center",color:"#CCC",fontSize:14,userSelect:"none"}}>⠿</td>
-                          <td style={{padding:"6px 10px",color:"#888",fontSize:10}}>{dos.reference}</td>
-                          <td style={{padding:"6px 10px",fontWeight:600,color:"#102A63"}}>{dos.intitule||"—"}</td>
-                          <td style={{padding:"6px 10px",color:"#555"}}>{dos.banque||"—"}</td>
-                          <td style={{padding:"6px 10px",fontWeight:600}}>{fmtE(parseNum(dos.montant))}</td>
-                          <td style={{padding:"6px 10px",color:"#065F46"}}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
-                          <td style={{padding:"6px 10px",color:"#555"}}>{dos.duree?dos.duree+" mois":"—"}</td>
-                          <td style={{padding:"6px 10px",color:"#888",fontSize:10}}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
-                          <td style={{padding:"6px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60"}}>{fmtE(restantDu)}</td>
-                          <td style={{padding:"6px 10px"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6}}>
-                              <div style={{flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50}}>
-                                <div style={{width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3}}/>
-                              </div>
-                              <span style={{fontSize:10,color:"#888",minWidth:30}}>{pct}%</span>
-                            </div>
-                          </td>
-                          <td style={{padding:"6px 10px",textAlign:"center"}}>
-                            <button onClick={e=>{e.stopPropagation();setModal(dos);}}
-                              style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#E67E22",fontFamily:"'Lora',serif"}}>✏️</button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>}
-          </div>
-        </div>
-      )}
 
-      {/* ── SYNTHÈSE ── */}
-      {activeTab==="synthese" && (
-        <div style={{ padding:"20px 24px",overflowY:"auto" }}>
-          <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
-            {dossiers.length===0
-              ? <div style={{ textAlign:"center",padding:"40px",color:"#CCC",fontFamily:"'Lora',serif" }}>Aucun échéancier</div>
-              : dossiers.map(dos=>{
-                  const lignes=dos.lignes||[];
-                  const nowT3=new Date().toISOString().split("T")[0];
-                  const paye=lignes.filter(r=>r.date<=nowT3).length;
-                  const pct=lignes.length>0?Math.round(paye/lignes.length*100):0;
-                  const restantDu=lignes[paye]?.capitalRestant||0;
-                  const prochaine=lignes.find(r=>r.date>nowT3);
-                  const enRetardDos=0;
-                  // Calcul timeline
-                  const hasCap=parseNum(dos.tauxCapita)>0;
-                  const car=parseInt(dos.carence)||0;
-                  const dif=parseInt(dos.differe)||0;
-                  const durA=parseInt(dos.duree)||lignes.length;
-                  const totalT=(hasCap?1:0)+car+dif+durA;
-                  // Position actuelle dans la timeline
-                  const dateDebut=dos.dateDebut||lignes[0]?.date||"";
-                  const dateFin2=dos.dateFin||lignes[lignes.length-1]?.date||"";
-                  let pctTimeline=0;
-                  if(dateDebut&&dateFin2){
-                    const dD=new Date(dateDebut),dF=new Date(dateFin2),dN=new Date(nowT3);
-                    pctTimeline=Math.min(100,Math.max(0,Math.round((dN-dD)/(dF-dD)*100)));
-                  }
-                  return (
-                    <div key={dos.id} style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",padding:"16px 20px",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}
-                      onClick={()=>setActiveTab(dos.id)}>
-                      {/* Header */}
-                      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12 }}>
-                        <div>
-                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{dos.reference} · {dos.banque||"—"}</div>
-                          <div style={{ fontSize:14,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{dos.intitule||"Sans titre"}</div>
-                          {dos.typeAmort && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:4,padding:"1px 7px",fontFamily:"'Lora',serif",fontWeight:700,marginTop:4,display:"inline-block" }}>{dos.typeAmort==="capital"?"Capital constant":"Annuités constantes"}</span>}
-                        </div>
-                        <div style={{ textAlign:"right" }}>
-                          <div style={{ fontSize:18,fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60",fontFamily:"'Lora',serif" }}>{fmtE(restantDu)}</div>
-                          <div style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif" }}>capital restant</div>
-                        </div>
-                      </div>
-                      {/* KPIs */}
-                      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:14 }}>
-                        {[
-                          {label:"Montant initial",val:fmtE(parseNum(dos.montant))},
-                          {label:"Taux",val:(dos.tauxAnnuel||"—")+" %"},
-                          {label:"Prochaine échéance",val:prochaine?prochaine.date.split("-").reverse().join("/"):"Terminé"},
-                          {label:"Avancement",val:`${pct}%`,color:pct===100?"#27AE60":"#1D4ED8"},
-                        ].map(f=>(
-                          <div key={f.label}>
-                            <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>{f.label}</div>
-                            <div style={{ fontSize:12,fontWeight:600,color:f.color||"#2C3E50",fontFamily:"'Lora',serif" }}>{f.val}</div>
-                          </div>
+            <EchKpisFiscaux dossiers={dossiers} />
+
+            {/* Liste des emprunts */}
+            <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden" }}>
+              <div style={{ padding:"14px 20px",borderBottom:"1px solid #ECEAE5",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                <div style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63" }}>Emprunts en cours</div>
+                <div style={{ fontSize:11,color:"#AAA",fontFamily:"'Lora',serif" }}>{dossiers.length} échéancier{dossiers.length>1?"s":""}</div>
+              </div>
+              {dossiers.length===0
+                ? <div style={{ padding:"32px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif" }}>Aucun échéancier — cliquez sur "+ Nouvel échéancier"</div>
+                : <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
+                    <thead>
+                      <tr style={{ background:"#102A63" }}>
+                        {["","Référence","Intitulé","Banque","Type","Montant","Taux","Modalité","Périodicité","Date fin","Cap. restant","Avancement",""].map(h=>(
+                          <th key={h} style={{ padding:"7px 10px",color:"white",fontWeight:400,textAlign:h==="Avancement"||h===""?"center":"left",fontSize:9,fontFamily:"'DM Mono',monospace",letterSpacing:"0.04em" }}>{h.toUpperCase()}</th>
                         ))}
-                      </div>
-                      {/* Timeline structure + position actuelle */}
-                      {totalT > 0 && (
-                        <div style={{ marginBottom:10 }}>
-                          <div style={{ position:"relative",height:14,borderRadius:7,overflow:"visible",display:"flex",gap:1,marginBottom:4 }}>
-                            {car>0&&<div style={{ width:`${car/totalT*100}%`,height:"100%",background:"#FCA5A5",borderRadius:"7px 0 0 7px",minWidth:4 }} title={`Carence ${car}m`}/>}
-                            {hasCap&&<div style={{ width:`${1/totalT*100}%`,height:"100%",background:"#6D28D9",minWidth:3 }} title="Capitalisation"/>}
-                            {dif>0&&<div style={{ width:`${dif/totalT*100}%`,height:"100%",background:"#FCD34D",minWidth:4 }} title={`Différé ${dif}m`}/>}
-                            <div style={{ flex:1,height:"100%",background:pct===100?"#27AE60":"#6EE7B7",borderRadius:car===0&&!hasCap&&dif===0?"7px":"0 7px 7px 0",minWidth:10 }} title={`Amortissement ${durA}m`}/>
-                            {/* Indicateur position actuelle */}
-                            {pctTimeline>0&&pctTimeline<100&&(
-                              <div style={{ position:"absolute",left:`${pctTimeline}%`,top:-3,transform:"translateX(-50%)",width:3,height:20,background:"#102A63",borderRadius:2,boxShadow:"0 0 0 2px white",zIndex:2 }} title={`Aujourd'hui (${pctTimeline}%)`}/>
-                            )}
-                          </div>
-                          {/* Légende + dates */}
-                          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-                            <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                              {car>0&&<span style={{ fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif" }}>● Carence {car}m</span>}
-                              {hasCap&&<span style={{ fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif" }}>● Cap.</span>}
-                              {dif>0&&<span style={{ fontSize:9,color:"#A16207",fontFamily:"'Lora',serif" }}>● Différé {dif}m</span>}
-                              <span style={{ fontSize:9,color:"#065F46",fontFamily:"'Lora',serif" }}>● Amort. {durA}m</span>
-                            </div>
-                            <div style={{ display:"flex",gap:12 }}>
-                              {dateDebut&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{dateDebut.split("-").reverse().join("/")} →</span>}
-                              {dateFin2&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>→ {dateFin2.split("-").reverse().join("/")}</span>}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                      {/* Barre avancement */}
-                      <div style={{ display:"flex",alignItems:"center",gap:10 }}>
-                        <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:4,overflow:"hidden" }}>
-                          <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:4,transition:"width 0.3s" }} />
-                        </div>
-                        <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:80 }}>{paye}/{lignes.length} mois</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dossiersOrdres.map((dos,i)=>{
+                        const lignes=dos.lignes||[];
+                        const payeT=lignes.filter(r=>r.date<=now).length;
+                        const pct=lignes.length>0?Math.round(payeT/lignes.length*100):0;
+                        const restantDu=lignes[payeT]?.capitalRestant||0;
+                        const isD=dragIdx===i;
+                        return (
+                          <tr key={dos.id} draggable
+                            onDragStart={()=>setDragIdx(i)}
+                            onDragOver={e=>e.preventDefault()}
+                            onDrop={e=>{e.preventDefault();if(dragIdx===null||dragIdx===i)return;const arr=[...dossiersOrdres];const[m]=arr.splice(dragIdx,1);arr.splice(i,0,m);setOrdre(arr.map(d=>d.id));setDragIdx(null);}}
+                            onDragEnd={()=>setDragIdx(null)}
+                            style={{background:isD?"#EFF6FF":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"pointer",opacity:isD?0.5:1}}
+                            onClick={()=>setActiveTab(dos.id)}>
+                            <td style={{padding:"5px 6px",textAlign:"center",color:"#CCC",fontSize:14,userSelect:"none"}}>⠿</td>
+                            <td style={{padding:"5px 10px",color:"#888",fontSize:9,fontFamily:"'DM Mono',monospace"}}>{dos.reference}</td>
+                            <td style={{padding:"5px 10px",fontWeight:600,color:"#102A63"}}>{dos.intitule||"—"}</td>
+                            <td style={{padding:"5px 10px",color:"#555"}}>{dos.banque||"—"}</td>
+                            <td style={{padding:"5px 10px",color:"#888",fontSize:10}}>{dos.typeCredit||"—"}</td>
+                            <td style={{padding:"5px 10px",fontWeight:600}}>{fmtE(parseNum(dos.montant))}</td>
+                            <td style={{padding:"5px 10px",color:"#065F46"}}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
+                            <td style={{padding:"5px 10px",color:"#555",fontSize:10}}>{dos.modalite||"—"}</td>
+                            <td style={{padding:"5px 10px",color:"#555",fontSize:10}}>{dos.periodicite||"—"}</td>
+                            <td style={{padding:"5px 10px",color:"#888",fontSize:10}}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
+                            <td style={{padding:"5px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60"}}>{fmtE(restantDu)}</td>
+                            <td style={{padding:"5px 10px"}}>
+                              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                                <div style={{flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50}}>
+                                  <div style={{width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3}}/>
+                                </div>
+                                <span style={{fontSize:10,color:"#888",minWidth:30}}>{pct}%</span>
+                              </div>
+                            </td>
+                            <td style={{padding:"5px 10px",textAlign:"center"}}>
+                              <button onClick={e=>{e.stopPropagation();setModal(dos);}}
+                                style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",fontSize:10,cursor:"pointer",color:"#E67E22",fontFamily:"'Lora',serif"}}>✏️</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ── ONGLETS DOSSIERS INDIVIDUELS ── */}
-      {dossiers.map(dos=>(
-        activeTab===dos.id && (
-          <EchDossierTab key={dos.id} dos={dos} saveDossier={saveDossier} deleteDossier={deleteDossier} now={now} fmtE={fmtE}/>
-        )
-      ))}
+        {/* SYNTHÈSE */}
+        {activeTab==="synthese" && (
+          <div style={{ padding:"20px 24px",overflowY:"auto",flex:1 }}>
+            <div style={{ display:"flex",flexDirection:"column",gap:12 }}>
+              {dossiers.length===0
+                ? <div style={{ textAlign:"center",padding:"40px",color:"#CCC",fontFamily:"'Lora',serif" }}>Aucun échéancier</div>
+                : dossiers.map(dos=>{
+                    const lignes=dos.lignes||[];
+                    const payeT=lignes.filter(r=>r.date<=now).length;
+                    const pct=lignes.length>0?Math.round(payeT/lignes.length*100):0;
+                    const restantDu=lignes[payeT]?.capitalRestant||0;
+                    const prochaine=lignes.find(r=>r.date>now);
+                    const totalInt=lignes.reduce((a,r)=>a+(r.interets||0),0);
+                    return (
+                      <div key={dos.id} style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",padding:"16px 20px",cursor:"pointer",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}
+                        onClick={()=>setActiveTab(dos.id)}>
+                        <div style={{ display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10 }}>
+                          <div>
+                            <div style={{ fontSize:14,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{dos.intitule||dos.reference}</div>
+                            <div style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",marginTop:2 }}>
+                              {dos.banque}{dos.typeCredit?` · ${dos.typeCredit}`:""}{dos.modalite?` · ${dos.modalite}`:""}{dos.periodicite&&dos.periodicite!=="Mensuelle"?` · ${dos.periodicite}`:""}
+                            </div>
+                          </div>
+                          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,textAlign:"right" }}>
+                            <div>
+                              <div style={{ fontSize:8,color:"#AAA",fontFamily:"'Lora',serif" }}>CAPITAL RESTANT</div>
+                              <div style={{ fontSize:13,fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60",fontFamily:"'Lora',serif" }}>{fmtE(restantDu)}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:8,color:"#AAA",fontFamily:"'Lora',serif" }}>TOTAL INTÉRÊTS</div>
+                              <div style={{ fontSize:13,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif" }}>{fmtE(totalInt)}</div>
+                            </div>
+                          </div>
+                        </div>
+                        {prochaine && (
+                          <div style={{ background:"#FFFBEB",borderRadius:8,padding:"6px 12px",marginBottom:8,border:"1px solid #FDE68A",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
+                            <div style={{ fontSize:10,color:"#A16207",fontFamily:"'Lora',serif" }}>Prochaine : {prochaine.date.split("-").reverse().join("/")}</div>
+                            <div style={{ fontSize:11,fontWeight:700,color:"#A16207",fontFamily:"'Lora',serif" }}>{fmtE(prochaine.echeanceGlobale||prochaine.echeance)}</div>
+                          </div>
+                        )}
+                        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                          <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:4,overflow:"hidden" }}>
+                            <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:4 }} />
+                          </div>
+                          <span style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif",minWidth:80 }}>{payeT}/{lignes.length} périodes</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+          </div>
+        )}
+
+        {/* ONGLETS DOSSIERS INDIVIDUELS */}
+        {dossiers.map(dos=>(
+          activeTab===dos.id && (
+            <EchDossierTab key={dos.id} dos={dos} saveDossier={saveDossier} deleteDossier={deleteDossier} now={now} fmtE={fmtE}/>
+          )
+        ))}
       </div>{/* fin contenu principal */}
 
-      {/* Modal */}
+      {/* Modal création/édition */}
       {modal && <EchDossierPanel dossier={modal} onSave={d=>{saveDossier(d);setActiveTab(d.id);}} onClose={()=>setModal(null)} />}
     </div>
   );
