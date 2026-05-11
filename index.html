@@ -6892,10 +6892,13 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                         </thead>
                         <tbody>
                           {(() => {
-                            const startDate = new Date();
+                            const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
+                            const jourRef   = startDate.getDate();
                             return ech.map((row,i)=>{
                               const d2 = new Date(startDate);
-                              d2.setMonth(d2.getMonth()+i+1);
+                              d2.setMonth(d2.getMonth() + i);
+                              const maxDay = new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate();
+                              d2.setDate(Math.min(jourRef, maxDay));
                               const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
                               return (
                                 <tr key={i} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0" }}>
@@ -10472,7 +10475,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.391<br />11/05/26 à 08:53
+          v.0.392<br />11/05/26 à 17:12
         </div>
       </div>
 
