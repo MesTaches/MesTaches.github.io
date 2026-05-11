@@ -6667,8 +6667,9 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   const ech     = calc0.taux12 !== null
     ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, (calc0.taux12/100)/12)
     : [];
-  const cbPaidCount = Math.min((d.paiements||[]).filter(p=>String(p.effectuePar||'').toLowerCase()==='banque' && parseNum(p.montant)>0).length, ech.length);
+  const todayStr = new Date().toISOString().split('T')[0];
   const cbTotalCount = ech.length;
+  const cbPaidCount = cbTotalCount>0 ? (()=>{ const startDate=d.dateDemarrage?new Date(d.dateDemarrage):null; if(!startDate) return 0; const jourRef=startDate.getDate(); let cnt=0; for(let i=0;i<cbTotalCount;i++){const dt=new Date(startDate);dt.setMonth(dt.getMonth()+i);const md=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();dt.setDate(Math.min(jourRef,md));if(dt.toISOString().split('T')[0]<=todayStr)cnt++;else break;} return cnt;})() : 0;
   const cbRemainCount = Math.max(0, cbTotalCount-cbPaidCount);
   const cbPct = cbTotalCount>0 ? Math.round(cbPaidCount/cbTotalCount*100) : 0;
   const compactInp = { ...inp, padding:"4px 10px", minHeight:30, lineHeight:1.2 };
@@ -6711,36 +6712,12 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
             <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
               {CB_KANBAN_STATUSES.map(s=>(
                 <button key={s.id} onClick={()=>set("statut",s.id)}
-                  style={{ border:`1px solid ${s.border||s.color}`,background:d.statut===s.id?s.bg:"white",color:d.statut===s.id?s.color:"#888",borderRadius:20,padding:"3px 12px",fontSize:10,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:d.statut===s.id?700:400 }}>
-                  {s.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Lignes 1+2 : grille 1fr 2fr alignée sur 4 champs */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
+                  style={{ border:`1p{/* Formulaire compact — 2 lignes principales + montants + dates */}
+          {/* Ligne A : 5 champs sur 1 ligne */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr 1fr 1fr", gap:8, marginBottom:8 }}>
             <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={compactInp} /></div>
             <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={compactInp} /></div>
-            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...compactInp,background:"#F5F5F5",color:"#888",userSelect:"none" }}>{d.reference||"—"}</div></div>
-            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={compactInp} /></div>
-          </div>
-
-          {/* Ligne 3 : Type invest + Fournisseur */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
-            <div>{lbl("TYPE D'INVESTISSEMENT")}
-              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={compactInp}>
-                <option value="">— Choisir —</option>
-                {INVEST_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>{lbl("FOURNISSEUR")}
-              <input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={compactInp} />
-            </div>
-          </div>
-
-          {/* Ligne 3b : Type de financement + N° contrat */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:10 }}>
+            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...compactInp, background:"#F5F5F5", color:"#888", userSelect:"none" }}>{d.reference||"—"}</div></div>
             <div>{lbl("TYPE DE FINANCEMENT")}
               <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={compactInp}>
                 <option value="">— Choisir —</option>
@@ -6748,36 +6725,36 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                 <option value="Lease back">Lease back</option>
               </select>
             </div>
-            <div>{lbl("N° CONTRAT")}
-              <input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="Ex: CB-2024-00123" style={compactInp} />
-            </div>
+            <div>{lbl("N° CONTRAT")}<input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="CB-2024-00123" style={compactInp} /></div>
           </div>
 
-          {/* Ligne 3 : Montants */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
+          {/* Ligne B : Type invest + Fournisseur + Site */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr", gap:8, marginBottom:8 }}>
+            <div>{lbl("TYPE D'INVESTISSEMENT")}
+              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={compactInp}>
+                <option value="">— Choisir —</option>
+                {INVEST_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>{lbl("FOURNISSEUR")}<input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={compactInp} /></div>
+            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={compactInp} /></div>
+          </div>
+
+          {/* Ligne C : Montants + Durée + Périodicité + VR */}
+          <div style={{ display:"grid", gridTemplateColumns:"1.2fr 0.6fr 1fr 1fr 0.8fr 0.7fr", gap:8, marginBottom:8 }}>
             <div>{lbl("MONTANT HT")}
               <div style={{ position:"relative" }}>
-                <input type="text" inputMode="decimal"
-                  value={d.montantHT}
+                <input type="text" inputMode="decimal" value={d.montantHT}
                   onChange={e=>set("montantHT",e.target.value)}
-                  onBlur={e=>{
-                    const n=parseNum(e.target.value);
-                    if(!isNaN(n)) set("montantHT", n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));
-                  }}
-                  placeholder="0 000,00"
-                  style={{ ...compactInp, paddingRight:22 }} />
-                <span style={{ position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none" }}>€</span>
+                  onBlur={e=>{ const n=parseNum(e.target.value); if(!isNaN(n)) set("montantHT", n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})); }}
+                  placeholder="0 000,00" style={{ ...compactInp, paddingRight:22 }} />
+                <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, color:"#AAA", pointerEvents:"none" }}>€</span>
               </div>
             </div>
             <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={compactInp} /></div>
             <div>{lbl("MONTANT TTC (auto)")}
-              <div style={{ ...compactInp,background:"#F5F5F5",color:"#102A63",fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
+              <div style={{ ...compactInp, background:"#F5F5F5", color:"#102A63", fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
             </div>
-            
-          </div>
-
-          {/* Ligne 4 : Durée + Périodicité + VR % */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
             <div>{lbl("DURÉE (MOIS)")}
               <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={compactInp}>
                 {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
@@ -6789,20 +6766,44 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                 <option>Trimestrielle</option>
               </select>
             </div>
-            <div>{lbl("VALEUR RÉSIDUELLE (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={compactInp} /></div>
+            <div>{lbl("VR (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={compactInp} /></div>
           </div>
 
-          {/* Dates */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10 }}>
-            <div>{lbl("DATE DE SIGNATURE")}
-              <input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={compactInp} />
+          {/* Ligne D : Dates */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
+            <div>{lbl("DATE DE SIGNATURE")}<input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={compactInp} /></div>
+            <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}<input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={compactInp} /></div>
+            <div>{lbl("DATE DE FIN")}<input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={compactInp} /></div>
+          </div>
+
+          {/* Mini graphique avancement */}
+          {ech.length>0 && (
+            <div style={{ marginBottom:10, background:"#F8FAFC", border:"1px solid #E2E8F0", borderRadius:8, padding:"8px 12px", display:"flex", alignItems:"center", gap:14 }}>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", background:"#F1F5F9", marginBottom:5 }}>
+                  <div style={{ width:`${cbPct}%`, background:"linear-gradient(90deg,#22C55E,#16A34A)", transition:"width 0.3s" }} />
+                  <div style={{ width:`${100-cbPct}%`, background:"linear-gradient(90deg,#F87171,#DC2626)", transition:"width 0.3s" }} />
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:9, color:"#16A34A", fontFamily:"'Lora',serif" }}>✓ {cbPaidCount} payée{cbPaidCount>1?"s":""}</span>
+                  <span style={{ fontSize:9, color:"#888", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>{cbPct} %</span>
+                  <span style={{ fontSize:9, color:"#DC2626", fontFamily:"'Lora',serif" }}>{cbRemainCount} restante{cbRemainCount>1?"s":""}</span>
+                </div>
+              </div>
+              <div style={{ textAlign:"center", flexShrink:0 }}>
+                <div style={{ fontSize:16, fontWeight:700, color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", lineHeight:1 }}>{cbPaidCount}<span style={{ fontSize:10, color:"#94A3B8", fontWeight:400 }}>/{cbTotalCount}</span></div>
+                <div style={{ fontSize:8, color:"#AAA", fontFamily:"'Lora',serif", letterSpacing:"0.05em" }}>ÉCHÉANCES</div>
+              </div>
             </div>
-            <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}
-              <input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={compactInp} />
-            </div>
-            <div>{lbl("DATE DE FIN")}
-              <input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={compactInp} />
-            </div>
+          )}
+
+          {/* Notes */}
+          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
+            {lbl("DESCRIPTION / NOTES")}
+            <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Description du projet, contexte, observations…" rows={4} />
+          </div>
+
+           </div>
           </div>
 
           {/* Notes */}
@@ -7046,18 +7047,6 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                     </div>
                   : (
                     <div>
-                      <div style={{ marginBottom:12, background:"#F8FAFC", border:"1px solid #E2E8F0", borderRadius:10, padding:"10px 12px" }}>
-                        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:8 }}>
-                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>ÉCHÉANCES PAYÉES</div><div style={{ fontSize:16,fontWeight:700,color:"#27AE60",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbPaidCount}<span style={{ fontSize:11,color:"#94A3B8",fontWeight:400 }}> / {cbTotalCount}</span></div></div>
-                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>RESTANTES</div><div style={{ fontSize:16,fontWeight:700,color:"#C0392B",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbRemainCount}</div></div>
-                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>AVANCEMENT</div><div style={{ fontSize:16,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{cbPct} %</div></div>
-                          <div><div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2 }}>PROCHAINE</div><div style={{ fontSize:11,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>{ech[cbPaidCount] ? (()=>{ const d2=new Date(d.dateDemarrage||new Date()); d2.setMonth(d2.getMonth()+cbPaidCount); const md=new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate(); d2.setDate(Math.min((new Date(d.dateDemarrage||new Date())).getDate(), md)); return d2.toLocaleDateString("fr-FR"); })() : "Terminé"}</div></div>
-                        </div>
-                        <div style={{ display:"flex", height:16, borderRadius:8, overflow:"hidden", background:"#F1F5F9", boxShadow:"inset 0 0 0 1px #E2E8F0" }}>
-                          <div title={`Payées : ${cbPaidCount}`} style={{ width:`${cbTotalCount?cbPaidCount/cbTotalCount*100:0}%`, background:"linear-gradient(90deg,#22C55E,#16A34A)", transition:"width 0.3s" }} />
-                          <div title={`Restantes : ${cbRemainCount}`} style={{ width:`${cbTotalCount?cbRemainCount/cbTotalCount*100:0}%`, background:"linear-gradient(90deg,#F87171,#DC2626)", transition:"width 0.3s" }} />
-                        </div>
-                      </div>
                       <div style={{ overflowX:"auto" }}>
                       <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>
                         <thead>
@@ -7283,7 +7272,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
                         <div style={{ display:"flex",gap:5,flexWrap:"wrap", alignItems:"center" }}>
                           {d.typeInvestissement && <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.typeInvestissement}</span>}
                           {d.site && <span style={{ fontSize:9,background:"#F5F5F5",color:"#888",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif" }}>{d.site}</span>}
-                          {(() => { const fin0=(d.financeurs||[])[0]||{}; const c0=calcCBRow({...fin0,montantHT:d.montantHT}); const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0; const paid=Math.min((d.paiements||[]).filter(p=>String(p.effectuePar||'').toLowerCase()==='banque' && parseNum(p.montant)>0).length,total); return total>0 ? <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",border:"0.5px solid #BBF7D0", fontVariantNumeric:"tabular-nums" }}>{paid}/{total}</span> : null; })()}
+                          {(() => { const fin0=(d.financeurs||[])[0]||{}; const c0=calcCBRow({...fin0,montantHT:d.montantHT}); const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0; const today2=new Date().toISOString().split('T')[0]; const startD=d.dateDemarrage?new Date(d.dateDemarrage):null; const jourR=startD?startD.getDate():1; let paid=0; if(startD){for(let ii=0;ii<total;ii++){const dtt=new Date(startD);dtt.setMonth(dtt.getMonth()+ii);const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();dtt.setDate(Math.min(jourR,mdd));if(dtt.toISOString().split('T')[0]<=today2)paid++;else break;}} return total>0 ? <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 5px",fontFamily:"'Lora',serif",border:"0.5px solid #BBF7D0", fontVariantNumeric:"tabular-nums" }}>{paid}/{total}</span> : null; })()}
                         </div>
                       )}
                     </div>
@@ -10655,7 +10644,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.397<br />11/05/26 à 18:35
+          v.0.398<br />11/05/26 à 18:45
         </div>
       </div>
 
