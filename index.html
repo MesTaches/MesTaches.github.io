@@ -6450,7 +6450,7 @@ function exportCBPDF(d) {
     </table>
   </div>`:""}
 
-  \${(()=>{
+  ${(()=>{
     const finRow0 = (d.financeurs||[])[0]||{};
     const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
     if (calc0.taux12 === null) return '';
@@ -6500,7 +6500,7 @@ function exportCBPDF(d) {
       +'</div>';
   })()}
 
-  \${d.notes?`<div class="notes"><strong style="font-size:10px;color:#102A63;text-transform:uppercase;letter-spacing:0.06em">Notes</strong><br/><br/>\${d.notes}</div>`:""}
+  ${d.notes?`<div class="notes"><strong style="font-size:10px;color:#102A63;text-transform:uppercase;letter-spacing:0.06em">Notes</strong><br/><br/>${d.notes}</div>`:""}
 
   <div class="footer">
     <span>${d.reference||""} — ${d.intitule||""}</span>
