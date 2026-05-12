@@ -796,7 +796,6 @@ function exportRCFPDF(lignes, selectedIds, now) {
     + '<div class="section-title">Détail des facilités</div>'
     + cardsHTML
     + '<div class="footer"><span>Synthèse RCF · '+subset.length+' facilité'+(subset.length>1?"s":"")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
-    + '<scr'+'ipt>setTimeout(function(){window.print();},600);</scr'+'ipt>'
     + '</body></html>';
 
   _rcfPrintIframe(htm);
@@ -837,7 +836,6 @@ function exportSingleRCFPDF(ligne, now) {
     + '<div class="section-title">Détail de la facilité</div>'
     + cardHTML
     + '<div class="footer"><span>'+(ligne.reference||ligne.intitule||"RCF")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
-    + '<scr'+'ipt>setTimeout(function(){window.print();},600);</scr'+'ipt>'
     + '</body></html>';
 
   _rcfPrintIframe(htm);
