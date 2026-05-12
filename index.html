@@ -68,6 +68,7 @@ input::placeholder, textarea::placeholder {
     }
   </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -7048,7 +7049,7 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
   const cbPaidCount = cbTotalCount>0 ? (()=>{ const startDate=d.dateDemarrage?new Date(d.dateDemarrage):null; if(!startDate) return 0; const jourRef=startDate.getDate(); let cnt=0; for(let i=0;i<cbTotalCount;i++){const dt=new Date(startDate);dt.setMonth(dt.getMonth()+i);const md=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();dt.setDate(Math.min(jourRef,md));if(dt.toISOString().split('T')[0]<=todayStr)cnt++;else break;} return cnt;})() : 0;
   const cbRemainCount = Math.max(0, cbTotalCount-cbPaidCount);
   const cbPct = cbTotalCount>0 ? Math.round(cbPaidCount/cbTotalCount*100) : 0;
-  const compactInp = { ...inp, padding:"4px 10px", minHeight:30, lineHeight:1.2 };
+  
 
   const fmtN = (v,dec=2) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
   const fmtE = (v,dec=0) => v===null||v===undefined||isNaN(v)?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
@@ -7098,29 +7099,29 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
           {/* Formulaire compact — 2 lignes principales + montants + dates */}
           {/* Ligne A : 5 champs sur 1 ligne */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr 1fr 1fr", gap:8, marginBottom:8 }}>
-            <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={compactInp} /></div>
-            <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={compactInp} /></div>
-            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ ...compactInp, background:"#F5F5F5", color:"#888", userSelect:"none" }}>{d.reference||"—"}</div></div>
+            <div>{lbl("CODE PROJET")}<input value={d.codeProjet} onChange={e=>set("codeProjet",e.target.value)} placeholder="EX-2026-001" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("INTITULÉ DU PROJET")}<input value={d.intitule} onChange={e=>set("intitule",e.target.value)} placeholder="Acquisition camion..." style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("RÉFÉRENCE DOSSIER")}<div style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2, background:"#F5F5F5", color:"#888", userSelect:"none" }}>{d.reference||"—"}</div></div>
             <div>{lbl("TYPE DE FINANCEMENT")}
-              <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={compactInp}>
+              <select value={d.typeFinancement||""} onChange={e=>set("typeFinancement",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                 <option value="">— Choisir —</option>
                 <option value="Crédit-bail">Crédit-bail</option>
                 <option value="Lease back">Lease back</option>
               </select>
             </div>
-            <div>{lbl("N° CONTRAT")}<input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="CB-2024-00123" style={compactInp} /></div>
+            <div>{lbl("N° CONTRAT")}<input value={d.numeroContrat||""} onChange={e=>set("numeroContrat",e.target.value)} placeholder="CB-2024-00123" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
           </div>
 
           {/* Ligne B : Type invest + Fournisseur + Site */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr 1fr", gap:8, marginBottom:8 }}>
             <div>{lbl("TYPE D'INVESTISSEMENT")}
-              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={compactInp}>
+              <select value={d.typeInvestissement} onChange={e=>set("typeInvestissement",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                 <option value="">— Choisir —</option>
                 {INVEST_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </div>
-            <div>{lbl("FOURNISSEUR")}<input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={compactInp} /></div>
-            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={compactInp} /></div>
+            <div>{lbl("FOURNISSEUR")}<input value={d.fournisseur} onChange={e=>set("fournisseur",e.target.value)} placeholder="Nom du fournisseur" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("SITE CONCERNÉ")}<input value={d.site||""} onChange={e=>set("site",e.target.value)} placeholder="Ex: Bordeaux, Paris..." style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
           </div>
 
           {/* Ligne C : Montants + Durée + Périodicité + VR */}
@@ -7130,33 +7131,33 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
                 <input type="text" inputMode="decimal" value={d.montantHT}
                   onChange={e=>set("montantHT",e.target.value)}
                   onBlur={e=>{ const n=parseNum(e.target.value); if(!isNaN(n)) set("montantHT", n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})); }}
-                  placeholder="0 000,00" style={{ ...compactInp, paddingRight:22 }} />
+                  placeholder="0 000,00" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2, paddingRight:22 }} />
                 <span style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)", fontSize:11, color:"#AAA", pointerEvents:"none" }}>€</span>
               </div>
             </div>
-            <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={compactInp} /></div>
+            <div>{lbl("TVA (%)")}<input type="text" inputMode="decimal" value={d.tva} onChange={e=>set("tva",e.target.value)} placeholder="20" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
             <div>{lbl("MONTANT TTC (auto)")}
-              <div style={{ ...compactInp, background:"#F5F5F5", color:"#102A63", fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
+              <div style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2, background:"#F5F5F5", color:"#102A63", fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
             </div>
             <div>{lbl("DURÉE (MOIS)")}
-              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={compactInp}>
+              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                 {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
               </select>
             </div>
             <div>{lbl("PÉRIODICITÉ")}
-              <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={compactInp}>
+              <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                 <option>Mensuelle</option>
                 <option>Trimestrielle</option>
               </select>
             </div>
-            <div>{lbl("VR (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={compactInp} /></div>
+            <div>{lbl("VR (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
           </div>
 
           {/* Ligne D : Dates */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
-            <div>{lbl("DATE DE SIGNATURE")}<input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={compactInp} /></div>
-            <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}<input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={compactInp} /></div>
-            <div>{lbl("DATE DE FIN")}<input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={compactInp} /></div>
+            <div>{lbl("DATE DE SIGNATURE")}<input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}<input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("DATE DE FIN")}<input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
           </div>
 
           {/* Mini graphique avancement */}
@@ -7828,6 +7829,91 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
 /* ═══════════════════════════════════════════════════════════════
    ECHEANCIER DOSSIER MODAL (panneau latéral)
    ═══════════════════════════════════════════════════════════════ */
+/* ── Helpers IA Échéancier ── */
+async function echExtractPdfText(file) {
+  var pdfjsLib = window['pdfjs-dist/build/pdf'];
+  if (!pdfjsLib) throw new Error('PDF.js non chargé');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var ab = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  var text = '';
+  for (var i = 1; i <= pdf.numPages; i++) {
+    var page = await pdf.getPage(i);
+    var tc = await page.getTextContent();
+    text += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+  }
+  return text.trim();
+}
+function echExtractXlsxText(file) {
+  return new Promise(function(resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        var wb = XLSX.read(e.target.result, { type: 'binary' });
+        var text = '';
+        wb.SheetNames.forEach(function(name) {
+          text += '=== Feuille: ' + name + ' ===\n' + XLSX.utils.sheet_to_csv(wb.Sheets[name]) + '\n';
+        });
+        resolve(text.trim());
+      } catch(err) { reject(err); }
+    };
+    reader.readAsBinaryString(file);
+  });
+}
+async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoading, setD, setAiOpen, setAiFiles) {
+  setAiLoading(true); setAiError(''); setAiLog('Extraction du texte...');
+  try {
+    var combinedText = '';
+    for (var fi = 0; fi < aiFiles.length; fi++) {
+      var f = aiFiles[fi];
+      var ext = f.name.split('.').pop().toLowerCase();
+      setAiLog('Lecture de ' + f.name + '...');
+      if (ext === 'pdf') combinedText += '\n\n[PDF: ' + f.name + ']\n' + await echExtractPdfText(f);
+      else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') combinedText += '\n\n[EXCEL: ' + f.name + ']\n' + await echExtractXlsxText(f);
+    }
+    setAiLog('Analyse Groq en cours...');
+    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + combinedText.substring(0, 28000);
+    var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
+      body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 8000 })
+    });
+    if (!resp.ok) throw new Error('Groq error ' + resp.status);
+    var data = await resp.json();
+    var raw = data.choices[0].message.content.trim();
+    var f1 = raw.indexOf('{'), l1 = raw.lastIndexOf('}');
+    if (f1 === -1) throw new Error('Pas de JSON dans la reponse');
+    var p = JSON.parse(raw.substring(f1, l1 + 1));
+    setD(function(prev) {
+      return Object.assign({}, prev, {
+        intitule: p.intitule || prev.intitule,
+        banque: p.creancier || prev.banque,
+        numContrat: p.reference || prev.numContrat,
+        montant: p.montant ? String(p.montant) : prev.montant,
+        tauxAnnuel: p.tauxAnnuel ? String(p.tauxAnnuel) : prev.tauxAnnuel,
+        duree: p.duree ? String(p.duree) : prev.duree,
+        dateDebut: p.dateDebut && p.dateDebut !== 'YYYY-MM-DD' ? p.dateDebut : prev.dateDebut,
+        typeAmort: p.typeAmort || prev.typeAmort,
+        assuranceMensuelle: p.assuranceMensuelle ? String(p.assuranceMensuelle) : prev.assuranceMensuelle,
+        carence: p.carence ? String(p.carence) : prev.carence,
+        differe: p.differe ? String(p.differe) : prev.differe,
+        tauxDiffere: p.tauxDiffere ? String(p.tauxDiffere) : prev.tauxDiffere,
+        tauxGarantie: p.tauxGarantie ? String(p.tauxGarantie) : prev.tauxGarantie,
+        objet: p.objet || prev.objet,
+        notes: p.notes || prev.notes,
+        lignes: (p.lignes && p.lignes.length > 1) ? p.lignes.map(function(l, i) {
+          return { id: (prev.lignes && prev.lignes[i]) ? prev.lignes[i].id : Math.random().toString(36).substr(2,9),
+            date: l.date || '', capitalRembourse: l.capital || 0, interets: l.interets || 0,
+            assurance: l.assurance || 0, totalMensualite: l.total || ((l.capital||0)+(l.interets||0)+(l.assurance||0)),
+            paye: false, datePaiement: '', commentaire: '' };
+        }) : prev.lignes
+      });
+    });
+    setAiOpen(false); setAiFiles([]); setAiLog(''); setAiError('');
+  } catch(err) { setAiError('Erreur : ' + err.message); setAiLog('');
+  } finally { setAiLoading(false); }
+}
+
 function EchDossierPanel({ dossier, onSave, onClose }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => {
@@ -7841,6 +7927,15 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
 
   const inp = { border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white" };
+  const [aiOpen, setAiOpen] = React.useState(false);
+  const [aiFiles, setAiFiles] = React.useState([]);
+  const [aiLoading, setAiLoading] = React.useState(false);
+  const [aiError, setAiError] = React.useState("");
+  const [aiLog, setAiLog] = React.useState("");
+  const openFilePicker = () => { var i2=document.createElement('input'); i2.type='file'; i2.multiple=true; i2.accept='.pdf,.xlsx,.xls,.csv'; i2.onchange=function(e){ setAiFiles(function(p){ return p.concat(Array.from(e.target.files)); }); setAiError(""); }; i2.click(); };
+  const removeAiFile = (idx) => setAiFiles(function(p){ return p.filter(function(_,j){ return j!==idx; }); });
+  const runAI = () => { var key=(loadSettings().groqKey||'').trim(); if(!key){setAiError('Clé Groq manquante dans Paramètres.');return;} if(aiFiles.length===0){setAiError('Déposez au moins un fichier.');return;} echAnalyzeWithAI(aiFiles,key,setAiLog,setAiError,setAiLoading,setD,setAiOpen,setAiFiles); };
+  
   const lbl = (t) => <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",
     marginBottom:3,letterSpacing:"0.06em",textTransform:"uppercase" }}>{t}</div>;
 
@@ -7921,10 +8016,29 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
             <div style={{ fontSize:17,fontWeight:700,color:"white",fontFamily:"'Lora',serif" }}>{d.intitule||"Nouvel échéancier"}</div>
           </div>
           <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
+            <button onClick={() => { setAiOpen(function(o){return !o;}); setAiError(""); setAiFiles([]); }} style={{ background:aiOpen?"rgba(255,200,0,0.25)":"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.35)", color:"white", borderRadius:8, padding:"0 12px", height:32, cursor:"pointer", fontSize:11, fontFamily:"'Lora',serif", fontWeight:700 }}>🤖 Importer via IA</button>
             <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center" }}>×</button>
           </div>
         </div>
 
+        {aiOpen && <div style={{ background:"#F0F4FF", borderBottom:"2px solid #102A63", padding:"14px 22px", flexShrink:0 }}>
+          <div style={{ fontFamily:"'Lora',serif", fontSize:11, fontWeight:700, color:"#102A63", marginBottom:8 }}>🤖 Déposez votre contrat (PDF) et/ou échéancier (Excel/CSV)</div>
+          <div onDragOver={function(e){e.preventDefault();}} onDrop={function(e){e.preventDefault();setAiFiles(function(p){return p.concat(Array.from(e.dataTransfer.files));});setAiError("");}} onClick={openFilePicker}
+            style={{ border:"2px dashed #102A63", borderRadius:8, padding:"14px", textAlign:"center", background:"white", cursor:"pointer", marginBottom:8 }}>
+            {aiFiles.length===0
+              ? <span style={{ fontSize:11, color:"#AAA", fontFamily:"'Lora',serif" }}>📂 Cliquez ou glissez vos fichiers (.pdf, .xlsx, .csv)</span>
+              : <div style={{ display:"flex", flexWrap:"wrap", gap:6, justifyContent:"center" }}>
+                  {aiFiles.map(function(f,i){ return <span key={i} style={{ background:"#E8EEF8", border:"1px solid #C5D0E8", borderRadius:6, padding:"3px 10px", fontSize:10, fontFamily:"'Lora',serif", color:"#102A63" }}>{f.name.endsWith('.pdf')?'📄':'📊'} {f.name} <span style={{ cursor:"pointer", color:"#E74C3C", fontWeight:700, marginLeft:6 }} onClick={function(ev){ev.stopPropagation();removeAiFile(i);}}>×</span></span>; })}
+                </div>
+            }
+          </div>
+          {aiError && <div style={{ fontSize:10, color:"#E74C3C", fontFamily:"'Lora',serif", marginBottom:6 }}>⚠ {aiError}</div>}
+          {aiLog && <div style={{ fontSize:10, color:"#555", fontFamily:"'Lora',serif", marginBottom:6, fontStyle:"italic" }}>⏳ {aiLog}</div>}
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={runAI} disabled={aiLoading||aiFiles.length===0} style={{ background:aiLoading?"#AAA":"#102A63", color:"white", border:"none", borderRadius:8, padding:"7px 16px", fontSize:11, fontFamily:"'Lora',serif", fontWeight:700, cursor:aiLoading?"not-allowed":"pointer" }}>{aiLoading?"⏳ Analyse en cours...":"🚀 Analyser et remplir"}</button>
+            <button onClick={function(){setAiOpen(false);setAiFiles([]);setAiError("");setAiLog("");}} style={{ background:"white", color:"#888", border:"1px solid #DDD", borderRadius:8, padding:"7px 14px", fontSize:11, fontFamily:"'Lora',serif", cursor:"pointer" }}>Annuler</button>
+          </div>
+        </div>}
         {/* Corps : 2 colonnes */}
         <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"row" }}>
 
@@ -7955,21 +8069,30 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
 
             {/* Infos prêt */}
             <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={compactInp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={compactInp} /></div>
-              <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={compactInp} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Intitulé")}<input value={d.intitule||""} onChange={e=>set("intitule",e.target.value)} placeholder="Ex : Emprunt BNP 2024" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Banque / Organisme")}<input value={d.banque||""} onChange={e=>set("banque",e.target.value)} placeholder="BNP Paribas…" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+              <div style={{ gridColumn:"1/-1" }}>{lbl("Objet du financement")}<input value={d.objet||""} onChange={e=>set("objet",e.target.value)} placeholder="Achat véhicule, travaux…" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div>{lbl("TYPE D'AMORTISSEMENT")}
-                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={compactInp}>
+                <select value={d.typeAmort||"annuites"} onChange={e=>set("typeAmort",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                   <option value="annuites">Annuités constantes</option>
                   <option value="capital">Capital constant</option>
                 </select>
               </div>
-              <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={compactInp} /></div>
+              <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={compactInp} /></div>
-              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={compactInp}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
-              <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={compactInp} /></div>
-              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={compactInp} /></div>
+              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+              <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
+              <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div style={{gridColumn:"1/-1"}}>
                 {lbl("DATES DE VERSEMENT DES FONDS")}
                 <div style={{display:"flex",flexDirection:"column",gap:6}}>
@@ -7983,9 +8106,11 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                   <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])} style={{fontSize:11,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",textAlign:"left"}}>+ Ajouter un versement</button>
                 </div>
               </div>
-              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={compactInp} /></div>
+              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div>{lbl("Garantie")}
-                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={compactInp}>
+                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
                   <option value="">—</option>
                   {ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}
                 </select>
@@ -7993,23 +8118,31 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={compactInp} /></div>
-                  <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={compactInp} /></div>
-                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={compactInp} /></div>
-                  <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={compactInp} /></div>
-                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={compactInp} /></div>
-                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={compactInp} /></div>
+                  <div>{lbl("TEG hors période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                  <div>{lbl("TEG période amort. add. (%/an)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                  <div>{lbl("Com. garantie 1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                  <div>{lbl("Taux capitalisation rang1 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                  <div>{lbl("Com. garantie 2 (%/an)")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                  <div>{lbl("Durée taux garantie 1 (mois)")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
                   <div>{lbl("Carence (mois) — aucun paiement")}
-                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={compactInp} />
+                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
                   </div>
                   <div>{lbl("Différé add. (mois) — intérêts seuls")}
-                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={compactInp} />
+                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
+    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
                   </div>
                 </div>
@@ -9011,12 +9144,12 @@ function RCFView({ settings }) {
   };
 
   const alertesContrat = (d) => alertes(d, [
-    [60, "< 60 jours", "#D97706", "#FEF3C7"],
     [30, "< 30 jours", "#DC2626", "#FEE2E2"],
+    [60, "< 60 jours", "#D97706", "#FEF3C7"],
   ]);
   const alertesTirage = (d) => alertes(d, [
-    [60, "< 60 jours", "#D97706", "#FEF3C7"],
     [30, "< 30 jours", "#DC2626", "#FEE2E2"],
+    [60, "< 60 jours", "#D97706", "#FEF3C7"],
   ]);
 
   // KPIs globaux
@@ -9088,10 +9221,10 @@ function RCFView({ settings }) {
           return (
             <div key={ligne.id} style={{ background: "white", borderRadius: 16, border: `1px solid ${alerteC?.urgent ? "#FECACA" : "#ECEAE5"}`, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
               {/* Header ligne */}
-              <div style={{ background: "#102A63", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ background: "#102A63", padding: "8px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <input type="checkbox" checked={selectedIds.includes(ligne.id)} onChange={() => toggleSelect(ligne.id)} style={{ width: 14, height: 14, accentColor: "#0E7490" }} />
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>↺</div>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>↺</div>
                   <div>
                     <div style={{ fontFamily: "'Lora',serif", fontSize: 15, fontWeight: 700, color: "white" }}>{ligne.intitule || "Sans titre"}</div>
                     <div style={{ fontFamily: "'Lora',serif", fontSize: 11, color: "rgba(255,255,255,0.6)" }}>{ligne.banque || ""}{ligne.reference ? " · " + ligne.reference : ""}</div>
@@ -9148,23 +9281,33 @@ function RCFView({ settings }) {
 
                 {/* Tirages */}
                 <div>
-                  <div style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em", marginBottom: 8 }}>
-                    TIRAGES EN COURS ({(ligne.tirages || []).filter(t => t.dateEcheance >= now).length})
+                  <div style={{ fontSize: 9, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                    {ligne.autorisationDecouverte ? "DÉCOUVERT EN COURS" : `TIRAGES EN COURS (${(ligne.tirages || []).filter(t => !t.dateEcheance || t.dateEcheance >= now).length})`}
+                    {ligne.autorisationDecouverte && <span style={{ fontSize:8, background:"#F5F3FF", color:"#6D28D9", borderRadius:4, padding:"1px 5px", fontWeight:700, fontFamily:"'Lora',serif", border:"1px solid #DDD6FE" }}>⬡ Découvert</span>}
                   </div>
                   {(ligne.tirages || []).length === 0
                     ? <div style={{ fontSize: 11, color: "#CCC", fontFamily: "'Lora',serif" }}>Aucun tirage</div>
                     : (ligne.tirages || []).sort((a, b) => (a.dateEcheance || "") > (b.dateEcheance || "") ? 1 : -1).map((t, ti) => {
-                        const alerteT = alertesTirage(t.dateEcheance);
-                        const isPast = t.dateEcheance < now;
+                        const noDate = !t.dateEcheance;
+                        const isPast = !noDate && t.dateEcheance < now;
+                        const alerteT = noDate ? null : alertesTirage(t.dateEcheance);
                         return (
                           <div key={ti} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "4px 8px", background: isPast ? "#F0FDF4" : alerteT ? alerteT.bg : "#F8FAFC", borderRadius: 6, marginBottom: 4, border: `1px solid ${alerteT ? alerteT.color + "40" : "#E2E8F0"}` }}>
                             <div>
                               <div style={{ fontSize: 11, fontWeight: 700, color: isPast ? "#888" : "#102A63", fontFamily: "'Lora',serif" }}>{fmtE(t.montant)}</div>
-                              <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif" }}>éch. {fmtD(t.dateEcheance)}</div>
+                              <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif" }}>
+                                {noDate
+                                  ? ligne.autorisationDecouverte ? "Découvert permanent" : "Sans date de fin"
+                                  : `éch. ${fmtD(t.dateEcheance)}`}
+                                {ligne.renouvAuto && !isPast && <span style={{ color:"#065F46", marginLeft: 4 }}>↺</span>}
+                                {t.note ? ` · ${t.note}` : ""}
+                              </div>
                             </div>
-                            {t.renouvAuto && !isPast && <span style={{ fontSize:9,background:"#ECFDF5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontWeight:700,fontFamily:"'Lora',serif",border:"1px solid #6EE7B7" }}>↺ Auto</span>}
-                            {alerteT && <AlertBadge date={t.dateEcheance} fn={alertesTirage} />}
-                            {isPast && <span style={{ fontSize: 9, background: "#D1FAE5", color: "#065F46", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "'Lora',serif" }}>Remboursé</span>}
+                            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                              {ligne.autorisationDecouverte && !isPast && <span style={{ fontSize:9, background:"#F5F3FF", color:"#6D28D9", borderRadius:4, padding:"1px 5px", fontWeight:700, fontFamily:"'Lora',serif", border:"1px solid #DDD6FE" }}>⬡</span>}
+                              {alerteT && <AlertBadge date={t.dateEcheance} fn={alertesTirage} />}
+                              {isPast && <span style={{ fontSize: 9, background: "#D1FAE5", color: "#065F46", borderRadius: 4, padding: "1px 6px", fontWeight: 700, fontFamily: "'Lora',serif" }}>Remboursé</span>}
+                            </div>
                           </div>
                         );
                       })}
@@ -9198,24 +9341,19 @@ function RCFView({ settings }) {
 }
 
 function RCFModal({ ligne, onSave, onClose }) {
-  const empty = { intitule: "", banque: "", reference: "", montantAutorise: "", montantTire: "", taux: "", dateDebutContrat: "", dateFinContrat: "", conditions: "", notes: "", tirages: [], attachments: [] };
+  const empty = { intitule: "", banque: "", reference: "", montantAutorise: "", montantTire: "", taux: "", dateDebutContrat: "", dateFinContrat: "", conditions: "", notes: "", tirages: [], attachments: [], renouvAuto: false, autorisationDecouverte: false };
   const [d, setD] = React.useState(ligne ? { ...ligne } : empty);
   const set = (k, v) => setD(p => ({ ...p, [k]: v }));
 
-  const addTirage = () => set("tirages", [...(d.tirages || []), { montant: "", periodeDebut: "", periodeFin: "", note: "" }]);
+  const addTirage = () => set("tirages", [...(d.tirages || []), { montant: "", periodeDebut: "", dateEcheance: "", note: "" }]);
   const updTirage = (i, k, v) => { const t = [...(d.tirages || [])]; t[i] = { ...t[i], [k]: v }; set("tirages", t); };
   const delTirage = (i) => set("tirages", (d.tirages || []).filter((_, j) => j !== i));
 
-  const inp = { border: "1px solid #E8E8E8", borderRadius: 8, padding: "8px 10px", fontSize: 12, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50" };
-  const compactInp = { ...inp, padding: "5px 10px", fontSize: 11 };
+  const inp = { border: "1px solid #E8E8E8", borderRadius: 8, padding: "6px 10px", fontSize: 11, outline: "none", width: "100%", boxSizing: "border-box", fontFamily: "'Lora',serif", color: "#2C3E50" };
   const lbl = (t) => <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", marginBottom: 4, letterSpacing: "0.05em" }}>{t}</div>;
-  const fmtMoney = (v) => {
-    const n = Number(String(v || "").replace(/\s/g, "").replace(/,/g, "."));
-    return isNaN(n) ? "" : n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-  };
+  const fmtMoney = (v) => { const n = Number(String(v || "").replace(/\s/g, "").replace(/,/g, ".")); return isNaN(n) ? "" : n.toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }); };
   const calcMontantTire = () => (d.tirages || []).reduce((a, t) => a + (Number(String(t.montant || "").replace(/\s/g, "").replace(/,/g, ".")) || 0), 0);
   const montantTireCalc = calcMontantTire();
-  const isReadOnlyTire = true;
 
   React.useEffect(() => {
     if (!ligne) return;
@@ -9223,55 +9361,161 @@ function RCFModal({ ligne, onSave, onClose }) {
       ...ligne,
       montantAutorise: ligne.montantAutorise != null && ligne.montantAutorise !== "" ? fmtMoney(ligne.montantAutorise) : "",
       montantTire: ligne.montantTire != null && ligne.montantTire !== "" ? fmtMoney(ligne.montantTire) : "",
-      tirages: Array.isArray(ligne.tirages) ? ligne.tirages : [],
-      attachments: Array.isArray(ligne.attachments) ? ligne.attachments : []
+      tirages: Array.isArray(ligne.tirages) ? ligne.tirages.map(t => ({ ...t, dateEcheance: t.dateEcheance || t.periodeFin || "" })) : [],
+      attachments: Array.isArray(ligne.attachments) ? ligne.attachments : [],
+      renouvAuto: !!ligne.renouvAuto,
+      autorisationDecouverte: !!ligne.autorisationDecouverte,
     });
   }, [ligne]);
+
+  /* Checkbox stylisée */
+  const CheckBox = ({ checked, onChange, icon, label, sublabel, color, bg, bd }) => (
+    <label onClick={() => onChange(!checked)} style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer", padding: "10px 14px", background: checked ? bg : "white", border: `1px solid ${checked ? bd : "#E8E8E8"}`, borderRadius: 10, transition: "background 0.15s,border 0.15s" }}>
+      <div style={{ marginTop: 2, flexShrink: 0, width: 18, height: 18, borderRadius: 4, border: `2px solid ${checked ? color : "#CCC"}`, background: checked ? color : "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        {checked && <span style={{ color: "white", fontSize: 11, lineHeight: 1, fontWeight: 700 }}>✓</span>}
+      </div>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, fontFamily: "'Lora',serif", color: checked ? color : "#555" }}>{icon} {label}</div>
+        {sublabel && <div style={{ fontSize: 10, fontFamily: "'Lora',serif", color: "#888", marginTop: 2, lineHeight: 1.5 }}>{sublabel}</div>}
+      </div>
+    </label>
+  );
+
+  const handleSave = () => {
+    const tirages = (d.tirages || []).map(t => ({
+      ...t,
+      dateEcheance: d.renouvAuto ? (d.dateFinContrat || t.dateEcheance || "") : d.autorisationDecouverte ? "" : (t.dateEcheance || t.periodeFin || ""),
+      periodeFin:   d.renouvAuto ? (d.dateFinContrat || t.periodeFin || "") : d.autorisationDecouverte ? "" : (t.periodeFin || t.dateEcheance || ""),
+    }));
+    onSave({ ...d, montantAutorise: String(d.montantAutorise || ""), montantTire: String(montantTireCalc || ""), tirages, attachments: d.attachments || [] });
+  };
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={{ width: "min(700px,96vw)", background: "white", borderRadius: 16, overflow: "hidden", maxHeight: "90vh", display: "flex", flexDirection: "column" }}>
+
         {/* Header */}
-        <div style={{ background: "#102A63", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ background: "#102A63", padding: "18px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: 10, color: "rgba(255,255,255,0.6)", fontFamily: "'Lora',serif", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 3 }}>Revolving Credit Facility</div>
             <div style={{ fontSize: 16, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>{ligne ? "Modifier le RCF" : "Nouveau RCF"}</div>
           </div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "white", fontSize: 20, cursor: "pointer" }}>×</button>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "white", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
         </div>
 
         <div style={{ overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 16 }}>
-          {/* Infos générales */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div style={{ gridColumn: "1/-1" }}>{lbl("INTITULÉ")}<input value={d.intitule} onChange={e => set("intitule", e.target.value)} placeholder="RCF BNP 2024" style={compactInp} /></div>
-            <div>{lbl("BANQUE / ORGANISME")}<input value={d.banque} onChange={e => set("banque", e.target.value)} placeholder="BNP Paribas" style={compactInp} /></div>
-            <div>{lbl("RÉFÉRENCE")}<input value={d.reference} onChange={e => set("reference", e.target.value)} placeholder="RCF-2024-001" style={compactInp} /></div>
-            <div>{lbl("MONTANT AUTORISÉ (€)")}<input type="text" value={d.montantAutorise} onChange={e => set("montantAutorise", fmtMoney(e.target.value))} placeholder="5 000 000" style={compactInp} /></div>
-            <div>{lbl("MONTANT TIRÉ (€)")}<div style={{ ...compactInp, background: "#F5F5F5", color: "#102A63", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span>{fmtMoney(montantTireCalc)}</span><span style={{ fontSize: 9, color: "#888", fontWeight: 400 }}>calculé</span></div></div>
-            <div>{lbl("TAUX (%/AN)")}<input type="text" value={d.taux} onChange={e => set("taux", e.target.value)} placeholder="3,50" style={compactInp} /></div>
-            <div>{lbl("CONDITIONS")}<input value={d.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Euribor + 1,5%" style={compactInp} /></div>
-            <div>{lbl("DATE DÉBUT CONTRAT")}<input type="date" value={d.dateDebutContrat} onChange={e => set("dateDebutContrat", e.target.value)} style={compactInp} /></div>
-            <div>{lbl("ÉCHÉANCE CONTRAT")}<input type="date" value={d.dateFinContrat} onChange={e => set("dateFinContrat", e.target.value)} style={compactInp} /></div>
+
+          {/* ── Infos générales ── */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div style={{ gridColumn: "1/-1" }}>{lbl("INTITULÉ")}<input value={d.intitule} onChange={e => set("intitule", e.target.value)} placeholder="RCF BNP 2024" style={inp} /></div>
+            <div>{lbl("BANQUE / ORGANISME")}<input value={d.banque} onChange={e => set("banque", e.target.value)} placeholder="BNP Paribas" style={inp} /></div>
+            <div>{lbl("RÉFÉRENCE")}<input value={d.reference} onChange={e => set("reference", e.target.value)} placeholder="RCF-2024-001" style={inp} /></div>
+            <div>{lbl("MONTANT AUTORISÉ (€)")}<input type="text" value={d.montantAutorise} onChange={e => set("montantAutorise", fmtMoney(e.target.value))} placeholder="5 000 000" style={inp} /></div>
+            <div>
+              {lbl("MONTANT TIRÉ (€)")}
+              <div style={{ ...inp, background: "#F5F5F5", color: "#102A63", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>{fmtMoney(montantTireCalc)}</span>
+                <span style={{ fontSize: 9, color: "#AAA", fontWeight: 400 }}>calculé</span>
+              </div>
+            </div>
+            <div>{lbl("TAUX (%/AN)")}<input type="text" value={d.taux} onChange={e => set("taux", e.target.value)} placeholder="3,50" style={inp} /></div>
+            <div>{lbl("CONDITIONS")}<input value={d.conditions} onChange={e => set("conditions", e.target.value)} placeholder="Euribor + 1,5%" style={inp} /></div>
+            <div>{lbl("DATE DÉBUT CONTRAT")}<input type="date" value={d.dateDebutContrat} onChange={e => set("dateDebutContrat", e.target.value)} style={inp} /></div>
+            <div>{lbl("ÉCHÉANCE CONTRAT")}<input type="date" value={d.dateFinContrat} onChange={e => set("dateFinContrat", e.target.value)} style={inp} /></div>
           </div>
 
-          {/* Tirages */}
+          {/* ── Type de facilité ── */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.06em" }}>TYPE DE FACILITÉ</div>
+            <CheckBox
+              checked={!!d.renouvAuto}
+              onChange={v => { set("renouvAuto", v); if (v) set("autorisationDecouverte", false); }}
+              icon="↺" label="Renouvellement automatique"
+              sublabel="Le tirage se renouvelle automatiquement sans demande auprès de la banque. Le montant reste actif jusqu'à expiration du contrat ou modification manuelle."
+              color="#065F46" bg="#F0FDF4" bd="#BBF7D0"
+            />
+            <CheckBox
+              checked={!!d.autorisationDecouverte}
+              onChange={v => { set("autorisationDecouverte", v); if (v) set("renouvAuto", false); }}
+              icon="⬡" label="Autorisation de découvert"
+              sublabel="Le tirage est une autorisation de découvert bancaire sans date de fin. Le montant reste actif jusqu'à résiliation manuelle."
+              color="#6D28D9" bg="#F5F3FF" bd="#DDD6FE"
+            />
+          </div>
+
+          {/* ── Tirages ── */}
           <div style={{ background: "#F0F5FF", borderRadius: 10, padding: "14px 16px", border: "1px solid #BFDBFE" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em" }}>TIRAGES EN COURS</div>
-              <button onClick={addTirage} style={{ fontSize: 11, fontFamily: "'Lora',serif", background: "#102A63", color: "white", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>+ Ajouter</button>
-            </div>
-            {(d.tirages || []).length === 0
-              ? <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif" }}>Aucun tirage — cliquez sur "+ Ajouter"</div>
-              : (d.tirages || []).map((t, i) => (
-                <div key={i} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 2fr auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
-                  <div>{lbl("Montant (€)")}<input type="text" value={t.montant || ""} onChange={e => updTirage(i, "montant", fmtMoney(e.target.value))} placeholder="500 000" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
-                  <div>{lbl("Période du")}<input type="date" value={t.periodeDebut || ""} onChange={e => updTirage(i, "periodeDebut", e.target.value)} style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
-                  <div>{lbl("au")}<input type="date" value={t.periodeFin || ""} onChange={e => updTirage(i, "periodeFin", e.target.value)} style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
-                  <div>{lbl("Note")}<input value={t.note || ""} onChange={e => updTirage(i, "note", e.target.value)} placeholder="Tranche A…" style={{ ...inp, fontSize: 11, padding: "6px 8px" }} /></div>
-                  <button onClick={() => delTirage(i)} style={{ border: "none", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, width: 30, height: 32, cursor: "pointer", fontSize: 14 }}>×</button>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.07em" }}>
+                  {d.autorisationDecouverte ? "DÉCOUVERT EN COURS" : "TIRAGES EN COURS"}
                 </div>
-              ))}
+                {d.renouvAuto && <div style={{ fontSize: 9, color: "#065F46", fontFamily: "'Lora',serif", marginTop: 2 }}>↺ Renouvellement auto · la date d'échéance est calée sur la fin du contrat</div>}
+                {d.autorisationDecouverte && <div style={{ fontSize: 9, color: "#6D28D9", fontFamily: "'Lora',serif", marginTop: 2 }}>⬡ Pas de date de fin · arrêt manuel uniquement</div>}
+              </div>
+              {!d.autorisationDecouverte && (
+                <button onClick={addTirage} style={{ fontSize: 11, fontFamily: "'Lora',serif", background: "#102A63", color: "white", border: "none", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>+ Ajouter</button>
+              )}
+            </div>
+
+            {d.autorisationDecouverte
+              ? /* Mode découvert : une ligne unique sans date d'échéance */
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8, alignItems: "end" }}>
+                  <div>
+                    {lbl("Montant du découvert (€)")}
+                    <input type="text"
+                      value={(d.tirages || [])[0]?.montant || ""}
+                      onChange={e => {
+                        const ts = [...(d.tirages || [{}])];
+                        if (!ts[0]) ts[0] = {};
+                        ts[0] = { ...ts[0], montant: fmtMoney(e.target.value), dateEcheance: "", periodeFin: "" };
+                        set("tirages", ts);
+                      }}
+                      placeholder="500 000" style={inp} />
+                  </div>
+                  <div>
+                    {lbl("Note")}
+                    <input
+                      value={(d.tirages || [])[0]?.note || ""}
+                      onChange={e => {
+                        const ts = [...(d.tirages || [{}])];
+                        if (!ts[0]) ts[0] = {};
+                        ts[0] = { ...ts[0], note: e.target.value };
+                        set("tirages", ts);
+                      }}
+                      placeholder="Autorisation de découvert en compte courant…" style={inp} />
+                  </div>
+                </div>
+              : (d.tirages || []).length === 0
+                ? <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif" }}>Aucun tirage — cliquez sur "+ Ajouter"</div>
+                : (d.tirages || []).map((t, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 2fr auto", gap: 8, marginBottom: 8, alignItems: "end" }}>
+                    <div>
+                      {lbl("Montant (€)")}
+                      <input type="text" value={t.montant || ""} onChange={e => updTirage(i, "montant", fmtMoney(e.target.value))} placeholder="500 000" style={inp} />
+                    </div>
+                    <div>
+                      {lbl("Date tirage")}
+                      <input type="date" value={t.periodeDebut || ""} onChange={e => updTirage(i, "periodeDebut", e.target.value)} style={inp} />
+                    </div>
+                    <div>
+                      {lbl("Échéance")}
+                      <input type="date"
+                        value={d.renouvAuto ? (d.dateFinContrat || "") : (t.dateEcheance || t.periodeFin || "")}
+                        onChange={e => updTirage(i, "dateEcheance", e.target.value)}
+                        disabled={!!d.renouvAuto}
+                        title={d.renouvAuto ? "Calée sur la fin du contrat" : ""}
+                        style={{ ...inp, background: d.renouvAuto ? "#F0FDF4" : "white", color: d.renouvAuto ? "#065F46" : "#2C3E50" }} />
+                    </div>
+                    <div>
+                      {lbl("Note")}
+                      <input value={t.note || ""} onChange={e => updTirage(i, "note", e.target.value)} placeholder="Tranche A…" style={inp} />
+                    </div>
+                    <button onClick={() => delTirage(i)} style={{ border: "none", background: "#FEE2E2", color: "#DC2626", borderRadius: 6, width: 30, height: 32, cursor: "pointer", fontSize: 16, alignSelf: "end" }}>×</button>
+                  </div>
+                ))
+            }
           </div>
 
           {/* Notes */}
@@ -9288,9 +9532,9 @@ function RCFModal({ ligne, onSave, onClose }) {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 10 }}>
+        <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0", display: "flex", justifyContent: "flex-end", gap: 10, flexShrink: 0 }}>
           <button onClick={onClose} style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 8, padding: "8px 18px", fontSize: 12, fontFamily: "'Lora',serif", cursor: "pointer" }}>Annuler</button>
-          <button onClick={() => onSave({ ...d, montantAutorise: String(d.montantAutorise || ""), montantTire: String(montantTireCalc || ""), tirages: d.tirages || [], attachments: d.attachments || [] })} style={{ background: "#102A63", color: "white", border: "none", borderRadius: 8, padding: "8px 22px", fontSize: 12, fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer" }}>✓ Enregistrer</button>
+          <button onClick={handleSave} style={{ background: "#102A63", color: "white", border: "none", borderRadius: 8, padding: "8px 22px", fontSize: 12, fontFamily: "'Lora',serif", fontWeight: 700, cursor: "pointer" }}>✓ Enregistrer</button>
         </div>
       </div>
     </div>
@@ -9345,12 +9589,24 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
 
   const PRIO_RANK = { urgente: 0, haute: 1, normale: 2, basse: 3 };
   const defaultSort = (a, b) => {
-    // 1) Complétées en bas
+    // Complétées toujours en bas
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    // 2) Par échéance croissante (sans date à la fin)
-    const da = a.dueDate || "9999-99-99", db = b.dueDate || "9999-99-99";
-    if (da !== db) return da < db ? -1 : 1;
-    // 3) Par priorité haute → normale → basse
+    const todayStr = today();
+    const da = a.dueDate || "", db = b.dueDate || "";
+    const aOverdue = da && da <= todayStr;
+    const bOverdue = db && db <= todayStr;
+    // 1) Tâches échues (date passée ou aujourd'hui) en premier
+    if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+    if (aOverdue && bOverdue) {
+      // Pour les échues : priorité d'abord, puis date d'échéance
+      const pCmp = (PRIO_RANK[a.priority] ?? 1) - (PRIO_RANK[b.priority] ?? 1);
+      if (pCmp !== 0) return pCmp;
+      return da < db ? -1 : da > db ? 1 : 0;
+    }
+    // 2) Tâches non échues : date d'échéance croissante (sans date à la fin)
+    const da2 = da || "9999-99-99", db2 = db || "9999-99-99";
+    if (da2 !== db2) return da2 < db2 ? -1 : 1;
+    // 3) Puis priorité
     return (PRIO_RANK[a.priority] ?? 1) - (PRIO_RANK[b.priority] ?? 1);
   };
   const sortedList = (() => {
@@ -9637,8 +9893,8 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
                 {(suiviTypes||[]).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={compactInp} /></div>
-            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={compactInp} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={{ border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"#FAFAFA" }} /></div>
+            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={{ border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:"'Lora',serif", color:"#2C3E50", background:"#FAFAFA" }} /></div>
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, paddingTop:4 }}>
             <input type="checkbox" id="sc-closed" checked={!!d.closed} onChange={e=>set("closed",e.target.checked)} style={{ width:15, height:15, cursor:"pointer" }} />
