@@ -7172,13 +7172,14 @@ function sendCBEmail(d) {
   window.location.href = `mailto:?subject=${subject}&body=${body}`;
 }
 
-function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFinanceurs }) {
+function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, onUpdateFinanceurs }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
   const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
   const [d, setD] = useState({ ...empty, ...dossier });
   const [tab, setTab] = useState("financeurs");
   const [newFinanceur, setNewFinanceur] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const set = (k,v) => setD(p=>({...p,[k]:v}));
   const uidP = () => Math.random().toString(36).substr(2,9);
   const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
@@ -7666,9 +7667,30 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
         </div>
 
         {/* Footer */}
-        <div style={{ padding:"12px 22px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
-          <button onClick={()=>{ onSave(d); onClose(); }} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
+        <div style={{ padding:"12px 22px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,flexShrink:0 }}>
+          {/* Gauche : Supprimer */}
+          <div>
+            {onDelete && !confirmDelete && (
+              <button onClick={()=>setConfirmDelete(true)}
+                style={{ ...S.btn("#FEE2E2","#B91C1C"),fontSize:11,padding:"7px 14px",border:"1px solid #FECACA" }}>
+                🗑 Supprimer
+              </button>
+            )}
+            {onDelete && confirmDelete && (
+              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <span style={{ fontSize:11,color:"#B91C1C",fontFamily:"'Lora',serif",fontWeight:600 }}>Confirmer la suppression ?</span>
+                <button onClick={()=>{ onDelete(d.id); onClose(); }}
+                  style={{ ...S.btn("#B91C1C"),fontSize:11,padding:"5px 12px" }}>Oui, supprimer</button>
+                <button onClick={()=>setConfirmDelete(false)}
+                  style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"5px 12px" }}>Non</button>
+              </div>
+            )}
+          </div>
+          {/* Droite : Annuler + Enregistrer */}
+          <div style={{ display:"flex",gap:8 }}>
+            <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
+            <button onClick={()=>{ onSave(d); onClose(); }} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
+          </div>
         </div>
       </div>
     </div>
@@ -7947,9 +7969,9 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
           {d.importedFromExcel && d.verifiedAt && (
             <span title={`Vérifié le ${d.verifiedAt}`} style={{ fontSize:10,color:"#059669",flexShrink:0 }}>✓</span>
           )}
-          <div style={{ flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:6 }}>
-            <span style={{ fontSize:12,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.intitule||"Sans titre"}</span>
-            {d.codeProjet && <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{d.codeProjet}</span>}
+          <div style={{ flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:0 }}>
+            <span style={{ fontSize:12,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.3 }}>{d.intitule||"Sans titre"}</span>
+            {d.codeProjet && <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",lineHeight:1.2,marginTop:1 }}>{d.codeProjet}</span>}
           </div>
           {/* Badges milieu */}
           <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,flexWrap:"nowrap" }}>
@@ -8079,13 +8101,23 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
 
 function CreditBailView({ tasks, onEdit, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
+  const CB_TRASH_KEY = "creditbail_trash_v1";
   const [dossiers, setDossiers]         = useState(() => loadCBDossiers());
   const [modal, setModal]               = useState(null);
   const [financeursList, setFinanceursList] = useState(() => loadCBFinanceurs());
   const [activeTab, setActiveTab]       = useState("dashboard");
   const [search, setSearch]             = useState("");
-  const [importResult, setImportResult] = useState(null); // {added, skipped, errors}
+  const [importResult, setImportResult] = useState(null);
+  const [undoCB, setUndoCB]             = useState(null);
+  const undoCBTimer                     = React.useRef(null);
+  const [trash, setTrash]               = useState(() => { try { const s=localStorage.getItem(CB_TRASH_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [showTrash, setShowTrash]       = useState(false);
   const importRef = React.useRef(null);
+
+  const saveTrash = t => { try { localStorage.setItem(CB_TRASH_KEY, JSON.stringify(t)); } catch {} };
+  const thirtyDaysAgo = new Date(Date.now()-30*864e5).toISOString();
+  const activeTrash = trash.filter(r=>r.deletedAt>thirtyDaysAgo);
+  const trashDaysLeft = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
 
   useEffect(()=>{ saveCBDossiers(dossiers); },[dossiers]);
   useEffect(()=>{
@@ -8096,6 +8128,34 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const handleSave = d => {
     setDossiers(p => p.find(x=>x.id===d.id) ? p.map(x=>x.id===d.id?d:x) : [d,...p]);
   };
+
+  const handleDelete = id => {
+    const found = dossiers.find(x=>x.id===id); if (!found) return;
+    setDossiers(p => p.filter(x=>x.id!==id));
+    const trashed = { ...found, deletedAt: new Date().toISOString() };
+    setTrash(p=>{ const n=[...p,trashed]; saveTrash(n); return n; });
+    if (undoCBTimer.current) clearTimeout(undoCBTimer.current);
+    setUndoCB(found);
+    undoCBTimer.current = setTimeout(()=>setUndoCB(null), 10000);
+  };
+
+  const undoDelete = () => {
+    if (!undoCB) return;
+    clearTimeout(undoCBTimer.current);
+    setDossiers(p=>[undoCB,...p]);
+    setTrash(p=>{ const n=p.filter(x=>x.id!==undoCB.id); saveTrash(n); return n; });
+    setUndoCB(null);
+  };
+
+  const restoreFromTrash = id => {
+    const r=trash.find(x=>x.id===id); if (!r) return;
+    const { deletedAt, ...restored } = r;
+    setDossiers(p=>[restored,...p]);
+    setTrash(p=>{ const n=p.filter(x=>x.id!==id); saveTrash(n); return n; });
+  };
+
+  const purgeTrash = id => setTrash(p=>{ const n=p.filter(x=>x.id!==id); saveTrash(n); return n; });
+
   const openNew = () => setModal({ id:uid(), reference:genCBRef(dossiers), codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", site:"", montantHT:"", tva:"20", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() });
 
   const fmtE = (v,dec=0) => v ? Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €" : "—";
@@ -8285,13 +8345,13 @@ function CreditBailView({ tasks, onEdit, settings }) {
   ];
 
   const NavBtn = ({id, label, badge}) => (
-    <button onClick={()=>setActiveTab(id)}
+    <button onClick={()=>{ setActiveTab(id); setShowTrash(false); }}
       style={{ display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:11,
         fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
-        fontWeight:activeTab===id?700:400,
-        color:activeTab===id?"white":"#555",
-        background:activeTab===id?"#102A63":"transparent",
-        borderLeft:activeTab===id?"3px solid #E67E22":"3px solid transparent" }}>
+        fontWeight:activeTab===id&&!showTrash?700:400,
+        color:activeTab===id&&!showTrash?"white":"#555",
+        background:activeTab===id&&!showTrash?"#102A63":"transparent",
+        borderLeft:activeTab===id&&!showTrash?"3px solid #E67E22":"3px solid transparent" }}>
       <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
         <span>{label}</span>
         {badge>0 && <span style={{ fontSize:9,background:"#E67E22",color:"white",borderRadius:20,padding:"0 6px",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{badge}</span>}
@@ -8334,9 +8394,9 @@ function CreditBailView({ tasks, onEdit, settings }) {
           )}
           {uniqueFinanceurs.map(f => {
             const count = dossiers.filter(d=>(d.financeurs||[]).some(x=>x.financeur===f)).length;
-            const isActive = activeTab===f;
+            const isActive = activeTab===f && !showTrash;
             return (
-              <button key={f} onClick={()=>setActiveTab(f)}
+              <button key={f} onClick={()=>{ setActiveTab(f); setShowTrash(false); }}
                 style={{ display:"block",width:"100%",textAlign:"left",padding:"8px 14px",fontSize:11,
                   fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
                   fontWeight:isActive?700:400,
@@ -8350,15 +8410,30 @@ function CreditBailView({ tasks, onEdit, settings }) {
               </button>
             );
           })}
+          {/* Corbeille */}
+          <div style={{ borderTop:"1px solid #ECEAE5",margin:"8px 0 0",padding:"6px 0 0" }}>
+            <button onClick={()=>setShowTrash(p=>!p)}
+              style={{ display:"block",width:"100%",textAlign:"left",padding:"8px 14px",fontSize:11,
+                fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
+                fontWeight:showTrash?700:400,
+                color:showTrash?"white":"#888",
+                background:showTrash?"#6B7280":"transparent",
+                borderLeft:showTrash?"3px solid #9CA3AF":"3px solid transparent" }}>
+              <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+                <span>🗑 Corbeille</span>
+                {activeTrash.length>0 && <span style={{ fontSize:9,background:showTrash?"rgba(255,255,255,0.25)":"#F0F0F0",color:showTrash?"white":"#888",borderRadius:20,padding:"0 6px",fontFamily:"'DM Mono',monospace" }}>{activeTrash.length}</span>}
+              </div>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Contenu principal */}
       <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
-        {activeTab==="dashboard" && (
+        {!showTrash && activeTab==="dashboard" && (
           <CBDashboard dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
         )}
-        {(activeTab==="synthese" || isFinanceurTab) && (
+        {!showTrash && (activeTab==="synthese" || isFinanceurTab) && (
           <CBSynthese
             dossiers={dossiers}
             tasks={tasks}
@@ -8369,6 +8444,39 @@ function CreditBailView({ tasks, onEdit, settings }) {
             onSearchChange={setSearch}
           />
         )}
+        {/* Panel Corbeille */}
+        {showTrash && (
+          <div style={{ padding:"20px 24px",overflowY:"auto" }}>
+            <div style={{ fontSize:14,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50",marginBottom:16 }}>🗑 Corbeille — crédit-bails supprimés <span style={{ fontSize:11,fontWeight:400,color:"#AAA" }}>(conservés 30 jours)</span></div>
+            {activeTrash.length===0
+              ? <div style={{ textAlign:"center",padding:"48px",color:"#CCC",fontFamily:"'Lora',serif",fontSize:13 }}>Corbeille vide</div>
+              : <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12 }}>
+                  {activeTrash.map(r=>{
+                    const pal={montage:"#1D4ED8",negociation:"#A16207",accepte:"#059669",signature:"#6D28D9",misplace:"#0E7490",refuse:"#B91C1C",clos:"#6B7280"};
+                    const statLabel=(CB_KANBAN_STATUSES.find(s=>s.id===r.statut)||{name:r.statut||"—"}).name;
+                    return (
+                      <div key={r.id}>
+                        <div style={{ background:"#FAFAFA",borderRadius:10,padding:"10px 14px",border:"1px dashed #E0E0E0",borderLeft:`3px solid ${pal[r.statut]||"#AAA"}` }}>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",marginBottom:2 }}>{r.reference||"—"} · {r.codeProjet||""}</div>
+                          <div style={{ fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#888",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{r.intitule||"Sans titre"}</div>
+                          <div style={{ display:"flex",gap:6,flexWrap:"wrap" }}>
+                            <span style={{ fontSize:9,background:"#F0F0F0",color:"#888",borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif" }}>{statLabel}</span>
+                            {(r.financeurs||[])[0]?.financeur && <span style={{ fontSize:9,background:"#DBEAFE",color:"#1D4ED8",borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif" }}>{r.financeurs[0].financeur}</span>}
+                            {r.montantHT && <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{Number(r.montantHT).toLocaleString("fr-FR")} €</span>}
+                          </div>
+                        </div>
+                        <div style={{ display:"flex",gap:6,marginTop:6,alignItems:"center" }}>
+                          <button onClick={()=>restoreFromTrash(r.id)} style={{ ...S.btn("#27AE60"),fontSize:10,padding:"5px 12px",flex:1 }}>↩ Restaurer</button>
+                          <span style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif",flexShrink:0 }}>J-{trashDaysLeft(r)}</span>
+                          <button onClick={()=>purgeTrash(r.id)} style={{ ...S.btn("#E74C3C"),fontSize:10,padding:"5px 10px" }} title="Supprimer définitivement">✕</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+            }
+          </div>
+        )}
       </div>
 
       {/* Modal édition */}
@@ -8376,10 +8484,25 @@ function CreditBailView({ tasks, onEdit, settings }) {
         <CBDossierModal
           dossier={modal}
           onSave={handleSave}
+          onDelete={handleDelete}
           onClose={()=>setModal(null)}
           financeursList={financeursList}
           onUpdateFinanceurs={v=>{ setFinanceursList(v); saveCBFinanceurs(v); }}
         />
+      )}
+
+      {/* Toast undo suppression */}
+      {undoCB && (
+        <div style={{ position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9999,
+          background:"#2C3E50",color:"white",borderRadius:12,padding:"12px 20px",
+          boxShadow:"0 8px 24px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:16,
+          fontFamily:"'Lora',serif",fontSize:12,whiteSpace:"nowrap" }}>
+          <span>🗑 <strong>"{(undoCB.intitule||"Dossier").slice(0,35)}"</strong> supprimé</span>
+          <button onClick={undoDelete}
+            style={{ background:"#27AE60",border:"none",borderRadius:6,color:"white",padding:"5px 14px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>↩ Annuler</button>
+          <button onClick={()=>setUndoCB(null)}
+            style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",cursor:"pointer",fontSize:18,padding:0,lineHeight:1 }}>×</button>
+        </div>
       )}
     </div>
   );
@@ -12003,7 +12126,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.432<br />13/05/26 à 18:30
+          v.0.433<br />13/05/26 à 19:15
         </div>
       </div>
 
