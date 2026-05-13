@@ -5610,18 +5610,19 @@ function DevView() {
 
 function StorageView() {
   const [info, setInfo] = React.useState(null);
+  const [idbInfo, setIdbInfo] = React.useState(null);
   React.useEffect(() => { refreshInfo(); }, []);
-  const refreshInfo = () => {
+
+  const refreshInfo = async () => {
+    // ── localStorage ──
     try {
       let total = 0, breakdown = {};
       for (let i=0; i<localStorage.length; i++) {
         const k = localStorage.key(i);
         const v = localStorage.getItem(k) || "";
-        const bytes = (k.length + v.length) * 2; // UTF-16 = 2 octets/char
+        const bytes = (k.length + v.length) * 2;
         total += bytes;
-        // Regrouper par préfixe
-        const prefix = k.startsWith("cb_doc_") ? "CB - Pièces jointes"
-          : k.startsWith("creditbail_") ? "CB - Dossiers & config"
+        const prefix = k.startsWith("creditbail_") ? "CB - Config (LS)"
           : k.startsWith("ech_") ? "Échéancier"
           : k.startsWith("rcf_") ? "RCF"
           : k.startsWith("cotation_") ? "Cotation"
@@ -5631,59 +5632,90 @@ function StorageView() {
           : "Autres";
         breakdown[prefix] = (breakdown[prefix]||0) + bytes;
       }
-      // Quota estimé à 5 MB (standard navigateur)
       const quotaBytes = 5 * 1024 * 1024;
       setInfo({ total, breakdown, quotaBytes });
     } catch(e) { setInfo(null); }
+
+    // ── IndexedDB CB ──
+    try {
+      const db = await openCBDB();
+      const metas = await idbGetAll(db, CB_STORE_META);
+      const docs  = await idbGetAll(db, CB_STORE_DOCS);
+      const metaBytes = new Blob([JSON.stringify(metas)]).size;
+      const docBytes  = docs.reduce((a,d) => a + (d.data?.length||0)*0.75, 0); // base64→binaire ≈ ×0.75
+      setIdbInfo({ dossiers: metas.length, docs: docs.length, metaBytes, docBytes, total: metaBytes + docBytes });
+    } catch { setIdbInfo(null); }
   };
 
   const fmt = b => b < 1024 ? `${b} o` : b < 1024*1024 ? `${(b/1024).toFixed(1)} Ko` : `${(b/1024/1024).toFixed(2)} Mo`;
-  const pct = b => info ? Math.min(100, (b / info.quotaBytes * 100)).toFixed(1) : 0;
+  const pct = (b, quota) => Math.min(100, (b / quota * 100)).toFixed(1);
   const barColor = p => p > 80 ? "#C0392B" : p > 60 ? "#E67E22" : "#27AE60";
 
-  if (!info) return <div style={{color:"#888",fontSize:12}}>Calcul en cours…</div>;
-
-  const usedPct = parseFloat(pct(info.total));
-  const entries = Object.entries(info.breakdown).sort((a,b)=>b[1]-a[1]);
-
   return (
-    <div style={{ maxWidth:520 }}>
-      <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#888", marginBottom:16 }}>
-        Utilisation du stockage local (localStorage) du navigateur.
+    <div style={{ maxWidth:560 }}>
+      <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#888", marginBottom:20 }}>
+        Utilisation du stockage du navigateur. Les données Crédit-bail sont stockées dans IndexedDB (grande capacité), les autres modules dans localStorage (limité à ~5 Mo).
       </div>
 
-      {/* Barre globale */}
-      <div style={{ marginBottom:20 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:12, fontFamily:"'Lora',serif" }}>
-          <span style={{ fontWeight:700, color:"#2C3E50" }}>Espace utilisé</span>
-          <span style={{ color: barColor(usedPct), fontWeight:700 }}>{fmt(info.total)} / ~{fmt(info.quotaBytes)} ({usedPct} %)</span>
-        </div>
-        <div style={{ height:14, background:"#F0F0F0", borderRadius:8, overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${usedPct}%`, background:barColor(usedPct), borderRadius:8, transition:"width 0.4s" }} />
-        </div>
-        {usedPct > 70 && <div style={{ marginTop:8, fontSize:11, color:"#E67E22", fontFamily:"'Lora',serif" }}>
-          ⚠ Espace presque plein. Supprimez des pièces jointes pour libérer de l'espace.
-        </div>}
+      {/* ── IndexedDB CB ── */}
+      <div style={{ background:"#F0F8FF", border:"1px solid #BAE6FD", borderRadius:10, padding:"14px 18px", marginBottom:20 }}>
+        <div style={{ fontSize:12, fontWeight:700, fontFamily:"'Lora',serif", color:"#0369A1", marginBottom:10 }}>🗄 IndexedDB — Crédit-bail</div>
+        {idbInfo ? (
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+            {[
+              { label:"Dossiers", val:idbInfo.dossiers },
+              { label:"PJ stockées", val:idbInfo.docs },
+              { label:"Métadonnées", val:fmt(idbInfo.metaBytes) },
+              { label:"PJ (binaire)", val:fmt(idbInfo.docBytes) },
+              { label:"Total estimé", val:fmt(idbInfo.total), bold:true },
+              { label:"Limite", val:"Plusieurs Go*", sub:true },
+            ].map(item => (
+              <div key={item.label} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:9, color:"#0369A1", fontFamily:"'DM Mono',monospace", letterSpacing:"0.05em", marginBottom:3 }}>{item.label}</div>
+                <div style={{ fontSize:item.bold?14:12, fontWeight:item.bold?700:400, color:"#0C4A6E", fontFamily:"'Lora',serif" }}>{item.val}</div>
+              </div>
+            ))}
+          </div>
+        ) : <div style={{ fontSize:11, color:"#888" }}>Chargement…</div>}
+        <div style={{ fontSize:9, color:"#7DD3FC", fontFamily:"'DM Mono',monospace", marginTop:10 }}>* Limité par l'espace disque disponible sur l'appareil</div>
       </div>
 
-      {/* Détail par module */}
-      <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:8, letterSpacing:"0.06em" }}>DÉTAIL PAR MODULE</div>
-      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-        {entries.map(([name, bytes]) => {
-          const p = parseFloat(pct(bytes));
-          return (
-            <div key={name}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3, fontSize:11, fontFamily:"'Lora',serif" }}>
-                <span style={{ color:"#2C3E50" }}>{name}</span>
-                <span style={{ color:"#888" }}>{fmt(bytes)} ({p} %)</span>
+      {/* ── localStorage ── */}
+      {info && (() => {
+        const usedPct = parseFloat(pct(info.total, info.quotaBytes));
+        const entries = Object.entries(info.breakdown).sort((a,b)=>b[1]-a[1]);
+        return (
+          <>
+            <div style={{ fontSize:12, fontWeight:700, fontFamily:"'Lora',serif", color:"#2C3E50", marginBottom:10 }}>💾 localStorage — Autres modules</div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:12, fontFamily:"'Lora',serif" }}>
+                <span style={{ color:"#555" }}>Espace utilisé</span>
+                <span style={{ color:barColor(usedPct), fontWeight:700 }}>{fmt(info.total)} / ~{fmt(info.quotaBytes)} ({usedPct} %)</span>
               </div>
-              <div style={{ height:6, background:"#F0F0F0", borderRadius:4, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${p}%`, background:"#102A63", borderRadius:4, opacity:0.7 }} />
+              <div style={{ height:12, background:"#F0F0F0", borderRadius:8, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${usedPct}%`, background:barColor(usedPct), borderRadius:8 }} />
               </div>
+              {usedPct > 70 && <div style={{ marginTop:6, fontSize:11, color:"#E67E22" }}>⚠ localStorage presque plein.</div>}
             </div>
-          );
-        })}
-      </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+              {entries.map(([name, bytes]) => {
+                const p = parseFloat(pct(bytes, info.quotaBytes));
+                return (
+                  <div key={name}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:2, fontSize:11, fontFamily:"'Lora',serif" }}>
+                      <span style={{ color:"#2C3E50" }}>{name}</span>
+                      <span style={{ color:"#888" }}>{fmt(bytes)} ({p} %)</span>
+                    </div>
+                    <div style={{ height:5, background:"#F0F0F0", borderRadius:4, overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:`${p}%`, background:"#102A63", borderRadius:4, opacity:0.6 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        );
+      })()}
 
       <button onClick={refreshInfo} style={{ marginTop:20, border:"1px solid #E0E0E0", background:"white", borderRadius:6, padding:"6px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", color:"#888" }}>↺ Actualiser</button>
     </div>
@@ -6890,58 +6922,100 @@ function CBKanbanSettings() {
   );
 }
 
-const CB_DOCS_PREFIX = "cb_doc_";
+/* ── IndexedDB pour CB (dossiers + PJ, pas de limite de taille) ── */
+const CB_IDB_NAME    = "creditbail_db";
+const CB_IDB_VERSION = 1;
+const CB_STORE_META  = "dossiers";   // métadonnées dossiers (sans binaire)
+const CB_STORE_DOCS  = "documents";  // données binaires PJ { id, data }
 
-function saveCBDocData(docId, data) {
-  try { localStorage.setItem(CB_DOCS_PREFIX + docId, data); } catch(e) {
-    console.warn("CB doc trop grand pour localStorage:", docId);
-  }
-}
-function loadCBDocData(docId) {
-  try { return localStorage.getItem(CB_DOCS_PREFIX + docId) || null; } catch { return null; }
-}
-function cleanCBDocData(activeIds) {
-  try {
-    Object.keys(localStorage).filter(k=>k.startsWith(CB_DOCS_PREFIX)).forEach(k=>{
-      const id = k.slice(CB_DOCS_PREFIX.length);
-      if (!activeIds.has(id)) localStorage.removeItem(k);
-    });
-  } catch {}
+// Ouvrir/créer la base IndexedDB CB
+function openCBDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(CB_IDB_NAME, CB_IDB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(CB_STORE_META))
+        db.createObjectStore(CB_STORE_META, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(CB_STORE_DOCS))
+        db.createObjectStore(CB_STORE_DOCS, { keyPath: "id" });
+    };
+    req.onsuccess  = e => resolve(e.target.result);
+    req.onerror    = e => reject(e.target.error);
+  });
 }
 
-function loadCBDossiers() {
+// Helpers IDB génériques
+function idbGetAll(db, store) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).getAll();
+    req.onsuccess = e => resolve(e.target.result);
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+function idbPut(db, store, record) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(store, "readwrite");
+    const req = tx.objectStore(store).put(record);
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+function idbDelete(db, store, key) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(store, "readwrite");
+    const req = tx.objectStore(store).delete(key);
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+function idbClear(db, store) {
+  return new Promise((resolve, reject) => {
+    const tx  = db.transaction(store, "readwrite");
+    const req = tx.objectStore(store).clear();
+    req.onsuccess = () => resolve();
+    req.onerror   = e => reject(e.target.error);
+  });
+}
+
+// Charger tous les dossiers CB depuis IDB (réhydrate les PJ)
+async function loadCBDossiersIDB() {
   try {
-    const s = localStorage.getItem(CB_DOSSIERS_KEY);
-    if (!s) return [];
-    const dossiers = JSON.parse(s);
-    return dossiers.map(d => ({
+    const db   = await openCBDB();
+    const metas = await idbGetAll(db, CB_STORE_META);
+    const docs  = await idbGetAll(db, CB_STORE_DOCS);
+    const docMap = Object.fromEntries(docs.map(d => [d.id, d.data]));
+    return metas.map(d => ({
       ...d,
       documents: Object.fromEntries(
         Object.entries(d.documents||{}).map(([type, files]) => [
           type,
-          (files||[]).map(f => ({
-            ...f,
-            data: f.dataRef ? loadCBDocData(f.dataRef) : f.data
-          }))
+          (files||[]).map(f => ({ ...f, data: f.dataRef ? (docMap[f.dataRef]||null) : f.data }))
         ])
       )
     }));
-  } catch { return []; }
+  } catch(e) {
+    console.error("CB IDB load error:", e);
+    return null; // null = fallback localStorage
+  }
 }
 
-function saveCBDossiers(v) {
+// Sauvegarder tous les dossiers CB dans IDB
+async function saveCBDossiersIDB(dossiers) {
   try {
-    const activeIds = new Set();
-    const stripped = v.map(d => ({
+    const db = await openCBDB();
+    // Séparer métadonnées et binaires
+    const activeDocIds = new Set();
+    const metas = dossiers.map(d => ({
       ...d,
       documents: Object.fromEntries(
         Object.entries(d.documents||{}).map(([type, files]) => [
           type,
           (files||[]).map(f => {
-            if (f.data && f.data.length > 500) {
+            if (f.data && f.data.length > 100) {
               const ref = f.id || (f.name + "_" + (f.size||0));
-              activeIds.add(ref);
-              saveCBDocData(ref, f.data);
+              activeDocIds.add(ref);
+              idbPut(db, CB_STORE_DOCS, { id: ref, data: f.data });
               const { data, dataRef, ...meta } = f;
               return { ...meta, dataRef: ref };
             }
@@ -6950,12 +7024,64 @@ function saveCBDossiers(v) {
         ])
       )
     }));
-    localStorage.setItem(CB_DOSSIERS_KEY, JSON.stringify(stripped));
-    cleanCBDocData(activeIds);
+    // Écrire les métadonnées
+    await idbClear(db, CB_STORE_META);
+    for (const d of metas) await idbPut(db, CB_STORE_META, d);
+    // Nettoyer les PJ orphelines
+    const allDocs = await idbGetAll(db, CB_STORE_DOCS);
+    for (const doc of allDocs) {
+      if (!activeDocIds.has(doc.id)) await idbDelete(db, CB_STORE_DOCS, doc.id);
+    }
+    return true;
   } catch(e) {
-    console.error("CB: impossible de sauvegarder", e);
+    console.error("CB IDB save error:", e);
+    return false;
   }
 }
+
+// Migration localStorage → IDB (une seule fois au démarrage)
+async function migrateCBLocalStorageToIDB() {
+  const LS_KEY = CB_DOSSIERS_KEY;
+  const lsData = localStorage.getItem(LS_KEY);
+  if (!lsData) return;
+  try {
+    const parsed = JSON.parse(lsData);
+    if (!parsed.length) { localStorage.removeItem(LS_KEY); return; }
+    // Réhydrater les anciennes dataRef localStorage
+    const CB_DOCS_PREFIX = "cb_doc_";
+    const migrated = parsed.map(d => ({
+      ...d,
+      documents: Object.fromEntries(
+        Object.entries(d.documents||{}).map(([type, files]) => [
+          type,
+          (files||[]).map(f => {
+            if (f.dataRef) {
+              const data = localStorage.getItem(CB_DOCS_PREFIX + f.dataRef);
+              return { ...f, data: data||undefined };
+            }
+            return f;
+          })
+        ])
+      )
+    }));
+    const ok = await saveCBDossiersIDB(migrated);
+    if (ok) {
+      // Nettoyer les anciennes clés localStorage CB
+      const toRemove = Object.keys(localStorage).filter(k =>
+        k === LS_KEY || k.startsWith(CB_DOCS_PREFIX)
+      );
+      toRemove.forEach(k => localStorage.removeItem(k));
+      console.info(`CB: migration IDB OK — ${migrated.length} dossier(s) migrés, ${toRemove.length} clés localStorage supprimées`);
+    }
+  } catch(e) {
+    console.error("CB: migration IDB échouée", e);
+  }
+}
+
+// API synchrone legacy (pour les useState(() => ...) — retourne [] immédiatement,
+// le chargement IDB se fait via useCBDossiers hook)
+function loadCBDossiers() { return []; }
+function saveCBDossiers() {} // no-op, remplacé par saveCBDossiersIDB via useEffect
 function genCBRef(dossiers) {
   const nums = dossiers.map(d => parseInt((d.reference||"").replace("CB_",""))||0);
   const next = (nums.length ? Math.max(...nums) : 0) + 1;
@@ -8939,7 +9065,8 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
 function CreditBailView({ tasks, onEdit, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const CB_TRASH_KEY = "creditbail_trash_v1";
-  const [dossiers, setDossiers]         = useState(() => loadCBDossiers());
+  const [dossiers, setDossiers]         = useState([]);
+  const [dbReady, setDbReady]           = useState(false); // IDB chargé ?
   const [modal, setModal]               = useState(null);
   const [financeursList, setFinanceursList] = useState(() => loadCBFinanceurs());
   const [activeTab, setActiveTab]       = useState("dashboard");
@@ -8956,7 +9083,32 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const activeTrash = trash.filter(r=>r.deletedAt>thirtyDaysAgo);
   const trashDaysLeft = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
 
-  useEffect(()=>{ saveCBDossiers(dossiers); },[dossiers]);
+  // ── Chargement initial depuis IndexedDB (+ migration LS→IDB si besoin) ──
+  useEffect(() => {
+    (async () => {
+      await migrateCBLocalStorageToIDB();          // migration silencieuse si ancienne data LS
+      const data = await loadCBDossiersIDB();
+      if (data !== null) setDossiers(data);
+      else {
+        // Fallback : tenter localStorage (legacy)
+        try {
+          const s = localStorage.getItem(CB_DOSSIERS_KEY);
+          if (s) setDossiers(JSON.parse(s));
+        } catch {}
+      }
+      setDbReady(true);
+    })();
+  }, []);
+
+  // ── Sauvegarde IDB à chaque changement de dossiers (après init) ──
+  const isSaving = React.useRef(false);
+  useEffect(() => {
+    if (!dbReady) return;
+    if (isSaving.current) return;
+    isSaving.current = true;
+    saveCBDossiersIDB(dossiers).finally(() => { isSaving.current = false; });
+  }, [dossiers, dbReady]);
+
   useEffect(()=>{
     const saved=loadCBColNames();
     if(Object.keys(saved).length) CB_KANBAN_STATUSES.forEach(s=>{if(saved[s.id])s.name=saved[s.id];});
@@ -9194,6 +9346,13 @@ function CreditBailView({ tasks, onEdit, settings }) {
         {badge>0 && <span style={{ fontSize:9,background:"#E67E22",color:"white",borderRadius:20,padding:"0 6px",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{badge}</span>}
       </div>
     </button>
+  );
+
+  if (!dbReady) return (
+    <div style={{ display:"flex",alignItems:"center",justifyContent:"center",minHeight:"60vh",flexDirection:"column",gap:16 }}>
+      <div style={{ width:40,height:40,border:"3px solid #E0E0E0",borderTopColor:"#102A63",borderRadius:"50%",animation:"spin 0.8s linear infinite" }} />
+      <div style={{ fontFamily:"'Lora',serif",fontSize:13,color:"#888" }}>Chargement des dossiers2026</div>
+    </div>
   );
 
   return (
@@ -12967,7 +13126,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.452<br />14/05/26 à 15:30
+          v.0.453<br />14/05/26 à 16:30
         </div>
       </div>
 
