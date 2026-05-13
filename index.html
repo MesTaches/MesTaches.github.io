@@ -5742,6 +5742,7 @@ function SettingsView({ settings, onSave }) {
           <Tab id="tabs" label="👁 Onglets" />
           <Tab id="creditbail" label="🧾 Crédit-bail" />
           <Tab id="profiles" label="👥 Profils" />
+          <Tab id="stockage" label="💾 Stockage" />
         </div>
         <div style={{ padding: "20px 24px" }}>
           {tab === "general" && <>
@@ -6990,7 +6991,7 @@ const CB_DOC_TYPES = [
   { id:"facture",     name:"Facture" },
   { id:"contrat",     name:"Contrat CB" },
   { id:"pv",          name:"PV de réception" },
-  { id:"echeancier",  name:"Échéancier" },
+  { id:"echeancier",  name:"Tableau d'amortissement" },
 ];
 
 /* ── Helpers financiers ── */
@@ -7606,13 +7607,19 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                 let refFin = null;
                 if (fins.length === 1) { refFin = fins[0]; }
                 else if (fins.length > 1) { for (const st of PRIO) { refFin = fins.find(f=>f.statut===st); if (refFin) break; } if (!refFin) refFin = fins[0]; }
-                const autoNb = refFin?.nbLoyers ? parseInt(refFin.nbLoyers) : null;
-                const isAuto = autoNb !== null && (d.duree===null||d.duree===undefined||d.duree==="");
+                const rawNb = refFin?.nbLoyers ? parseInt(refFin.nbLoyers) : null;
+                const isTrim = d.periodicite === "Trimestrielle";
+                const autoNb = rawNb !== null ? (isTrim ? Math.round(rawNb/3) : rawNb) : null;
+                const isAuto = autoNb !== null && !d.dureeManuelle;
+                const displayVal = isAuto ? autoNb : (isTrim ? Math.round(parseInt(d.duree||"12")/3) : parseInt(d.duree||"12"));
+                const unit = isTrim ? "trim." : "mois";
+                const maxVal = isTrim ? 28 : 84;
+                const options = Array.from({length:maxVal},(_,i)=>i+1);
                 return (
                   <div style={{ position:"relative" }}>
-                    <select value={isAuto ? String(autoNb) : (d.duree||"36")} onChange={e=>set("duree",e.target.value)}
+                    <select value={displayVal} onChange={e=>{ set("duree", String(isTrim ? parseInt(e.target.value)*3 : parseInt(e.target.value))); set("dureeManuelle", true); }}
                       style={{ border:`1px solid ${isAuto?"#0E7490":"#E8E8E8"}`,borderRadius:8,padding:"4px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:isAuto?"#0E7490":"#2C3E50",background:isAuto?"#E0F7FA":"#FAFAFA", minHeight:30, lineHeight:1.2, appearance:"auto" }}>
-                      {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
+                      {options.map(v=><option key={v} value={v}>{v} {unit}</option>)}
                     </select>
                     {isAuto && <span style={{ position:"absolute",right:22,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"#0E7490",fontFamily:"'DM Mono',monospace",pointerEvents:"none" }}>auto</span>}
                   </div>
