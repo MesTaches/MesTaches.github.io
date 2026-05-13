@@ -7664,8 +7664,16 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
           </div>
 
           {/* Ligne D : Dates */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:8 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, marginBottom:8 }}>
             <div>{lbl("DATE DE SIGNATURE")}<input type="date" value={d.dateSignature||""} onChange={e=>set("dateSignature",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>
+              {lbl("DATE ESTIMÉE MEP CAPEX")}
+              <div style={{ position:"relative" }}>
+                <input type="date" value={d.dateMEP||""} onChange={e=>{ set("dateMEP",e.target.value); if(!d.dateDemarrage) set("dateDemarrage",e.target.value); }}
+                  style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"4px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", minHeight:30, lineHeight:1.2 }} />
+                <span style={{ position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"#AAA",pointerEvents:"none" }}>MEP</span>
+              </div>
+            </div>
             <div>{lbl("DATE DE DÉMARRAGE ÉCHÉANCIER")}<input type="date" value={d.dateDemarrage||""} onChange={e=>set("dateDemarrage",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
             <div>{lbl("DATE DE FIN")}<input type="date" value={d.dateFin||""} onChange={e=>set("dateFin",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
           </div>
@@ -8129,6 +8137,258 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
    CREDITBAIL VIEW
    ══════════════════════════════════════════════════ */
 /* ── CB Dashboard KPIs ── */
+function CBAmortissement({ dossiers, fmtE, onOpen }) {
+  const today = new Date();
+  const currentYear = today.getFullYear();
+  const [viewYear, setViewYear] = React.useState(currentYear);
+
+  // Palette de couleurs par dossier
+  const PALETTE = [
+    "#102A63","#E67E22","#0E7490","#6D28D9","#065F46","#B91C1C",
+    "#1D4ED8","#92400E","#047857","#7C3AED","#0369A1","#BE185D",
+  ];
+
+  // Calculer les barres d'amortissement pour chaque dossier actif
+  const items = React.useMemo(() => {
+    return dossiers
+      .filter(d => d.statut !== "refuse" && d.statut !== "clos" && d.dateDemarrage)
+      .map((d, idx) => {
+        const finRow0 = (d.financeurs||[])[0]||{};
+        const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
+        const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
+        const nbL = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+        const start = new Date(d.dateDemarrage);
+        const end = new Date(start);
+        end.setMonth(end.getMonth() + nbL * periStep);
+        const loyerHT = calc0.loyerHT || 0;
+        const vr = calc0.vr || 0;
+        const color = PALETTE[idx % PALETTE.length];
+        return { d, start, end, nbL, periStep, loyerHT, vr, color, calc0 };
+      })
+      .filter(item => item.nbL > 0)
+      .sort((a,b) => a.start - b.start);
+  }, [dossiers]);
+
+  if (items.length === 0) {
+    return (
+      <div style={{ padding:"60px 40px", textAlign:"center", color:"#CCC", fontFamily:"'Lora',serif" }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>📉</div>
+        <div style={{ fontSize:16 }}>Aucun crédit-bail actif avec échéancier configuré</div>
+      </div>
+    );
+  }
+
+  // Années couvertes par tous les CB
+  const minYear = Math.min(...items.map(i => i.start.getFullYear()));
+  const maxYear = Math.max(...items.map(i => i.end.getFullYear()));
+  const years = Array.from({length: maxYear - minYear + 1}, (_, i) => minYear + i);
+
+  // Pour l'année sélectionnée : timeline mensuelle (12 colonnes)
+  const MONTHS = ["Jan","Fév","Mar","Avr","Mai","Jun","Jul","Aoû","Sep","Oct","Nov","Déc"];
+
+  // Calculer pour chaque mois de l'année les loyers actifs et le total
+  const monthlyData = MONTHS.map((m, mi) => {
+    const monthStart = new Date(viewYear, mi, 1);
+    const monthEnd = new Date(viewYear, mi + 1, 0);
+    let total = 0;
+    const active = items.filter(item => item.start <= monthEnd && item.end >= monthStart);
+    active.forEach(item => { total += item.loyerHT; });
+    return { m, mi, total, active };
+  });
+
+  const maxMonthly = Math.max(...monthlyData.map(m => m.total), 1);
+
+  // Vue Gantt : chaque CB = une ligne, mois = colonnes
+  const ganttMonths = MONTHS.map((m, mi) => ({ m, mi }));
+
+  const monthPct = (date, year) => {
+    // Position en % dans l'année
+    const start = new Date(year, 0, 1);
+    const end = new Date(year + 1, 0, 1);
+    const clamped = Math.max(start, Math.min(end, date));
+    return ((clamped - start) / (end - start)) * 100;
+  };
+
+  return (
+    <div style={{ padding:"20px 24px", overflowY:"auto", flex:1, background:"#F7F6F3" }}>
+
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63" }}>📉 Calendrier d'amortissement</div>
+          <div style={{ fontSize:11, color:"#888", fontFamily:"'DM Mono',monospace", marginTop:2 }}>{items.length} crédit{items.length>1?"s":""}-bail actif{items.length>1?"s":""}</div>
+        </div>
+        {/* Sélecteur d'année */}
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {years.map(y => (
+            <button key={y} onClick={() => setViewYear(y)}
+              style={{ border:`2px solid ${y===viewYear?"#102A63":"#E0E0E0"}`, borderRadius:8, padding:"5px 14px",
+                fontSize:12, fontFamily:"'DM Mono',monospace", cursor:"pointer",
+                background: y===viewYear?"#102A63":"white",
+                color: y===viewYear?"white":"#555",
+                fontWeight: y===viewYear?700:400 }}>
+              {y}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Graphe barres mensuel ── */}
+      <div style={{ background:"white", borderRadius:12, border:"1px solid #ECEAE5", padding:"18px 20px", marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+        <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", letterSpacing:"0.06em", marginBottom:12 }}>LOYERS HT / MOIS — {viewYear}</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(12,1fr)", gap:4, alignItems:"end", height:120 }}>
+          {monthlyData.map(({ m, mi, total, active }) => {
+            const pct = total / maxMonthly * 100;
+            const isCurrentMonth = viewYear === today.getFullYear() && mi === today.getMonth();
+            return (
+              <div key={mi} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                <div style={{ fontSize:9, fontFamily:"'DM Mono',monospace", color:"#888", whiteSpace:"nowrap" }}>
+                  {total > 0 ? fmtE(total) : ""}
+                </div>
+                <div style={{ width:"100%", height:90, display:"flex", flexDirection:"column", justifyContent:"flex-end" }}>
+                  {total > 0 ? (
+                    <div style={{ width:"100%", borderRadius:"4px 4px 0 0", overflow:"hidden",
+                      height:`${pct}%`, minHeight:4,
+                      border: isCurrentMonth?"2px solid #E67E22":"none",
+                      display:"flex", flexDirection:"column", justifyContent:"flex-end" }}>
+                      {active.map((item, ii) => (
+                        <div key={item.d.id}
+                          title={`${item.d.intitule} — ${fmtE(item.loyerHT)}/mois`}
+                          onClick={() => onOpen(item.d)}
+                          style={{ flex:1, background:item.color, cursor:"pointer", opacity:0.85,
+                            transition:"opacity 0.15s" }}
+                          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+                          onMouseLeave={e=>e.currentTarget.style.opacity="0.85"} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ width:"100%", height:2, background:"#F0F0F0", borderRadius:2 }} />
+                  )}
+                </div>
+                <div style={{ fontSize:9, fontFamily:"'Lora',serif", color: isCurrentMonth?"#E67E22":"#AAA", fontWeight: isCurrentMonth?700:400 }}>{m}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Gantt timeline ── */}
+      <div style={{ background:"white", borderRadius:12, border:"1px solid #ECEAE5", overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+        <div style={{ padding:"14px 20px 10px", borderBottom:"1px solid #F0F0F0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", letterSpacing:"0.06em" }}>GANTT — {viewYear}</div>
+          <div style={{ fontSize:10, color:"#AAA", fontFamily:"'Lora',serif" }}>Cliquez sur un dossier pour l'ouvrir</div>
+        </div>
+
+        {/* Header mois */}
+        <div style={{ display:"grid", gridTemplateColumns:"200px 1fr", borderBottom:"1px solid #F0F0F0" }}>
+          <div style={{ padding:"6px 14px", fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace" }}>DOSSIER</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(12,1fr)" }}>
+            {MONTHS.map((m, mi) => {
+              const isCur = viewYear===today.getFullYear() && mi===today.getMonth();
+              return (
+                <div key={mi} style={{ padding:"6px 2px", fontSize:9, textAlign:"center",
+                  fontFamily:"'DM Mono',monospace", color: isCur?"#E67E22":"#AAA",
+                  fontWeight: isCur?700:400,
+                  background: isCur?"#FFF8F0":"transparent" }}>
+                  {m}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Lignes dossiers */}
+        {items.map(item => {
+          const { d, start, end, nbL, periStep, loyerHT, vr, color } = item;
+          // Calculer la position et largeur dans l'année viewYear
+          const yearStart = new Date(viewYear, 0, 1);
+          const yearEnd = new Date(viewYear, 11, 31, 23, 59, 59);
+          const isActive = start <= yearEnd && end >= yearStart;
+
+          if (!isActive) return (
+            <div key={d.id} style={{ display:"grid", gridTemplateColumns:"200px 1fr",
+              borderBottom:"1px solid #FAFAFA", opacity:0.35 }}>
+              <div style={{ padding:"10px 14px" }}>
+                <div style={{ fontSize:10, fontFamily:"'Lora',serif", color:"#AAA", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.intitule||d.reference}</div>
+              </div>
+              <div style={{ padding:"10px 8px", display:"grid", gridTemplateColumns:"repeat(12,1fr)" }}>
+                {MONTHS.map((_,mi) => <div key={mi} style={{ height:20, background:"#F8F8F8", borderRadius:2, margin:"0 1px" }} />)}
+              </div>
+            </div>
+          );
+
+          // Calculer quels mois sont couverts
+          return (
+            <div key={d.id}
+              onClick={() => onOpen(d)}
+              style={{ display:"grid", gridTemplateColumns:"200px 1fr",
+                borderBottom:"1px solid #F5F5F5", cursor:"pointer",
+                transition:"background 0.15s" }}
+              onMouseEnter={e=>e.currentTarget.style.background="#FAFAF8"}
+              onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+
+              {/* Infos dossier */}
+              <div style={{ padding:"8px 14px", borderRight:"1px solid #F0F0F0" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                  <span style={{ width:8, height:8, borderRadius:"50%", background:color, flexShrink:0 }} />
+                  <div style={{ fontSize:10, fontWeight:700, fontFamily:"'Lora',serif", color:"#2C3E50",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.intitule||d.reference}</div>
+                </div>
+                <div style={{ fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace", marginLeft:14 }}>
+                  {fmtE(loyerHT)}/mois · {nbL} {periStep===3?"trim.":"loyers"}
+                </div>
+                {vr > 0 && <div style={{ fontSize:9, color:"#E67E22", fontFamily:"'DM Mono',monospace", marginLeft:14 }}>VR {fmtE(vr)}</div>}
+              </div>
+
+              {/* Barre Gantt */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(12,1fr)", alignItems:"center", padding:"0 0" }}>
+                {MONTHS.map((_, mi) => {
+                  const mStart = new Date(viewYear, mi, 1);
+                  const mEnd = new Date(viewYear, mi+1, 0, 23, 59, 59);
+                  const covered = start <= mEnd && end >= mStart;
+                  const isFirst = covered && (mi===0 || !(start <= new Date(viewYear,mi-1,1) && end >= new Date(viewYear,mi-1,1)));
+                  const isLast  = covered && (mi===11 || !(start <= new Date(viewYear,mi+1,0,23,59,59) && end >= new Date(viewYear,mi+1,1)));
+                  const isPaid  = mEnd < today;
+                  const isCurM  = viewYear===today.getFullYear() && mi===today.getMonth();
+                  return (
+                    <div key={mi} style={{ height:28, margin:"4px 1px", borderRadius:
+                      isFirst && isLast ? "8px" : isFirst ? "8px 0 0 8px" : isLast ? "0 8px 8px 0" : "0",
+                      background: covered ? (isPaid ? color+"99" : color) : (isCurM?"#FFF8F0":"#F8F8F8"),
+                      borderTop: isCurM&&!covered?"1px solid #FDDCBC":"none",
+                      borderBottom: isCurM&&!covered?"1px solid #FDDCBC":"none",
+                      position:"relative", overflow:"hidden" }}>
+                      {covered && isPaid && (
+                        <div style={{ position:"absolute", inset:0, background:"repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.15) 3px,rgba(255,255,255,0.15) 6px)" }} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Légende */}
+      <div style={{ marginTop:12, display:"flex", alignItems:"center", gap:20, padding:"0 4px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:10, color:"#888", fontFamily:"'Lora',serif" }}>
+          <div style={{ width:20, height:12, borderRadius:3, background:"#102A63" }} /> Loyers à venir
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:10, color:"#888", fontFamily:"'Lora',serif" }}>
+          <div style={{ width:20, height:12, borderRadius:3, background:"#102A6399",
+            backgroundImage:"repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.3) 3px,rgba(255,255,255,0.3) 6px)" }} /> Loyers passés
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:10, color:"#888", fontFamily:"'Lora',serif" }}>
+          <div style={{ width:20, height:12, borderRadius:3, border:"2px solid #E67E22", background:"#FFF8F0" }} /> Mois courant
+        </div>
+        <div style={{ marginLeft:"auto", fontSize:10, color:"#AAA", fontFamily:"'DM Mono',monospace" }}>
+          Total {viewYear} : {fmtE(monthlyData.reduce((a,m)=>a+m.total,0))} HT/an
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CBDashboard({ dossiers, fmtE, onOpen }) {
   const now = new Date().toISOString().split("T")[0];
   const thisMonth = now.slice(0,7);
@@ -8764,7 +9024,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const toVerifyCount = dossiers.filter(d=>d.importedFromExcel && !d.verifiedAt).length;
 
   // Si onglet = financeur, c'est un filtre sur la synthèse
-  const isFinanceurTab = activeTab!=="dashboard" && activeTab!=="synthese";
+  const isFinanceurTab = activeTab!=="dashboard" && activeTab!=="synthese" && activeTab!=="amortissement";
   const filterFinanceur = isFinanceurTab ? activeTab : "";
 
   const NAV_ITEMS = [
@@ -8816,6 +9076,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
         <div style={{ overflowY:"auto",flex:1,padding:"8px 0" }}>
           <NavBtn id="dashboard" label="📊 Tableau de bord" />
           <NavBtn id="synthese" label="📋 Synthèse" badge={toVerifyCount} />
+          <NavBtn id="amortissement" label="📉 Amortissement" />
 
           {uniqueFinanceurs.length>0 && (
             <div style={{ fontSize:9,color:"#AAA",padding:"10px 14px 4px",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase" }}>Par financeur</div>
@@ -8860,6 +9121,9 @@ function CreditBailView({ tasks, onEdit, settings }) {
       <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
         {!showTrash && activeTab==="dashboard" && (
           <CBDashboard dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
+        )}
+        {!showTrash && activeTab==="amortissement" && (
+          <CBAmortissement dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
         )}
         {!showTrash && (activeTab==="synthese" || isFinanceurTab) && (
           <CBSynthese
@@ -12554,7 +12818,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.450<br />14/05/26 à 13:00
+          v.0.451<br />14/05/26 à 14:30
         </div>
       </div>
 
