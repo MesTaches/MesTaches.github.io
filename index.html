@@ -8167,7 +8167,9 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                               {/* Ligne Valeur Résiduelle M+1 */}
                               {calc0.vr > 0 && (() => {
                                 const vrDate = new Date(startDate);
-                                vrDate.setMonth(vrDate.getMonth() + ech.length * periStep);
+                                // ech.length * periStep = nb mois total du contrat
+                                // VR = toujours le mois calendaire suivant (+1 mois), quelle que soit la périodicité
+                                vrDate.setMonth(vrDate.getMonth() + ech.length * periStep + 1);
                                 const maxDay = new Date(vrDate.getFullYear(), vrDate.getMonth()+1, 0).getDate();
                                 vrDate.setDate(Math.min(jourRef, maxDay));
                                 const vrDateStr = vrDate.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -13126,7 +13128,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.453<br />14/05/26 à 16:30
+          v.0.454<br />14/05/26 à 17:30
         </div>
       </div>
 
