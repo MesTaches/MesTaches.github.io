@@ -5964,7 +5964,28 @@ function SettingsView({ settings, onSave }) {
             </div>
           )}
 
-          {tab === "creditbail" && <CBKanbanSettings />}
+          {tab === "creditbail" && (
+            <div style={{display:"flex",flexDirection:"column",gap:20}}>
+              <CBKanbanSettings />
+              <div style={{borderTop:"1px solid #F0F0F0",paddingTop:16}}>
+                <div style={{fontSize:12,fontWeight:700,fontFamily:"'Lora',serif",color:"#2C3E50",marginBottom:8}}>⚠ Alertes d'expiration</div>
+                <div style={{fontSize:12,color:"#888",fontFamily:"'Lora',serif",marginBottom:10}}>Afficher une alerte dans le tableau de bord pour les CB se terminant dans les :</div>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  {[3,6,9,12].map(m=>(
+                    <button key={m}
+                      onClick={()=>{ const el=document.getElementById("cb_alert_months_input"); if(el){el.value=m;} localStorage.setItem("cb_alert_months",String(m)); window.dispatchEvent(new CustomEvent("cb_alert_months_changed",{detail:m})); }}
+                      style={{border:"1px solid #E0E0E0",borderRadius:6,padding:"5px 14px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",background:"white",color:"#555"}}>
+                      {m} mois
+                    </button>
+                  ))}
+                  <input id="cb_alert_months_input" type="number" min="1" max="24" defaultValue={parseInt(localStorage.getItem("cb_alert_months")||"6")}
+                    onChange={e=>{ localStorage.setItem("cb_alert_months",e.target.value); }}
+                    style={{width:60,border:"1px solid #E0E0E0",borderRadius:6,padding:"5px 8px",fontSize:11,fontFamily:"'DM Mono',monospace",outline:"none"}} />
+                  <span style={{fontSize:11,color:"#888",fontFamily:"'Lora',serif"}}>mois (personnalisé)</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {tab === "labels" && <>
             {(s.labels||[]).map(l => (
@@ -6924,9 +6945,10 @@ function CBKanbanSettings() {
 
 /* ── IndexedDB pour CB (dossiers + PJ, pas de limite de taille) ── */
 const CB_IDB_NAME    = "creditbail_db";
-const CB_IDB_VERSION = 1;
+const CB_IDB_VERSION = 2; // v2: ajout store corbeille
 const CB_STORE_META  = "dossiers";   // métadonnées dossiers (sans binaire)
 const CB_STORE_DOCS  = "documents";  // données binaires PJ { id, data }
+const CB_STORE_TRASH = "corbeille";  // dossiers supprimés (30 jours)
 
 // Ouvrir/créer la base IndexedDB CB
 function openCBDB() {
@@ -6938,6 +6960,8 @@ function openCBDB() {
         db.createObjectStore(CB_STORE_META, { keyPath: "id" });
       if (!db.objectStoreNames.contains(CB_STORE_DOCS))
         db.createObjectStore(CB_STORE_DOCS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(CB_STORE_TRASH))
+        db.createObjectStore(CB_STORE_TRASH, { keyPath: "id" });
     };
     req.onsuccess  = e => resolve(e.target.result);
     req.onerror    = e => reject(e.target.error);
@@ -7080,6 +7104,30 @@ async function migrateCBLocalStorageToIDB() {
 
 // API synchrone legacy (pour les useState(() => ...) — retourne [] immédiatement,
 // le chargement IDB se fait via useCBDossiers hook)
+// ── Corbeille CB via IDB ──
+async function loadCBTrashIDB() {
+  try { const db=await openCBDB(); return await idbGetAll(db,CB_STORE_TRASH); } catch { return []; }
+}
+async function saveCBTrashItemIDB(item) {
+  try { const db=await openCBDB(); await idbPut(db,CB_STORE_TRASH,item); } catch(e) { console.error("CB trash save",e); }
+}
+async function deleteCBTrashItemIDB(id) {
+  try { const db=await openCBDB(); await idbDelete(db,CB_STORE_TRASH,id); } catch(e) { console.error("CB trash del",e); }
+}
+async function migrateCBTrashLocalStorageToIDB() {
+  const KEY = "creditbail_trash_v1";
+  const s = localStorage.getItem(KEY);
+  if (!s) return;
+  try {
+    const items = JSON.parse(s);
+    if (!items.length) { localStorage.removeItem(KEY); return; }
+    const db = await openCBDB();
+    for (const item of items) await idbPut(db, CB_STORE_TRASH, item);
+    localStorage.removeItem(KEY);
+    console.info("CB trash: migration IDB OK");
+  } catch(e) { console.error("CB trash migration",e); }
+}
+
 function loadCBDossiers() { return []; }
 function saveCBDossiers() {} // no-op, remplacé par saveCBDossiersIDB via useEffect
 function genCBRef(dossiers) {
@@ -8269,6 +8317,180 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
    CREDITBAIL VIEW
    ══════════════════════════════════════════════════ */
 /* ── CB Dashboard KPIs ── */
+function CBComparateur({ dossiers, fmtE, onOpen }) {
+  const [selectedId, setSelectedId] = React.useState(null);
+  const selected = dossiers.find(d=>d.id===selectedId);
+  const fins = selected?.financeurs||[];
+
+  const calcFin = (fin, montantHT) => calcCBRow({...fin, montantHT});
+
+  const COLS = [
+    {key:"financeur",    label:"Financeur",      fmt:(v,c)=>v||"—"},
+    {key:"coeff",        label:"Coeff %",         fmt:(v,c)=>v?Number(v).toFixed(4):"—"},
+    {key:"loyerHT",      label:"Loyer HT",        fmt:(v,c)=>fmtE(c.loyerHT)},
+    {key:"loyerTTC",     label:"Loyer TTC",       fmt:(v,c)=>fmtE(c.loyerTTC)},
+    {key:"assuranceMens",label:"Assurance/mois",  fmt:(v,c)=>parseFloat(v)>0?fmtE(parseFloat(v)):"—"},
+    {key:"_majoré",      label:"Loyer majoré TTC",fmt:(v,c)=>fmtE((c.loyerTTC||0)+parseFloat(fins.find(f=>f.id===c._id)?.assuranceMens||0))},
+    {key:"taux12",       label:"Taux %",          fmt:(v,c)=>c.taux12!==null?Number(c.taux12).toFixed(2)+" %":"—", color:"#065F46"},
+    {key:"teg12",        label:"TEG %",           fmt:(v,c)=>c.teg12!==null?Number(c.teg12).toFixed(2)+" %":"—", color:"#A16207"},
+    {key:"vr",           label:"V. Résiduelle",   fmt:(v,c)=>fmtE(c.vr)},
+    {key:"coutTotal",    label:"Coût total",      fmt:(v,c)=>fmtE(c.coutTotal), color:"#C0392B", bold:true},
+    {key:"nbLoyers",     label:"Nb loyers",       fmt:(v,c)=>v||"—"},
+    {key:"statut",       label:"Statut",          fmt:(v,c)=>{const s=CB_FINANCEUR_STATUSES.find(x=>x.id===v); return s?s.name:v||"—";}},
+  ];
+
+  const exportExcelCB = () => {
+    // Export Excel du portefeuille CB (tous les dossiers actifs)
+    const actifs = dossiers.filter(d=>d.statut==="misplace"||d.statut==="signature"||d.statut==="accepte"||d.statut==="montage"||d.statut==="negociation");
+    const rows = actifs.map(d => {
+      const fin0=(d.financeurs||[])[0]||{};
+      const c0=calcCBRow({...fin0,montantHT:d.montantHT});
+      return {
+        "Référence":d.reference||"",
+        "Intitulé":d.intitule||"",
+        "Code projet":d.codeProjet||"",
+        "Site":d.site||"",
+        "Statut":CB_KANBAN_STATUSES.find(s=>s.id===d.statut)?.name||d.statut||"",
+        "Type financement":d.typeFinancement||"",
+        "Type investissement":d.typeInvestissement||"",
+        "Fournisseur":d.fournisseur||"",
+        "Montant HT":parseNum(d.montantHT)||0,
+        "TVA %":d.tva||"20",
+        "Financeur":fin0.financeur||"",
+        "Coeff %":fin0.coeff||"",
+        "Nb loyers":fin0.nbLoyers||d.duree||"",
+        "Périodicité":d.periodicite||"Mensuelle",
+        "Loyer HT":c0.loyerHT||0,
+        "Loyer TTC":c0.loyerTTC||0,
+        "Assurance/mois":parseFloat(fin0.assuranceMens)||0,
+        "Loyer majoré TTC":(c0.loyerTTC||0)+(parseFloat(fin0.assuranceMens)||0),
+        "Taux %":c0.taux12||0,
+        "TEG %":c0.teg12||0,
+        "V. Résiduelle":c0.vr||0,
+        "Coût total":c0.coutTotal||0,
+        "Date signature":d.dateSignature||"",
+        "Date MEP":d.dateMEP||"",
+        "Date démarrage":d.dateDemarrage||"",
+        "Date fin":d.dateFin||"",
+        "N° contrat":d.numeroContrat||"",
+        "Notes":d.notes||"",
+      };
+    });
+    if (!rows.length) { alert("Aucun dossier à exporter"); return; }
+    // CSV (fallback universel)
+    const headers = Object.keys(rows[0]);
+    const csv = [headers.join(";"), ...rows.map(r=>headers.map(h=>{
+      const v=r[h]; return typeof v==="number"?String(v).replace(".",","):`"${String(v).replace(/"/g,'""')}"`;
+    }).join(";"))].join("\n");
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href=url;
+    a.download=`[CB] Portefeuille_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div style={{padding:"20px 24px",overflowY:"auto",flex:1}}>
+      {/* Header + export */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63"}}>⚖ Comparateur multi-financeurs</div>
+          <div style={{fontSize:11,color:"#888",fontFamily:"'DM Mono',monospace",marginTop:2}}>Comparez les offres de financeurs pour un même dossier</div>
+        </div>
+        <button onClick={exportExcelCB}
+          style={{background:"#065F46",color:"white",border:"none",borderRadius:8,padding:"8px 16px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+          📥 Exporter portefeuille CSV
+        </button>
+      </div>
+
+      {/* Sélecteur dossier */}
+      <div style={{background:"white",borderRadius:10,border:"1px solid #ECEAE5",padding:"14px 18px",marginBottom:16}}>
+        <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888",letterSpacing:"0.06em",marginBottom:8}}>CHOISIR UN DOSSIER</div>
+        <select value={selectedId||""} onChange={e=>setSelectedId(e.target.value||null)}
+          style={{border:"1px solid #E0E0E0",borderRadius:8,padding:"7px 12px",fontSize:12,fontFamily:"'Lora',serif",color:"#2C3E50",outline:"none",width:"100%",maxWidth:480,background:"#FAFAFA"}}>
+          <option value="">— Sélectionner un dossier —</option>
+          {dossiers.map(d=>(
+            <option key={d.id} value={d.id}>{d.reference} — {d.intitule||"Sans titre"} {(d.financeurs||[]).length>1?`(${d.financeurs.length} financeurs)`:""}</option>
+          ))}
+        </select>
+      </div>
+
+      {selected && fins.length===0 && (
+        <div style={{textAlign:"center",padding:"40px",color:"#CCC",fontFamily:"'Lora',serif",fontSize:13}}>Aucun financeur renseigné pour ce dossier</div>
+      )}
+
+      {selected && fins.length===1 && (
+        <div style={{background:"#FFF8E7",border:"1px solid #FDE68A",borderRadius:8,padding:"12px 16px",fontSize:12,fontFamily:"'Lora',serif",color:"#92400E"}}>
+          ⚠ Ce dossier n'a qu'un seul financeur. Ajoutez d'autres financeurs dans le détail du dossier pour comparer.
+          <button onClick={()=>onOpen(selected)} style={{marginLeft:12,background:"#102A63",color:"white",border:"none",borderRadius:6,padding:"4px 12px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif"}}>Ouvrir le dossier</button>
+        </div>
+      )}
+
+      {selected && fins.length>1 && (() => {
+        const calcs = fins.map(f=>({...calcCBRow({...f,montantHT:selected.montantHT}),_id:f.id,_fin:f}));
+        // Meilleur TEG
+        const bestTEG = Math.min(...calcs.filter(c=>c.teg12!==null).map(c=>c.teg12));
+        const bestCout = Math.min(...calcs.filter(c=>c.coutTotal).map(c=>c.coutTotal));
+
+        return (
+          <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
+            <div style={{padding:"12px 18px",borderBottom:"1px solid #F0F0F0",display:"flex",alignItems:"center",gap:10}}>
+              <div style={{fontSize:13,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63"}}>{selected.intitule||selected.reference}</div>
+              <div style={{fontSize:11,color:"#888",fontFamily:"'DM Mono',monospace"}}>{selected.codeProjet} · {fmtE(parseNum(selected.montantHT))} HT · {fins.length} financeurs</div>
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif"}}>
+                <thead>
+                  <tr style={{background:"#F8F9FB"}}>
+                    <td style={{padding:"8px 14px",fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",letterSpacing:"0.06em",borderBottom:"1px solid #ECEAE5",whiteSpace:"nowrap"}}>INDICATEUR</td>
+                    {calcs.map((calc,i)=>{
+                      const isBestTEG = calc.teg12===bestTEG;
+                      const isBestCout = calc.coutTotal===bestCout;
+                      const st=CB_FINANCEUR_STATUSES.find(s=>s.id===calc._fin.statut);
+                      return (
+                        <td key={i} style={{padding:"8px 14px",borderBottom:"1px solid #ECEAE5",textAlign:"center",borderLeft:"1px solid #F0F0F0",background:isBestCout?"#F0FDF4":"transparent"}}>
+                          <div style={{fontSize:12,fontWeight:700,color:"#102A63"}}>{calc._fin.financeur||`Financeur ${i+1}`}</div>
+                          {st&&<div style={{marginTop:3}}><span style={{fontSize:9,background:st.bg,color:st.color,borderRadius:3,padding:"1px 6px",fontFamily:"'DM Mono',monospace"}}>{st.name}</span></div>}
+                          {isBestCout&&<div style={{fontSize:9,color:"#059669",fontWeight:700,marginTop:2}}>⭐ Meilleur coût</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COLS.map(col=>(
+                    <tr key={col.key} style={{borderBottom:"1px solid #FAFAFA"}}>
+                      <td style={{padding:"7px 14px",color:"#888",fontFamily:"'DM Mono',monospace",fontSize:10,whiteSpace:"nowrap",borderRight:"1px solid #F0F0F0"}}>{col.label}</td>
+                      {calcs.map((calc,i)=>{
+                        const val = col.fmt(calc._fin[col.key], calc);
+                        // Mise en évidence best valeur pour taux et TEG
+                        const isNum = typeof calc[col.key]==="number"||col.key==="taux12"||col.key==="teg12";
+                        const isBest = (col.key==="teg12"&&calc.teg12===bestTEG)||(col.key==="coutTotal"&&calc.coutTotal===bestCout);
+                        return (
+                          <td key={i} style={{padding:"7px 14px",textAlign:"center",color:isBest?"#059669":(col.color||"#2C3E50"),fontWeight:isBest||col.bold?700:400,borderLeft:"1px solid #F0F0F0",background:isBest?"#F0FDF4":"transparent",fontVariantNumeric:"tabular-nums"}}>
+                            {val}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {!selected && (
+        <div style={{textAlign:"center",padding:"60px",color:"#CCC",fontFamily:"'Lora',serif",fontSize:13}}>
+          <div style={{fontSize:40,marginBottom:12}}>⚖</div>
+          Sélectionnez un dossier avec plusieurs financeurs pour comparer leurs offres
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CBAmortissement({ dossiers, fmtE, onOpen }) {
   const today = new Date();
   const currentYear = today.getFullYear();
@@ -8666,201 +8888,293 @@ function CBAmortissement({ dossiers, fmtE, onOpen }) {
   );
 }
 
-function CBDashboard({ dossiers, fmtE, onOpen }) {
-  const now = new Date().toISOString().split("T")[0];
-  const thisMonth = now.slice(0,7);
-  const nextM = new Date(); nextM.setMonth(nextM.getMonth()+1);
+function CBDashboard({ dossiers, fmtE, onOpen, alertMonths }) {
+  const now   = new Date();
+  const nowS  = now.toISOString().split("T")[0];
+  const thisMonth  = nowS.slice(0,7);
+  const nextM = new Date(now); nextM.setMonth(nextM.getMonth()+1);
   const nextMonthS = nextM.getFullYear()+"-"+String(nextM.getMonth()+1).padStart(2,"0");
-  const fy = new Date().getMonth()>=9 ? new Date().getFullYear()+1 : new Date().getFullYear();
+  const fy = now.getMonth()>=9 ? now.getFullYear()+1 : now.getFullYear();
   const fNS=`${fy-1}-10-01`, fNE=`${fy}-09-30`;
   const fN1S=`${fy}-10-01`,  fN1E=`${fy+1}-09-30`;
 
-  // Dossiers actifs (misplace = capex mis en place)
+  // Dossiers actifs
   const actifs = dossiers.filter(d=>d.statut==="misplace"||d.statut==="signature"||d.statut==="accepte");
 
-  // Calcul loyers pour un dossier
+  // Loyer TTC + assurance mensuelle d'un dossier
   const calcLoyers = d => {
-    const fin0=(d.financeurs||[])[0]||{};
-    const c0=calcCBRow({...fin0,montantHT:d.montantHT});
-    const total=c0.taux12!==null?genEcheancier(c0.mttc,c0.loyerTTC,parseInt(fin0.nbLoyers)||parseInt(d.duree)||0,(c0.taux12/100)/12).length:0;
-    const startD=d.dateDemarrage?new Date(d.dateDemarrage):null;
-    const jourR=startD?startD.getDate():1;
-    let paid=0;
-    if(startD){for(let ii=0;ii<total;ii++){const dtt=new Date(startD);dtt.setMonth(dtt.getMonth()+ii);const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();dtt.setDate(Math.min(jourR,mdd));if(dtt.toISOString().split('T')[0]<=now)paid++;else break;}}
-    return {paid,total,loyer:c0.loyerTTC||0,mttc:c0.mttc||0};
+    const fin0 = (d.financeurs||[])[0]||{};
+    const c0   = calcCBRow({...fin0, montantHT:d.montantHT});
+    const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
+    const nbLMois  = parseInt(fin0.nbLoyers)||parseInt(d.duree)||0;
+    const nbEch    = Math.round(nbLMois/periStep);
+    const total    = c0.taux12!==null ? genEcheancier(c0.mttc,c0.loyerTTC,nbEch,(c0.taux12/100)/12*periStep).length : 0;
+    const assurance = parseFloat(fin0.assuranceMens)||0;
+    const loyerTTC  = (c0.loyerTTC||0) + assurance; // loyer majoré avec assurance
+    const startD    = d.dateDemarrage ? new Date(d.dateDemarrage) : null;
+    const jourR     = startD ? startD.getDate() : 1;
+    let paid = 0;
+    if (startD) {
+      for (let ii=0; ii<total; ii++) {
+        const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+ii*periStep);
+        const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();
+        dtt.setDate(Math.min(jourR,mdd));
+        if (dtt.toISOString().split("T")[0]<=nowS) paid++; else break;
+      }
+    }
+    const dateFin = d.dateFin || (startD && nbLMois ? (() => { const dt=new Date(startD); dt.setMonth(dt.getMonth()+nbLMois); return dt.toISOString().split("T")[0]; })() : null);
+    return { paid, total, loyer:loyerTTC, loyerHT:c0.loyerHT||0, assurance, mttc:c0.mttc||0, dateFin, periStep };
   };
 
   // KPIs globaux
   const totalMontantHT = dossiers.reduce((a,d)=>a+(parseNum(d.montantHT)||0),0);
-  const totalMontantActifs = actifs.reduce((a,d)=>a+(parseNum(d.montantHT)||0),0);
-  const totalDossiers = dossiers.length;
+  const totalDossiers  = dossiers.length;
   const dossiersEnCours = actifs.length;
 
-  // Loyers ce mois / mois prochain
-  let loyerCeMois=0, loyerMoisSuiv=0, loyerFN=0, loyerFN1=0;
-  actifs.forEach(d=>{
-    const {loyer,paid,total,mttc}=calcLoyers(d);
-    if(!loyer||!d.dateDemarrage) return;
-    const startD=new Date(d.dateDemarrage);
-    const jourR=startD.getDate();
-    for(let ii=0;ii<total;ii++){
-      const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+ii);
+  // Loyers cumulés (TTC avec assurance)
+  let loyerCeMois=0, loyerMoisSuiv=0, loyerFN=0, loyerFN1=0, loyerMensuelTotal=0;
+  actifs.forEach(d => {
+    const {loyer,total,paid,dateFin,periStep} = calcLoyers(d);
+    if (!loyer||!d.dateDemarrage) return;
+    if (paid < total) loyerMensuelTotal += loyer;
+    const startD=new Date(d.dateDemarrage), jourR=startD.getDate();
+    for (let ii=0; ii<total; ii++) {
+      const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+ii*periStep);
       const mdd=new Date(dtt.getFullYear(),dtt.getMonth()+1,0).getDate();
       dtt.setDate(Math.min(jourR,mdd));
-      const ds=dtt.toISOString().split('T')[0];
-      const ms=ds.slice(0,7);
-      if(ms===thisMonth) loyerCeMois+=loyer;
-      if(ms===nextMonthS) loyerMoisSuiv+=loyer;
-      if(ds>=fNS&&ds<=fNE) loyerFN+=loyer;
-      if(ds>=fN1S&&ds<=fN1E) loyerFN1+=loyer;
+      const ds=dtt.toISOString().split("T")[0], ms=ds.slice(0,7);
+      if (ms===thisMonth) loyerCeMois+=loyer;
+      if (ms===nextMonthS) loyerMoisSuiv+=loyer;
+      if (ds>=fNS&&ds<=fNE) loyerFN+=loyer;
+      if (ds>=fN1S&&ds<=fN1E) loyerFN1+=loyer;
     }
   });
 
-  // Encours restant estimé (montant * (1-pct) pour chaque actif)
-  const encours = actifs.reduce((a,d)=>{
-    const {paid,total,mttc}=calcLoyers(d);
-    if(!total) return a+(parseNum(d.montantHT)||0);
-    const pct=paid/total;
-    return a+(mttc*(1-pct));
+  // Encours restant
+  const encours = actifs.reduce((a,d) => {
+    const {paid,total,mttc} = calcLoyers(d);
+    if (!total) return a+(parseNum(d.montantHT)||0);
+    return a+(mttc*(1-paid/total));
   },0);
 
-  const kpis1 = [
-    {label:"Dossiers en cours",    val:String(dossiersEnCours),      color:"#1D4ED8",bg:"#EFF6FF",bd:"#BFDBFE",icon:"🗂️"},
-    {label:"Montant total",         val:fmtE(totalMontantHT),         color:"#102A63",bg:"#F0F5FF",bd:"#C7D7FD",icon:"💶"},
-    {label:"Encours estimé",        val:fmtE(encours),                color:"#C0392B",bg:"#FEE2E2",bd:"#FECACA",icon:"📉"},
-    {label:"Total dossiers",        val:String(totalDossiers),        color:"#6B7280",bg:"#F3F4F6",bd:"#E5E7EB",icon:"📁"},
-  ];
-  const kpis2 = [
-    {label:"Loyers ce mois",        val:fmtE(loyerCeMois),            color:"#102A63",bg:"#EFF6FF",bd:"#BFDBFE",icon:"📅"},
-    {label:"Loyers mois suivant",   val:fmtE(loyerMoisSuiv),          color:"#1D4ED8",bg:"#EFF6FF",bd:"#BFDBFE",icon:"🔜"},
-    {label:`Exercice N (oct.${fy-1}-sept.${fy})`,val:fmtE(loyerFN),  color:"#065F46",bg:"#F0FDF4",bd:"#BBF7D0",icon:"📊"},
-    {label:`Exercice N+1 (oct.${fy}-sept.${fy+1})`,val:fmtE(loyerFN1),color:"#0E7490",bg:"#ECFEFF",bd:"#A5F3FC",icon:"📈"},
-  ];
+  // CB se terminant dans les X mois suivants (alertMonths)
+  const alertM = alertMonths||6;
+  const alertDate = new Date(now); alertDate.setMonth(alertDate.getMonth()+alertM);
+  const alertDateS = alertDate.toISOString().split("T")[0];
+  const expirant = actifs.filter(d => {
+    const {dateFin} = calcLoyers(d);
+    return dateFin && dateFin>=nowS && dateFin<=alertDateS;
+  }).sort((a,b) => {
+    const fA=calcLoyers(a).dateFin||"", fB=calcLoyers(b).dateFin||"";
+    return fA.localeCompare(fB);
+  });
+
+  // Répartition par financeur (pour camembert SVG)
+  const byFinanceur = {};
+  actifs.forEach(d => {
+    const f = (d.financeurs||[])[0]?.financeur||"Autre";
+    const mnt = parseNum(d.montantHT)||0;
+    byFinanceur[f] = (byFinanceur[f]||0)+mnt;
+  });
+  const finEntries = Object.entries(byFinanceur).sort((a,b)=>b[1]-a[1]);
+  const finTotal = finEntries.reduce((a,[,v])=>a+v,0);
+  const FIN_COLORS = ["#102A63","#E67E22","#0E7490","#6D28D9","#065F46","#B91C1C","#1D4ED8","#7C3AED"];
+
+  // Camembert SVG
+  const PieChart = ({entries, total, colors}) => {
+    if (!total) return <div style={{textAlign:"center",color:"#CCC",fontSize:11,padding:"30px 0"}}>Aucune donnée</div>;
+    const cx=80, cy=80, r=65, gap=0.02;
+    let angle=-Math.PI/2;
+    const slices = entries.map(([name,val],i) => {
+      const frac = val/total;
+      const a1=angle, a2=angle+frac*2*Math.PI-gap;
+      angle += frac*2*Math.PI;
+      const x1=cx+r*Math.cos(a1), y1=cy+r*Math.sin(a1);
+      const x2=cx+r*Math.cos(a2), y2=cy+r*Math.sin(a2);
+      const large=frac>0.5?1:0;
+      return {name,val,frac,x1,y1,x2,y2,large,color:colors[i%colors.length],mid:(a1+a2)/2};
+    });
+    return (
+      <svg viewBox="0 0 160 160" style={{width:160,height:160,flexShrink:0}}>
+        {slices.map((s,i)=>(
+          <path key={i} d={`M${cx},${cy} L${s.x1},${s.y1} A${r},${r} 0 ${s.large} 1 ${s.x2},${s.y2} Z`}
+            fill={s.color} opacity={0.88} stroke="white" strokeWidth={1.5}>
+            <title>{s.name}: {fmtE(s.val)} ({(s.frac*100).toFixed(1)}%)</title>
+          </path>
+        ))}
+        <circle cx={cx} cy={cy} r={38} fill="white"/>
+        <text x={cx} y={cy-6} textAnchor="middle" fontSize={9} fill="#888" fontFamily="'DM Mono',monospace">TOTAL</text>
+        <text x={cx} y={cy+10} textAnchor="middle" fontSize={11} fontWeight="700" fill="#102A63" fontFamily="'Lora',serif">{fmtE(finTotal,0)}</text>
+      </svg>
+    );
+  };
 
   // Répartition par statut
+  const PAL_S={montage:"#1D4ED8",negociation:"#A16207",accepte:"#059669",signature:"#6D28D9",misplace:"#0E7490",refuse:"#B91C1C",clos:"#6B7280"};
   const byStatut = CB_KANBAN_STATUSES.map(s=>({
-    ...s,
-    count:dossiers.filter(d=>d.statut===s.id).length,
+    ...s, count:dossiers.filter(d=>d.statut===s.id).length,
     total:dossiers.filter(d=>d.statut===s.id).reduce((a,d)=>a+(parseNum(d.montantHT)||0),0),
   })).filter(s=>s.count>0);
 
-  // Top 5 loyers
-  const topLoyers = actifs.map(d=>({d,loyer:calcLoyers(d).loyer})).filter(x=>x.loyer>0).sort((a,b)=>b.loyer-a.loyer).slice(0,5);
+  // Top loyers (avec assurance)
+  const topLoyers = actifs.map(d=>({d,...calcLoyers(d)})).filter(x=>x.loyer>0).sort((a,b)=>b.loyer-a.loyer).slice(0,5);
+
+  const KCard = ({icon,label,val,color,bg,bd,sub}) => (
+    <div style={{background:bg||"white",borderRadius:12,padding:"14px 16px",border:`1px solid ${bd||"#ECEAE5"}`,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+      <div style={{fontSize:18,marginBottom:6}}>{icon}</div>
+      <div style={{fontSize:20,fontWeight:700,color,fontFamily:"'Lora',serif",marginBottom:2,fontVariantNumeric:"tabular-nums",lineHeight:1.2}}>{val}</div>
+      <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{label}</div>
+      {sub&&<div style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",marginTop:3}}>{sub}</div>}
+    </div>
+  );
 
   return (
-    <div style={{ padding:"20px 24px",display:"flex",flexDirection:"column",gap:16,overflowY:"auto" }}>
-      {/* KPIs ligne 1 */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
-        {kpis1.map(k=>(
-          <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 18px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-            <div style={{ fontSize:20,marginBottom:8 }}>{k.icon}</div>
-            <div style={{ fontSize:22,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:4,fontVariantNumeric:"tabular-nums" }}>{k.val}</div>
-            <div style={{ fontSize:11,color:"#888",fontFamily:"'Lora',serif" }}>{k.label}</div>
-          </div>
-        ))}
-      </div>
-      {/* KPIs loyers */}
-      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12 }}>
-        {kpis2.map(k=>(
-          <div key={k.label} style={{ background:k.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${k.bd}` }}>
-            <div style={{ fontSize:16,marginBottom:4 }}>{k.icon}</div>
-            <div style={{ fontSize:16,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:2,fontVariantNumeric:"tabular-nums" }}>{k.val}</div>
-            <div style={{ fontSize:10,color:"#888",fontFamily:"'Lora',serif" }}>{k.label}</div>
-          </div>
-        ))}
-      </div>
+    <div style={{padding:"18px 22px",display:"flex",flexDirection:"column",gap:14,overflowY:"auto",flex:1}}>
 
-      <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:16 }}>
-        {/* Répartition par statut */}
-        <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>Répartition par statut</div>
-          <div style={{ padding:"8px 0" }}>
-            {byStatut.map(s=>{
-              const PAL_S={montage:"#1D4ED8",negociation:"#A16207",accepte:"#059669",signature:"#6D28D9",misplace:"#0E7490",refuse:"#B91C1C",clos:"#6B7280"};
-              const pct=totalMontantHT>0?Math.round(s.total/totalMontantHT*100):0;
+      {/* ── Alertes expiration ── */}
+      {expirant.length>0 && (
+        <div style={{background:"#FFF7ED",border:"1px solid #FED7AA",borderRadius:10,padding:"10px 16px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#C2410C",fontFamily:"'Lora',serif",marginBottom:8}}>
+            ⚠ {expirant.length} crédit{expirant.length>1?"s":""}-bail se terminant dans les {alertM} mois
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            {expirant.map(d=>{
+              const {dateFin,loyer} = calcLoyers(d);
+              const daysLeft = Math.ceil((new Date(dateFin)-now)/86400000);
               return (
-                <div key={s.id} style={{ display:"flex",alignItems:"center",gap:10,padding:"5px 16px" }}>
-                  <div style={{ width:8,height:8,borderRadius:"50%",background:PAL_S[s.id]||"#888",flexShrink:0 }} />
-                  <span style={{ fontSize:11,fontFamily:"'Lora',serif",color:"#555",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{s.name}</span>
-                  <span style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:"#888",fontVariantNumeric:"tabular-nums" }}>{s.count}</span>
-                  <div style={{ width:80,height:5,background:"#F0F0F0",borderRadius:3,overflow:"hidden",flexShrink:0 }}>
-                    <div style={{ width:`${pct}%`,height:"100%",background:PAL_S[s.id]||"#888",borderRadius:3 }} />
+                <div key={d.id} onClick={()=>onOpen(d)}
+                  style={{background:"white",border:"1px solid #FED7AA",borderRadius:6,padding:"5px 10px",cursor:"pointer",display:"flex",flexDirection:"column",gap:1}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif"}}>{d.intitule||d.reference}</div>
+                  <div style={{fontSize:9,color:"#C2410C",fontFamily:"'DM Mono',monospace"}}>
+                    Fin: {dateFin?.split("-").reverse().join("/")} · J-{daysLeft}
                   </div>
-                  <span style={{ fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace",width:60,textAlign:"right",fontVariantNumeric:"tabular-nums" }}>{fmtE(s.total)}</span>
                 </div>
               );
             })}
-            {byStatut.length===0 && <div style={{ padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:11 }}>Aucun dossier</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── KPIs ligne 1 ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        <KCard icon="🗂️" label="Dossiers en cours" val={String(dossiersEnCours)} color="#1D4ED8" bg="#EFF6FF" bd="#BFDBFE" />
+        <KCard icon="💶" label="Montant total HT" val={fmtE(totalMontantHT)} color="#102A63" bg="#F0F5FF" bd="#C7D7FD" />
+        <KCard icon="📉" label="Encours estimé" val={fmtE(encours)} color="#C0392B" bg="#FEE2E2" bd="#FECACA" sub="Capital restant estimé" />
+        <KCard icon="⚠" label={`Expirant < ${alertM} mois`} val={String(expirant.length)} color={expirant.length>0?"#C2410C":"#059669"} bg={expirant.length>0?"#FFF7ED":"#F0FDF4"} bd={expirant.length>0?"#FED7AA":"#BBF7D0"} />
+      </div>
+
+      {/* ── KPIs loyers (TTC avec assurance) ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+        <KCard icon="📅" label="Loyers TTC ce mois" val={fmtE(loyerCeMois)} color="#102A63" bg="#EFF6FF" bd="#BFDBFE" sub="Assurance incluse" />
+        <KCard icon="🔜" label="Loyers TTC mois suivant" val={fmtE(loyerMoisSuiv)} color="#1D4ED8" bg="#EFF6FF" bd="#BFDBFE" sub="Assurance incluse" />
+        <KCard icon="📊" label={`Exercice N (oct.${fy-1}-sept.${fy})`} val={fmtE(loyerFN)} color="#065F46" bg="#F0FDF4" bd="#BBF7D0" />
+        <KCard icon="📈" label={`Exercice N+1 (oct.${fy}-sept.${fy+1})`} val={fmtE(loyerFN1)} color="#0E7490" bg="#ECFEFF" bd="#A5F3FC" />
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1.2fr 1fr",gap:14}}>
+
+        {/* ── Camembert par financeur ── */}
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif"}}>
+            Répartition par financeur (montants HT actifs)
+          </div>
+          <div style={{padding:"12px 16px",display:"flex",alignItems:"center",gap:16}}>
+            <PieChart entries={finEntries} total={finTotal} colors={FIN_COLORS} />
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+              {finEntries.map(([name,val],i)=>(
+                <div key={name} style={{display:"flex",alignItems:"center",gap:8}}>
+                  <div style={{width:10,height:10,borderRadius:2,background:FIN_COLORS[i%FIN_COLORS.length],flexShrink:0}}/>
+                  <span style={{fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</span>
+                  <span style={{fontSize:10,color:"#888",fontFamily:"'DM Mono',monospace",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtE(val)}</span>
+                  <span style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",width:32,textAlign:"right"}}>{finTotal>0?(val/finTotal*100).toFixed(0):0}%</span>
+                </div>
+              ))}
+              {finEntries.length===0&&<div style={{color:"#CCC",fontSize:11,fontFamily:"'Lora',serif"}}>Aucun actif</div>}
+            </div>
           </div>
         </div>
 
-        {/* Top loyers mensuels */}
-        <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>Top loyers mensuels</div>
-          <div style={{ padding:"8px 0" }}>
-            {topLoyers.length===0
-              ? <div style={{ padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:11 }}>Aucun dossier actif avec loyer</div>
-              : topLoyers.map(({d,loyer},i)=>(
-                  <div key={d.id} onClick={()=>onOpen(d)} style={{ display:"flex",alignItems:"center",gap:10,padding:"6px 16px",cursor:"pointer" }}
-                    onMouseEnter={e=>e.currentTarget.style.background="#F8F9FB"}
-                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <span style={{ fontSize:10,color:"#CCC",fontFamily:"'DM Mono',monospace",width:14,flexShrink:0 }}>{i+1}</span>
-                    <div style={{ flex:1,minWidth:0 }}>
-                      <div style={{ fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:600 }}>{d.intitule||"Sans titre"}</div>
-                      <div style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{(d.financeurs||[])[0]?.financeur||"—"}</div>
-                    </div>
-                    <span style={{ fontSize:11,fontWeight:700,color:"#1D4ED8",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums",flexShrink:0 }}>{fmtE(loyer)}/mois</span>
+        {/* ── Répartition par statut ── */}
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif"}}>Répartition par statut</div>
+          <div style={{padding:"8px 0"}}>
+            {byStatut.map(s=>{
+              const pct=totalMontantHT>0?Math.round(s.total/totalMontantHT*100):0;
+              return (
+                <div key={s.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 14px"}}>
+                  <div style={{width:8,height:8,borderRadius:"50%",background:PAL_S[s.id]||"#888",flexShrink:0}}/>
+                  <span style={{fontSize:11,fontFamily:"'Lora',serif",color:"#555",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                  <span style={{fontSize:10,fontFamily:"'DM Mono',monospace",color:"#888"}}>{s.count}</span>
+                  <div style={{width:70,height:5,background:"#F0F0F0",borderRadius:3,overflow:"hidden",flexShrink:0}}>
+                    <div style={{width:`${pct}%`,height:"100%",background:PAL_S[s.id]||"#888",borderRadius:3}}/>
                   </div>
-                ))
-            }
+                  <span style={{fontSize:10,color:"#AAA",fontFamily:"'DM Mono',monospace",width:56,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtE(s.total)}</span>
+                </div>
+              );
+            })}
+            {byStatut.length===0&&<div style={{padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:11}}>Aucun dossier</div>}
           </div>
         </div>
       </div>
 
-      {/* Tableau récap dossiers actifs */}
-      {actifs.length>0 && (
-        <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px",borderBottom:"1px solid #ECEAE5",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-            <div style={{ fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif" }}>Dossiers en cours</div>
-            <div style={{ fontSize:11,color:"#AAA",fontFamily:"'Lora',serif" }}>{actifs.length} dossier{actifs.length>1?"s":""}</div>
+      {/* ── Top loyers + CB expirant ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif"}}>Top loyers mensuels TTC <span style={{fontSize:10,fontWeight:400,color:"#AAA"}}>(assurance incluse)</span></div>
+          <div style={{padding:"6px 0"}}>
+            {topLoyers.map(({d,loyer,assurance,loyerHT},i)=>(
+              <div key={d.id} onClick={()=>onOpen(d)}
+                style={{display:"flex",alignItems:"center",gap:10,padding:"6px 14px",cursor:"pointer",borderBottom:"1px solid #FAFAFA"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#FAFAF8"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:9,color:"#CCC",fontFamily:"'DM Mono',monospace",width:14,flexShrink:0}}>#{i+1}</span>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#102A63",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.intitule||d.reference}</div>
+                  {assurance>0&&<div style={{fontSize:9,color:"#4F46E5",fontFamily:"'DM Mono',monospace"}}>dont {fmtE(assurance)} assurance/mois</div>}
+                </div>
+                <span style={{fontSize:13,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums",flexShrink:0}}>{fmtE(loyer)}</span>
+              </div>
+            ))}
+            {topLoyers.length===0&&<div style={{padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:11}}>Aucun dossier actif</div>}
           </div>
-          <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
-            <thead>
-              <tr style={{ background:"#102A63" }}>
-                {["Référence","Intitulé","Financeur","Montant HT","Loyer/mois","Avancement","Date fin"].map(h=>(
-                  <th key={h} style={{ padding:"7px 12px",color:"white",fontWeight:400,textAlign:"left",fontSize:10 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {actifs.map((d,i)=>{
-                const {paid,total,loyer}=calcLoyers(d);
-                const pct=total>0?Math.round(paid/total*100):0;
-                return (
-                  <tr key={d.id} onClick={()=>onOpen(d)} style={{ background:i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0",cursor:"pointer" }}
-                    onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
-                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"white":"#FAFAFA"}>
-                    <td style={{ padding:"6px 12px",color:"#888",fontSize:10 }}>{d.reference||"—"}</td>
-                    <td style={{ padding:"6px 12px",fontWeight:600,color:"#102A63" }}>{d.intitule||"—"}</td>
-                    <td style={{ padding:"6px 12px",color:"#555" }}>{(d.financeurs||[])[0]?.financeur||"—"}</td>
-                    <td style={{ padding:"6px 12px",fontWeight:600,fontVariantNumeric:"tabular-nums" }}>{fmtE(parseNum(d.montantHT))}</td>
-                    <td style={{ padding:"6px 12px",color:"#1D4ED8",fontVariantNumeric:"tabular-nums" }}>{loyer?fmtE(loyer):"—"}</td>
-                    <td style={{ padding:"6px 12px" }}>
-                      <div style={{ display:"flex",alignItems:"center",gap:6 }}>
-                        <div style={{ flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50 }}>
-                          <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":"#1D4ED8",borderRadius:3 }} />
-                        </div>
-                        <span style={{ fontSize:10,color:"#888",minWidth:28,fontVariantNumeric:"tabular-nums" }}>{pct}%</span>
-                      </div>
-                    </td>
-                    <td style={{ padding:"6px 12px",color:"#888",fontSize:10 }}>{d.dateFin?d.dateFin.split("-").reverse().join("/"):"—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
         </div>
-      )}
+
+        {/* CB expirant timeline */}
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden"}}>
+          <div style={{padding:"12px 16px",borderBottom:"1px solid #ECEAE5",fontSize:12,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif"}}>
+            Fins d'amortissement à venir
+          </div>
+          <div style={{padding:"6px 0",overflowY:"auto",maxHeight:220}}>
+            {actifs
+              .map(d=>({d,...calcLoyers(d)}))
+              .filter(x=>x.dateFin&&x.dateFin>=nowS)
+              .sort((a,b)=>a.dateFin.localeCompare(b.dateFin))
+              .slice(0,8)
+              .map(({d,dateFin,paid,total})=>{
+                const daysLeft=Math.ceil((new Date(dateFin)-now)/86400000);
+                const isAlert=daysLeft<=alertM*30;
+                return (
+                  <div key={d.id} onClick={()=>onOpen(d)}
+                    style={{display:"flex",alignItems:"center",gap:8,padding:"5px 14px",cursor:"pointer",borderBottom:"1px solid #FAFAFA"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#FAFAF8"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div style={{width:6,height:6,borderRadius:"50%",background:isAlert?"#E67E22":"#E0E0E0",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:11,fontWeight:600,color:"#102A63",fontFamily:"'Lora',serif",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.intitule||d.reference}</div>
+                      <div style={{fontSize:9,color:"#888",fontFamily:"'DM Mono',monospace"}}>{paid}/{total} loyers · {(paid/total*100).toFixed(0)}%</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:10,fontWeight:700,color:isAlert?"#C2410C":"#555",fontFamily:"'DM Mono',monospace"}}>{dateFin?.split("-").reverse().join("/")}</div>
+                      <div style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>J-{daysLeft}</div>
+                    </div>
+                  </div>
+                );
+              })
+            }
+            {actifs.filter(d=>calcLoyers(d).dateFin).length===0&&<div style={{padding:"20px",textAlign:"center",color:"#CCC",fontFamily:"'Lora',serif",fontSize:11}}>Aucune échéance calculable</div>}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -9094,7 +9408,6 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
 
 function CreditBailView({ tasks, onEdit, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
-  const CB_TRASH_KEY = "creditbail_trash_v1";
   const [dossiers, setDossiers]         = useState([]);
   const [dbReady, setDbReady]           = useState(false); // IDB chargé ?
   const [modal, setModal]               = useState(null);
@@ -9104,11 +9417,15 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const [importResult, setImportResult] = useState(null);
   const [undoCB, setUndoCB]             = useState(null);
   const undoCBTimer                     = React.useRef(null);
-  const [trash, setTrash]               = useState(() => { try { const s=localStorage.getItem(CB_TRASH_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [trash, setTrash]               = useState([]);
   const [showTrash, setShowTrash]       = useState(false);
+  const [alertMonths, setAlertMonths]   = useState(() => { try { return parseInt(localStorage.getItem("cb_alert_months")||"6"); } catch { return 6; } });
   const importRef = React.useRef(null);
 
-  const saveTrash = t => { try { localStorage.setItem(CB_TRASH_KEY, JSON.stringify(t)); } catch {} };
+  const saveAlertMonths = v => { setAlertMonths(v); localStorage.setItem("cb_alert_months",String(v)); };
+  const saveTrash = async (items) => {
+    // IDB : synchro incrémentale (trop complexe → on refait un full sync via state)
+  };
   const thirtyDaysAgo = new Date(Date.now()-30*864e5).toISOString();
   const activeTrash = trash.filter(r=>r.deletedAt>thirtyDaysAgo);
   const trashDaysLeft = r => Math.max(0,Math.ceil((new Date(r.deletedAt).getTime()+30*864e5-Date.now())/864e5));
@@ -9116,16 +9433,15 @@ function CreditBailView({ tasks, onEdit, settings }) {
   // ── Chargement initial depuis IndexedDB (+ migration LS→IDB si besoin) ──
   useEffect(() => {
     (async () => {
-      await migrateCBLocalStorageToIDB();          // migration silencieuse si ancienne data LS
+      await migrateCBLocalStorageToIDB();
+      await migrateCBTrashLocalStorageToIDB();
       const data = await loadCBDossiersIDB();
       if (data !== null) setDossiers(data);
       else {
-        // Fallback : tenter localStorage (legacy)
-        try {
-          const s = localStorage.getItem(CB_DOSSIERS_KEY);
-          if (s) setDossiers(JSON.parse(s));
-        } catch {}
+        try { const s=localStorage.getItem(CB_DOSSIERS_KEY); if(s) setDossiers(JSON.parse(s)); } catch {}
       }
+      const trashData = await loadCBTrashIDB();
+      setTrash(trashData);
       setDbReady(true);
     })();
   }, []);
@@ -9152,7 +9468,8 @@ function CreditBailView({ tasks, onEdit, settings }) {
     const found = dossiers.find(x=>x.id===id); if (!found) return;
     setDossiers(p => p.filter(x=>x.id!==id));
     const trashed = { ...found, deletedAt: new Date().toISOString() };
-    setTrash(p=>{ const n=[...p,trashed]; saveTrash(n); return n; });
+    saveCBTrashItemIDB(trashed);
+    setTrash(p=>[...p, trashed]);
     if (undoCBTimer.current) clearTimeout(undoCBTimer.current);
     setUndoCB(found);
     undoCBTimer.current = setTimeout(()=>setUndoCB(null), 10000);
@@ -9162,7 +9479,8 @@ function CreditBailView({ tasks, onEdit, settings }) {
     if (!undoCB) return;
     clearTimeout(undoCBTimer.current);
     setDossiers(p=>[undoCB,...p]);
-    setTrash(p=>{ const n=p.filter(x=>x.id!==undoCB.id); saveTrash(n); return n; });
+    deleteCBTrashItemIDB(undoCB.id);
+    setTrash(p=>p.filter(x=>x.id!==undoCB.id));
     setUndoCB(null);
   };
 
@@ -9170,10 +9488,11 @@ function CreditBailView({ tasks, onEdit, settings }) {
     const r=trash.find(x=>x.id===id); if (!r) return;
     const { deletedAt, ...restored } = r;
     setDossiers(p=>[restored,...p]);
-    setTrash(p=>{ const n=p.filter(x=>x.id!==id); saveTrash(n); return n; });
+    deleteCBTrashItemIDB(id);
+    setTrash(p=>p.filter(x=>x.id!==id));
   };
 
-  const purgeTrash = id => setTrash(p=>{ const n=p.filter(x=>x.id!==id); saveTrash(n); return n; });
+  const purgeTrash = id => { deleteCBTrashItemIDB(id); setTrash(p=>p.filter(x=>x.id!==id)); };
 
   const openNew = () => setModal({ id:uid(), reference:genCBRef(dossiers), codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", site:"", montantHT:"", tva:"20", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() });
 
@@ -9355,7 +9674,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const toVerifyCount = dossiers.filter(d=>d.importedFromExcel && !d.verifiedAt).length;
 
   // Si onglet = financeur, c'est un filtre sur la synthèse
-  const isFinanceurTab = activeTab!=="dashboard" && activeTab!=="synthese" && activeTab!=="amortissement";
+  const isFinanceurTab = activeTab!=="dashboard" && activeTab!=="synthese" && activeTab!=="amortissement" && activeTab!=="comparateur";
   const filterFinanceur = isFinanceurTab ? activeTab : "";
 
   const NAV_ITEMS = [
@@ -9415,6 +9734,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
           <NavBtn id="dashboard" label="📊 Tableau de bord" />
           <NavBtn id="synthese" label="📋 Synthèse" badge={toVerifyCount} />
           <NavBtn id="amortissement" label="📉 Amortissement" />
+          <NavBtn id="comparateur" label="⚖ Comparateur" />
 
           {uniqueFinanceurs.length>0 && (
             <div style={{ fontSize:9,color:"#AAA",padding:"10px 14px 4px",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase" }}>Par financeur</div>
@@ -9458,10 +9778,13 @@ function CreditBailView({ tasks, onEdit, settings }) {
       {/* Contenu principal */}
       <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
         {!showTrash && activeTab==="dashboard" && (
-          <CBDashboard dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
+          <CBDashboard dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} alertMonths={alertMonths} />
         )}
         {!showTrash && activeTab==="amortissement" && (
           <CBAmortissement dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
+        )}
+        {!showTrash && activeTab==="comparateur" && (
+          <CBComparateur dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
         )}
         {!showTrash && (activeTab==="synthese" || isFinanceurTab) && (
           <CBSynthese
@@ -13156,7 +13479,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.455<br />14/05/26 à 18:00
+          v.0.456<br />14/05/26 à 19:30
         </div>
       </div>
 
