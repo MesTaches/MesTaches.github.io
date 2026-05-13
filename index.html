@@ -7262,8 +7262,9 @@ async function exportCBPDF(d) {
     const finRow0 = (d.financeurs||[])[0]||{};
     const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
     if (calc0.taux12 === null) return '';
-    const nbL = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+    const nbLMois = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
     const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
+    const nbL = Math.round(nbLMois / periStep);
     const tauxPer = (calc0.taux12/100)/12 * periStep;
     const echRows = genEcheancier(calc0.mttc, calc0.loyerTTC, nbL, tauxPer);
     if (!echRows.length) return '';
@@ -7487,8 +7488,11 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
   const calc0   = calcCBRow({...finRow0, montantHT: d.montantHT});
   const periStep = d.periodicite==="Trimestrielle" ? 3 : 1; // mois par échéance
   const tauxPeriode = calc0.taux12 !== null ? (calc0.taux12/100)/12 * periStep : 0;
-  const ech     = calc0.taux12 !== null
-    ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, tauxPeriode)
+  // nbLoyers est toujours en mois dans le financeur → diviser par periStep pour nb d'échéances réelles
+  const nbLoyersMois = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+  const nbEcheances = Math.round(nbLoyersMois / periStep);
+  const ech = calc0.taux12 !== null
+    ? genEcheancier(calc0.mttc, calc0.loyerTTC, nbEcheances, tauxPeriode)
     : [];
   const todayStr = new Date().toISOString().split('T')[0];
   const cbTotalCount = ech.length;
@@ -8141,6 +8145,7 @@ function CBAmortissement({ dossiers, fmtE, onOpen }) {
   const today = new Date();
   const currentYear = today.getFullYear();
   const [viewYear, setViewYear] = React.useState(currentYear);
+  const [viewMode, setViewMode] = React.useState("materiel"); // "materiel" | "banque"
 
   // Palette de couleurs par dossier
   const PALETTE = [
@@ -8156,10 +8161,11 @@ function CBAmortissement({ dossiers, fmtE, onOpen }) {
         const finRow0 = (d.financeurs||[])[0]||{};
         const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
         const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
-        const nbL = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+        const nbLMois = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
+        const nbL = Math.round(nbLMois / periStep); // nb d'échéances réelles
         const start = new Date(d.dateDemarrage);
         const end = new Date(start);
-        end.setMonth(end.getMonth() + nbL * periStep);
+        end.setMonth(end.getMonth() + nbLMois); // durée totale = toujours en mois
         const loyerHT = calc0.loyerHT || 0;
         const vr = calc0.vr || 0;
         const color = PALETTE[idx % PALETTE.length];
@@ -8218,22 +8224,164 @@ function CBAmortissement({ dossiers, fmtE, onOpen }) {
           <div style={{ fontSize:18, fontWeight:700, fontFamily:"'Lora',serif", color:"#102A63" }}>📉 Calendrier d'amortissement</div>
           <div style={{ fontSize:11, color:"#888", fontFamily:"'DM Mono',monospace", marginTop:2 }}>{items.length} crédit{items.length>1?"s":""}-bail actif{items.length>1?"s":""}</div>
         </div>
-        {/* Sélecteur d'année */}
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          {years.map(y => (
-            <button key={y} onClick={() => setViewYear(y)}
-              style={{ border:`2px solid ${y===viewYear?"#102A63":"#E0E0E0"}`, borderRadius:8, padding:"5px 14px",
-                fontSize:12, fontFamily:"'DM Mono',monospace", cursor:"pointer",
-                background: y===viewYear?"#102A63":"white",
-                color: y===viewYear?"white":"#555",
-                fontWeight: y===viewYear?700:400 }}>
-              {y}
-            </button>
-          ))}
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          {/* Toggle vue */}
+          <div style={{ display:"flex", background:"#F0F0F0", borderRadius:8, padding:2, gap:2 }}>
+            {[{id:"materiel",label:"🔧 Matériel"},{id:"banque",label:"🏦 Banque"}].map(v=>(
+              <button key={v.id} onClick={()=>setViewMode(v.id)}
+                style={{ border:"none", borderRadius:6, padding:"5px 14px", fontSize:11,
+                  fontFamily:"'Lora',serif", cursor:"pointer", fontWeight:viewMode===v.id?700:400,
+                  background:viewMode===v.id?"white":"transparent",
+                  color:viewMode===v.id?"#102A63":"#888",
+                  boxShadow:viewMode===v.id?"0 1px 3px rgba(0,0,0,0.12)":"none" }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          {/* Sélecteur d'année */}
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            {years.map(y => (
+              <button key={y} onClick={() => setViewYear(y)}
+                style={{ border:`2px solid ${y===viewYear?"#102A63":"#E0E0E0"}`, borderRadius:8, padding:"5px 14px",
+                  fontSize:12, fontFamily:"'DM Mono',monospace", cursor:"pointer",
+                  background: y===viewYear?"#102A63":"white",
+                  color: y===viewYear?"white":"#555",
+                  fontWeight: y===viewYear?700:400 }}>
+                {y}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── Graphe barres mensuel ── */}
+      {/* ── Vue Banque : regrouper par financeur ── */}
+      {viewMode==="banque" && (() => {
+        // Construire la liste des financeurs uniques avec leurs CB
+        const banqueMap = {};
+        items.forEach(item => {
+          const fins = item.d.financeurs||[];
+          const f = fins[0]?.financeur || "Sans financeur";
+          if (!banqueMap[f]) banqueMap[f] = { name:f, items:[], color: PALETTE[Object.keys(banqueMap).length % PALETTE.length] };
+          banqueMap[f].items.push(item);
+        });
+        const banques = Object.values(banqueMap);
+
+        // Loyers mensuels par banque
+        const bMonthly = MONTHS.map((m,mi) => {
+          const mStart = new Date(viewYear,mi,1), mEnd = new Date(viewYear,mi+1,0,23,59,59);
+          const byBanque = banques.map(b => ({
+            name: b.name, color: b.color,
+            total: b.items.filter(i=>i.start<=mEnd&&i.end>=mStart).reduce((a,i)=>a+i.loyerHT,0)
+          }));
+          return { m, mi, byBanque, total: byBanque.reduce((a,b)=>a+b.total,0) };
+        });
+        const bMax = Math.max(...bMonthly.map(m=>m.total),1);
+
+        return (
+          <>
+            {/* Barres empilées par banque */}
+            <div style={{ background:"white", borderRadius:12, border:"1px solid #ECEAE5", padding:"18px 20px", marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+              <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", letterSpacing:"0.06em", marginBottom:12 }}>LOYERS HT / MOIS PAR BANQUE — {viewYear}</div>
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(12,1fr)", gap:4, alignItems:"end", height:120 }}>
+                {bMonthly.map(({m,mi,byBanque,total}) => {
+                  const pct = total/bMax*100;
+                  const isCM = viewYear===today.getFullYear()&&mi===today.getMonth();
+                  return (
+                    <div key={mi} style={{ display:"flex",flexDirection:"column",alignItems:"center",gap:3 }}>
+                      <div style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:"#888",whiteSpace:"nowrap" }}>{total>0?fmtE(total):""}</div>
+                      <div style={{ width:"100%",height:90,display:"flex",flexDirection:"column",justifyContent:"flex-end" }}>
+                        {total>0 ? (
+                          <div style={{ width:"100%",borderRadius:"4px 4px 0 0",overflow:"hidden",height:`${pct}%`,minHeight:4,border:isCM?"2px solid #E67E22":"none",display:"flex",flexDirection:"column",justifyContent:"flex-end" }}>
+                            {byBanque.filter(b=>b.total>0).map(b=>(
+                              <div key={b.name} style={{ flex:b.total,background:b.color,opacity:0.85 }} title={`${b.name} — ${fmtE(b.total)}`} />
+                            ))}
+                          </div>
+                        ) : <div style={{ width:"100%",height:2,background:"#F0F0F0",borderRadius:2 }} />}
+                      </div>
+                      <div style={{ fontSize:9,fontFamily:"'Lora',serif",color:isCM?"#E67E22":"#AAA",fontWeight:isCM?700:400 }}>{m}</div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Légende banques */}
+              <div style={{ display:"flex",flexWrap:"wrap",gap:12,marginTop:12 }}>
+                {banques.map(b=>(
+                  <div key={b.name} style={{ display:"flex",alignItems:"center",gap:5,fontSize:10,fontFamily:"'Lora',serif",color:"#555" }}>
+                    <div style={{ width:10,height:10,borderRadius:2,background:b.color }} />{b.name}
+                    <span style={{ color:"#AAA",fontSize:9 }}>({b.items.length} dossier{b.items.length>1?"s":""})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Gantt par banque */}
+            <div style={{ background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
+              <div style={{ padding:"14px 20px 10px",borderBottom:"1px solid #F0F0F0" }}>
+                <div style={{ fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888",letterSpacing:"0.06em" }}>GANTT PAR BANQUE — {viewYear}</div>
+              </div>
+              <div style={{ display:"grid",gridTemplateColumns:"200px 1fr",borderBottom:"1px solid #F0F0F0" }}>
+                <div style={{ padding:"6px 14px",fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>FINANCEUR / DOSSIER</div>
+                <div style={{ display:"grid",gridTemplateColumns:"repeat(12,1fr)" }}>
+                  {MONTHS.map((m,mi)=>{
+                    const isCM=viewYear===today.getFullYear()&&mi===today.getMonth();
+                    return <div key={mi} style={{ padding:"6px 2px",fontSize:9,textAlign:"center",fontFamily:"'DM Mono',monospace",color:isCM?"#E67E22":"#AAA",fontWeight:isCM?700:400,background:isCM?"#FFF8F0":"transparent" }}>{m}</div>;
+                  })}
+                </div>
+              </div>
+              {banques.map(banque=>(
+                <React.Fragment key={banque.name}>
+                  {/* Ligne groupe banque */}
+                  <div style={{ display:"grid",gridTemplateColumns:"200px 1fr",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5" }}>
+                    <div style={{ padding:"6px 14px",display:"flex",alignItems:"center",gap:6 }}>
+                      <span style={{ width:8,height:8,borderRadius:2,background:banque.color,flexShrink:0 }}/>
+                      <span style={{ fontSize:10,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63" }}>🏦 {banque.name}</span>
+                    </div>
+                    <div style={{ display:"grid",gridTemplateColumns:"repeat(12,1fr)",padding:"0" }}>
+                      {MONTHS.map((_,mi)=>{
+                        const mStart=new Date(viewYear,mi,1),mEnd=new Date(viewYear,mi+1,0,23,59,59);
+                        const tot=banque.items.filter(i=>i.start<=mEnd&&i.end>=mStart).reduce((a,i)=>a+i.loyerHT,0);
+                        return <div key={mi} style={{ height:26,margin:"3px 1px",borderRadius:4,background:tot>0?banque.color+"33":"transparent",display:"flex",alignItems:"center",justifyContent:"center" }}>
+                          {tot>0&&<span style={{ fontSize:8,color:banque.color,fontFamily:"'DM Mono',monospace",fontWeight:700 }}>{fmtE(tot)}</span>}
+                        </div>;
+                      })}
+                    </div>
+                  </div>
+                  {/* Sous-lignes dossiers */}
+                  {banque.items.map(item=>{
+                    const {d,start,end} = item;
+                    const yearStart=new Date(viewYear,0,1),yearEnd=new Date(viewYear,11,31,23,59,59);
+                    const isActive=start<=yearEnd&&end>=yearStart;
+                    return (
+                      <div key={d.id} onClick={()=>onOpen(d)}
+                        style={{ display:"grid",gridTemplateColumns:"200px 1fr",borderBottom:"1px solid #FAFAFA",cursor:"pointer" }}
+                        onMouseEnter={e=>e.currentTarget.style.background="#FAFAF8"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <div style={{ padding:"6px 14px 6px 26px",borderRight:"1px solid #F0F0F0" }}>
+                          <div style={{ fontSize:9,fontFamily:"'Lora',serif",color:"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>↳ {d.intitule||d.reference}</div>
+                          <div style={{ fontSize:8,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{fmtE(item.loyerHT)}/mois · {item.nbL} {item.periStep===3?"trim.":"loyers"}</div>
+                        </div>
+                        <div style={{ display:"grid",gridTemplateColumns:"repeat(12,1fr)",alignItems:"center" }}>
+                          {MONTHS.map((_,mi)=>{
+                            const mStart=new Date(viewYear,mi,1),mEnd=new Date(viewYear,mi+1,0,23,59,59);
+                            const covered=start<=mEnd&&end>=mStart;
+                            const isFirst=covered&&(mi===0||!(start<=new Date(viewYear,mi-1,1)&&end>=new Date(viewYear,mi-1,1)));
+                            const isLast=covered&&(mi===11||!(start<=new Date(viewYear,mi+1,0,23,59,59)&&end>=new Date(viewYear,mi+1,1)));
+                            const isPaid=mEnd<today;
+                            return <div key={mi} style={{ height:22,margin:"3px 1px",borderRadius:isFirst&&isLast?"6px":isFirst?"6px 0 0 6px":isLast?"0 6px 6px 0":"0",background:covered?(isPaid?banque.color+"77":banque.color):"#F5F5F5",position:"relative",overflow:"hidden" }}>
+                              {covered&&isPaid&&<div style={{ position:"absolute",inset:0,background:"repeating-linear-gradient(45deg,transparent,transparent 3px,rgba(255,255,255,0.2) 3px,rgba(255,255,255,0.2) 6px)" }} />}
+                            </div>;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          </>
+        );
+      })()}
+      {viewMode==="materiel" && (<>
       <div style={{ background:"white", borderRadius:12, border:"1px solid #ECEAE5", padding:"18px 20px", marginBottom:16, boxShadow:"0 1px 4px rgba(0,0,0,0.05)" }}>
         <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", letterSpacing:"0.06em", marginBottom:12 }}>LOYERS HT / MOIS — {viewYear}</div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(12,1fr)", gap:4, alignItems:"end", height:120 }}>
@@ -8385,6 +8533,7 @@ function CBAmortissement({ dossiers, fmtE, onOpen }) {
           Total {viewYear} : {fmtE(monthlyData.reduce((a,m)=>a+m.total,0))} HT/an
         </div>
       </div>
+      </>)}
     </div>
   );
 }
@@ -12818,7 +12967,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.451<br />14/05/26 à 14:30
+          v.0.452<br />14/05/26 à 15:30
         </div>
       </div>
 
