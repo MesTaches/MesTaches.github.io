@@ -7026,7 +7026,9 @@ function exportCBPDF(d) {
     });
   });
 
-  // Section PJ : images inline, PDFs identifiés par placeholder — les blobs seront injectés après document.close()
+  // Section PJ : images inline, PDFs en carte avec ouverture dans un nouvel onglet
+  // Les blob URLs sont créées ici dans la fenêtre parente pour les PDFs (ouverture onglet séparé)
+  const pdfBlobUrls = [];
   const pjSection = allDocs.length === 0 ? "" : allDocs.map((doc, idx) => {
     const isImg = /^data:image\//i.test(doc.data||"");
     const isPdf = /^data:application\/pdf/i.test(doc.data||"");
@@ -7037,9 +7039,32 @@ function exportCBPDF(d) {
       </div>`;
     }
     if (isPdf) {
-      return `<div style="page-break-before:always;margin:0;padding:0;width:100%;height:100vh">
-        <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:8px 36px 4px;border-top:1px solid #F0F0F0">${doc.typeName} — ${doc.name||""}</div>
-        <embed id="pdf_embed_${idx}" type="application/pdf" style="width:100%;height:calc(100vh - 28px);border:none;display:block" />
+      // Créer un blob URL dans la fenêtre PARENTE (accessible pour window.open)
+      let blobUrl = doc.data;
+      try {
+        const b64 = doc.data.split(",")[1]||"";
+        const bin = atob(b64);
+        const buf = new Uint8Array(bin.length);
+        for (let i=0; i<bin.length; i++) buf[i] = bin.charCodeAt(i);
+        const blob = new Blob([buf], {type:"application/pdf"});
+        blobUrl = URL.createObjectURL(blob);
+        pdfBlobUrls.push(blobUrl);
+      } catch(e) {}
+      return `<div style="page-break-before:always;padding:28px 36px">
+        <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:12px;border-top:1px solid #F0F0F0;padding-top:8px">${doc.typeName} — ${doc.name||""}</div>
+        <div style="border:2px solid #102A63;border-radius:8px;padding:20px 24px;display:flex;align-items:center;gap:16px;background:#F0F5FF">
+          <div style="font-size:36px;flex-shrink:0">📄</div>
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:700;color:#102A63;margin-bottom:4px">${doc.name||"Document PDF"}</div>
+            <div style="font-size:11px;color:#555">${doc.typeName}</div>
+          </div>
+          <a href="${blobUrl}" target="_blank"
+             onclick="window.open('${blobUrl}','_blank');return false;"
+             style="background:#102A63;color:white;border-radius:8px;padding:8px 18px;font-size:12px;font-weight:700;text-decoration:none;flex-shrink:0;font-family:Georgia,serif">
+            Ouvrir le PDF →
+          </a>
+        </div>
+        <div style="font-size:9px;color:#AAA;margin-top:6px;font-style:italic">Cliquez sur "Ouvrir le PDF" pour consulter ce document dans un nouvel onglet.</div>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#F8F9FB;border-radius:6px;border:1px solid #ECEAE5;margin:4px 36px">
@@ -7102,8 +7127,11 @@ function exportCBPDF(d) {
       +'</div>';
   })();
 
+  const dateStr = new Date().toISOString().split("T")[0].split("-").reverse().join("-");
+  const pdfTitle = `[Crédit-bail] ${d.intitule||"Dossier"}${d.codeProjet?" - "+d.codeProjet:""} - ${dateStr}`;
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>CB ${d.reference||""} — ${d.intitule||""}</title>
+  <title>${pdfTitle}</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&family=DM+Mono&display=swap');
     *{box-sizing:border-box;margin:0;padding:0}
@@ -7202,30 +7230,12 @@ function exportCBPDF(d) {
   if (win) {
     win.document.write(html);
     win.document.close();
-
-    // Injecter les PDFs dans les embeds via le contexte de la popup (après document.close)
-    const pdfDocs = allDocs.filter(doc => /^data:application\/pdf/i.test(doc.data||""));
-    const injectPdfs = () => {
-      pdfDocs.forEach((doc, idx) => {
-        try {
-          const b64 = doc.data.split(",")[1]||"";
-          const bin = atob(b64);
-          const buf = new Uint8Array(bin.length);
-          for (let i=0; i<bin.length; i++) buf[i] = bin.charCodeAt(i);
-          // Créer le blob dans le contexte de la popup
-          const blob = new win.Blob([buf], {type:"application/pdf"});
-          const url = win.URL.createObjectURL(blob);
-          const embed = win.document.getElementById("pdf_embed_"+idx);
-          if (embed) embed.src = url;
-        } catch(e) { console.warn("PDF inject error:", e); }
-      });
-    };
-
-    const hasPdfs = pdfDocs.length > 0;
-    const delay = hasPdfs ? 2500 : 600;
+    const hasPdfs = allDocs.some(doc => /^data:application\/pdf/i.test(doc.data||""));
+    const delay = hasPdfs ? 800 : 600;
     setTimeout(()=>{
-      if (hasPdfs) injectPdfs();
-      setTimeout(()=>win.print(), hasPdfs ? 1500 : 0);
+      win.print();
+      // Révoquer les blob URLs après impression
+      setTimeout(()=>{ pdfBlobUrls.forEach(u=>URL.revokeObjectURL(u)); }, 10000);
     }, delay);
   }
 }
@@ -12293,7 +12303,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.439<br />13/05/26 à 22:30
+          v.0.440<br />13/05/26 à 23:00
         </div>
       </div>
 
