@@ -9040,7 +9040,35 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
       <div style={{ padding:"10px 14px",display:"flex",flexDirection:"column",gap:6 }}>
         {CB_KANBAN_STATUSES.map(col => {
           const pal = PAL[col.id]||PAL.default;
-          const items = filteredDossiers.filter(d=>d.statut===col.id);
+          const rawItems = filteredDossiers.filter(d=>d.statut===col.id);
+
+          // Calculer la date de fin réelle depuis dateDemarrage + durée (en mois)
+          const computeDateFin = d => {
+            if (d.dateFin) return d.dateFin;
+            if (!d.dateDemarrage) return "9999-12-31";
+            const fin0 = (d.financeurs||[])[0]||{};
+            const nbMois = parseInt(fin0.nbLoyers)||parseInt(d.duree)||0;
+            if (!nbMois) return "9999-12-31";
+            const dt = new Date(d.dateDemarrage);
+            dt.setMonth(dt.getMonth() + nbMois);
+            return dt.toISOString().split("T")[0];
+          };
+
+          const items = [...rawItems].sort((a, b) => {
+            if (col.id === "misplace") {
+              // Capex mis en place : fin amortissement ASC, puis montant DESC
+              const finA = computeDateFin(a);
+              const finB = computeDateFin(b);
+              if (finA !== finB) return finA.localeCompare(finB);
+              return (parseNum(b.montantHT)||0) - (parseNum(a.montantHT)||0);
+            } else {
+              // Autres : date MEP estimée ASC (vide en dernier), puis montant DESC
+              const mepA = a.dateMEP || "9999-12-31";
+              const mepB = b.dateMEP || "9999-12-31";
+              if (mepA !== mepB) return mepA.localeCompare(mepB);
+              return (parseNum(b.montantHT)||0) - (parseNum(a.montantHT)||0);
+            }
+          });
           // refuse et clos : repliés par défaut (collapsedSections initialisé à true pour eux)
           const collapsed = !!collapsedSections[col.id];
           return (
@@ -13128,7 +13156,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.454<br />14/05/26 à 17:30
+          v.0.455<br />14/05/26 à 18:00
         </div>
       </div>
 
