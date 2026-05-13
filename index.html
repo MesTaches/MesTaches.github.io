@@ -7053,14 +7053,22 @@ async function exportCBPDF(d) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       await page.render({canvasContext: ctx, viewport: vp}).promise;
-      // Détecter page blanche : échantillonner les pixels
-      const sample = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      // Détecter page blanche : analyser la zone centrale uniquement (évite filigranes/numéros de bord)
+      const sample = ctx.getImageData(
+        Math.floor(canvas.width  * 0.1),
+        Math.floor(canvas.height * 0.1),
+        Math.floor(canvas.width  * 0.8),
+        Math.floor(canvas.height * 0.8)
+      );
       let nonWhite = 0;
-      for (let i=0; i<sample.data.length; i+=40) {
-        const r=sample.data[i], g=sample.data[i+1], b=sample.data[i+2];
-        if (r<240 || g<240 || b<240) nonWhite++;
+      for (let i = 0; i < sample.data.length; i += 4) {
+        const r = sample.data[i], g = sample.data[i+1], b = sample.data[i+2];
+        if (r < 230 || g < 230 || b < 230) nonWhite++;
       }
-      if (nonWhite < 50) continue; // ignorer pages quasi-blanches
+      // Une page de texte dense a des milliers de pixels non-blancs
+      // Une page vide BPCE peut avoir ~50-500 px (numéros page, filigranes)
+      // Seuil à 2000 pour être sûr de filtrer les pages vraiment vides
+      if (nonWhite < 2000) continue;
       pages.push(canvas.toDataURL('image/jpeg', 0.92));
     }
     return pages;
@@ -7459,7 +7467,35 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                 <option>Trimestrielle</option>
               </select>
             </div>
-            <div>{lbl("VR (%)")}<input type="number" value={d.valeurResPct} onChange={e=>set("valeurResPct",e.target.value)} placeholder="1" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+            <div>{lbl("VR (%)")}
+              {(() => {
+                // Calcul auto depuis les financeurs
+                const PRIO = ["termine","en_cours","attente_mep","negociation","contrat","envoyee","a_faire","refuse"];
+                const fins = d.financeurs||[];
+                let refFin = null;
+                if (fins.length === 1) {
+                  refFin = fins[0];
+                } else if (fins.length > 1) {
+                  for (const st of PRIO) {
+                    refFin = fins.find(f=>f.statut===st);
+                    if (refFin) break;
+                  }
+                  if (!refFin) refFin = fins[0];
+                }
+                const autoVR = refFin?.tauxVR ? parseFloat(refFin.tauxVR) : null;
+                const isAuto = autoVR !== null && (d.valeurResPct===null||d.valeurResPct===undefined||d.valeurResPct==="");
+                return (
+                  <div style={{ position:"relative" }}>
+                    <input type="number"
+                      value={isAuto ? autoVR : (d.valeurResPct||"")}
+                      onChange={e=>set("valeurResPct",e.target.value)}
+                      placeholder={autoVR!==null?String(autoVR):"1"}
+                      style={{ border:`1px solid ${isAuto?"#0E7490":"#E8E8E8"}`,borderRadius:8,padding:"4px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:isAuto?"#0E7490":"#2C3E50",background:isAuto?"#E0F7FA":"#FAFAFA", minHeight:30, lineHeight:1.2 }} />
+                    {isAuto && <span style={{ position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"#0E7490",fontFamily:"'DM Mono',monospace",pointerEvents:"none" }}>auto</span>}
+                  </div>
+                );
+              })()}
+            </div>
           </div>
 
           {/* Ligne D : Dates */}
@@ -12334,7 +12370,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.442<br />14/05/26 à 00:00
+          v.0.444<br />14/05/26 à 01:00
         </div>
       </div>
 
