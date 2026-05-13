@@ -7026,33 +7026,20 @@ function exportCBPDF(d) {
     });
   });
 
-  // Section PJ : images inline, PDFs via script dans la popup (blob créé dans le contexte de la popup)
+  // Section PJ : images inline, PDFs identifiés par placeholder — les blobs seront injectés après document.close()
   const pjSection = allDocs.length === 0 ? "" : allDocs.map((doc, idx) => {
     const isImg = /^data:image\//i.test(doc.data||"");
     const isPdf = /^data:application\/pdf/i.test(doc.data||"");
     if (isImg) {
       return `<div style="page-break-before:always;padding:28px 36px">
         <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${doc.typeName} — ${doc.name||""}</div>
-        <img src="${doc.displayUrl||doc.data}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
+        <img src="${doc.data}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
       </div>`;
     }
     if (isPdf) {
-      // Stocker le base64 dans un script, créer le blob URL dans la popup elle-même
-      const b64 = doc.data.split(",")[1]||"";
       return `<div style="page-break-before:always;margin:0;padding:0;width:100%;height:100vh">
         <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:8px 36px 4px;border-top:1px solid #F0F0F0">${doc.typeName} — ${doc.name||""}</div>
         <embed id="pdf_embed_${idx}" type="application/pdf" style="width:100%;height:calc(100vh - 28px);border:none;display:block" />
-        <script>
-        (function(){
-          var b64='${b64}';
-          var bin=atob(b64);
-          var buf=new Uint8Array(bin.length);
-          for(var i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
-          var blob=new Blob([buf],{type:'application/pdf'});
-          var url=URL.createObjectURL(blob);
-          document.getElementById('pdf_embed_${idx}').src=url;
-        })();
-        <\/script>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#F8F9FB;border-radius:6px;border:1px solid #ECEAE5;margin:4px 36px">
@@ -7215,10 +7202,31 @@ function exportCBPDF(d) {
   if (win) {
     win.document.write(html);
     win.document.close();
-    // Délai plus long si des PDFs sont joints (scripts à exécuter + embed à charger)
-    const hasPdfs = allDocs.some(doc => /^data:application\/pdf/i.test(doc.data||""));
+
+    // Injecter les PDFs dans les embeds via le contexte de la popup (après document.close)
+    const pdfDocs = allDocs.filter(doc => /^data:application\/pdf/i.test(doc.data||""));
+    const injectPdfs = () => {
+      pdfDocs.forEach((doc, idx) => {
+        try {
+          const b64 = doc.data.split(",")[1]||"";
+          const bin = atob(b64);
+          const buf = new Uint8Array(bin.length);
+          for (let i=0; i<bin.length; i++) buf[i] = bin.charCodeAt(i);
+          // Créer le blob dans le contexte de la popup
+          const blob = new win.Blob([buf], {type:"application/pdf"});
+          const url = win.URL.createObjectURL(blob);
+          const embed = win.document.getElementById("pdf_embed_"+idx);
+          if (embed) embed.src = url;
+        } catch(e) { console.warn("PDF inject error:", e); }
+      });
+    };
+
+    const hasPdfs = pdfDocs.length > 0;
     const delay = hasPdfs ? 2500 : 600;
-    setTimeout(()=>{ win.print(); }, delay);
+    setTimeout(()=>{
+      if (hasPdfs) injectPdfs();
+      setTimeout(()=>win.print(), hasPdfs ? 1500 : 0);
+    }, delay);
   }
 }
 
@@ -7766,10 +7774,37 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                                   </tr>
                                 );
                               })}
+                              {/* Ligne Valeur Résiduelle M+1 */}
+                              {calc0.vr > 0 && (() => {
+                                const vrDate = new Date(startDate);
+                                vrDate.setMonth(vrDate.getMonth() + ech.length);
+                                const maxDay = new Date(vrDate.getFullYear(), vrDate.getMonth()+1, 0).getDate();
+                                vrDate.setDate(Math.min(jourRef, maxDay));
+                                const vrDateStr = vrDate.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
+                                const vrTVA = calc0.vr * tvaRate/100;
+                                const vrTTC = calc0.vr + vrTVA;
+                                return (
+                                  <tr style={{ background:"#FEF9EC", borderTop:"2px solid #E67E22" }}>
+                                    <td style={{ padding:"5px 7px", textAlign:"center", color:"#E67E22", fontFamily:"'DM Mono',monospace", fontSize:9, fontWeight:700 }}>VR</td>
+                                    <td style={{ padding:"5px 7px", textAlign:"left", fontFamily:"'Lora',serif", color:"#92400E", fontSize:10, fontWeight:700 }}>
+                                      {vrDateStr}
+                                      <span style={{ marginLeft:6, fontSize:8, background:"#FDE68A", color:"#92400E", borderRadius:3, padding:"1px 5px", fontWeight:700 }}>Valeur résiduelle</span>
+                                    </td>
+                                    {td(fmtN(calc0.vr,2), "#E67E22", true)}
+                                    {td(`${tvaRate.toFixed(2)} %`, "#6B7280")}
+                                    {td("—", "#AAA")}
+                                    {td("—", "#AAA")}
+                                    {td("—", "#AAA")}
+                                    {td(fmtN(vrTVA,2), "#0E7490")}
+                                    {td(fmtN(vrTTC,2), "#E67E22", true)}
+                                  </tr>
+                                );
+                              })()}
+                              })}
                             </tbody>
                             <tfoot>
                               <tr style={{ background:"#F0F4FF", borderTop:"2px solid #102A63", fontWeight:700 }}>
-                                <td colSpan={2} style={{ padding:"6px 7px", fontFamily:"'Lora',serif", fontSize:10, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL</td>
+                                <td colSpan={2} style={{ padding:"6px 7px", fontFamily:"'Lora',serif", fontSize:10, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL LOYERS</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totLoyerHT,2)}</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#6B7280", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
@@ -7778,6 +7813,15 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#0E7490", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTVA,2)}</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTTC,2)}</td>
                               </tr>
+                              {calc0.vr > 0 && (
+                                <tr style={{ background:"#FFF8E7", fontWeight:700 }}>
+                                  <td colSpan={2} style={{ padding:"5px 7px", fontFamily:"'Lora',serif", fontSize:10, color:"#E67E22", letterSpacing:"0.06em" }}>TOTAL + VR</td>
+                                  <td style={{ padding:"5px 7px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totLoyerHT + calc0.vr, 2)}</td>
+                                  <td colSpan={4} style={{ padding:"5px 7px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontSize:9, fontStyle:"italic" }}>dont VR : {fmtN(calc0.vr,2)} HT</td>
+                                  <td style={{ padding:"5px 7px", textAlign:"right", color:"#0E7490", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTVA + calc0.vr*tvaRate/100, 2)}</td>
+                                  <td style={{ padding:"5px 7px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTTC + calc0.vr*(1+tvaRate/100), 2)}</td>
+                                </tr>
+                              )}
                             </tfoot>
                           </table>
                         </div>
@@ -12249,7 +12293,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.438<br />13/05/26 à 22:00
+          v.0.439<br />13/05/26 à 22:30
         </div>
       </div>
 
