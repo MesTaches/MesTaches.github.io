@@ -7026,41 +7026,33 @@ function exportCBPDF(d) {
     });
   });
 
-  // Convertir les PDFs base64 en Blob URLs (contourne la restriction Chrome)
-  const blobUrls = [];
-  const allDocsWithBlobUrls = allDocs.map(doc => {
-    const isPdf = /^data:application\/pdf/i.test(doc.data||"");
-    if (isPdf) {
-      try {
-        const base64 = doc.data.split(",")[1];
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
-        const blob = new Blob([bytes], {type:"application/pdf"});
-        const url = URL.createObjectURL(blob);
-        blobUrls.push(url);
-        return { ...doc, displayUrl: url };
-      } catch(e) {
-        return { ...doc, displayUrl: doc.data };
-      }
-    }
-    return { ...doc, displayUrl: doc.data };
-  });
-
-  // Section PJ avec Blob URLs
-  const pjSection = allDocsWithBlobUrls.length === 0 ? "" : allDocsWithBlobUrls.map(doc => {
+  // Section PJ : images inline, PDFs via script dans la popup (blob créé dans le contexte de la popup)
+  const pjSection = allDocs.length === 0 ? "" : allDocs.map((doc, idx) => {
     const isImg = /^data:image\//i.test(doc.data||"");
     const isPdf = /^data:application\/pdf/i.test(doc.data||"");
     if (isImg) {
       return `<div style="page-break-before:always;padding:28px 36px">
         <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${doc.typeName} — ${doc.name||""}</div>
-        <img src="${doc.displayUrl}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
+        <img src="${doc.displayUrl||doc.data}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
       </div>`;
     }
     if (isPdf) {
+      // Stocker le base64 dans un script, créer le blob URL dans la popup elle-même
+      const b64 = doc.data.split(",")[1]||"";
       return `<div style="page-break-before:always;margin:0;padding:0;width:100%;height:100vh">
         <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:8px 36px 4px;border-top:1px solid #F0F0F0">${doc.typeName} — ${doc.name||""}</div>
-        <iframe src="${doc.displayUrl}" style="width:100%;height:calc(100vh - 28px);border:none;display:block" frameborder="0"></iframe>
+        <embed id="pdf_embed_${idx}" type="application/pdf" style="width:100%;height:calc(100vh - 28px);border:none;display:block" />
+        <script>
+        (function(){
+          var b64='${b64}';
+          var bin=atob(b64);
+          var buf=new Uint8Array(bin.length);
+          for(var i=0;i<bin.length;i++) buf[i]=bin.charCodeAt(i);
+          var blob=new Blob([buf],{type:'application/pdf'});
+          var url=URL.createObjectURL(blob);
+          document.getElementById('pdf_embed_${idx}').src=url;
+        })();
+        <\/script>
       </div>`;
     }
     return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#F8F9FB;border-radius:6px;border:1px solid #ECEAE5;margin:4px 36px">
@@ -7223,14 +7215,10 @@ function exportCBPDF(d) {
   if (win) {
     win.document.write(html);
     win.document.close();
-    // Délai plus long si des PDFs sont joints (iframes à charger)
+    // Délai plus long si des PDFs sont joints (scripts à exécuter + embed à charger)
     const hasPdfs = allDocs.some(doc => /^data:application\/pdf/i.test(doc.data||""));
     const delay = hasPdfs ? 2500 : 600;
-    setTimeout(()=>{
-      win.print();
-      // Révoquer les Blob URLs après impression
-      setTimeout(()=>{ blobUrls.forEach(u=>URL.revokeObjectURL(u)); }, 5000);
-    }, delay);
+    setTimeout(()=>{ win.print(); }, delay);
   }
 }
 
@@ -7694,7 +7682,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                   : (() => {
                       const tvaRate   = parseFloat(d.tva)||20;
                       const fraisAnn  = parseFloat(finRow0.fraisAnn)||0;
-                      const loyerHT   = parseFloat(finRow0.loyerHT)||0;
+                      const loyerHT   = calc0.loyerHT||0;  // calculé par calcCBRow (coeff*montantHT/100 en priorité)
                       const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
                       const jourRef   = startDate.getDate();
 
@@ -12261,7 +12249,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.437<br />13/05/26 à 21:30
+          v.0.438<br />13/05/26 à 22:00
         </div>
       </div>
 
