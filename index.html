@@ -7570,8 +7570,8 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                       {/* ── Ligne 1 : saisies ── */}
                       <div style={{ background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",
                         padding:"10px 14px",display:"grid",
-                        gridTemplateColumns:"1.6fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr 0.8fr 28px",
-                        gap:8,alignItems:"center" }}>
+                        gridTemplateColumns:"1.2fr 0.9fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 24px",
+                        gap:6,alignItems:"end" }}>
 
                         {/* Financeur */}
                         <div>
@@ -7622,7 +7622,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
 
                         {/* Assurance mensuelle */}
                         <div>
-                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>ASSURANCE/MOIS</div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>ASSUR./MOIS</div>
                           <input type="text" inputMode="decimal" value={row.assuranceMens||""} onChange={e=>updFinRow(row.id,"assuranceMens",e.target.value)}
                             placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />
                         </div>
@@ -12397,7 +12397,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.447<br />14/05/26 à 11:00
+          v.0.448<br />14/05/26 à 11:30
         </div>
       </div>
 
