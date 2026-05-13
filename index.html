@@ -7251,6 +7251,21 @@ function CBDossierModal({ dossier, onSave, onClose, financeursList, onUpdateFina
           </div>
           {/* Boutons actions */}
           <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
+            {/* Badge À vérifier / case Vérifié */}
+            {d.importedFromExcel && (
+              <label title={d.verifiedAt ? `Vérifié le ${d.verifiedAt}` : "Importé depuis Excel — cliquez pour marquer comme vérifié"}
+                style={{ display:"flex",alignItems:"center",gap:5,cursor:"pointer",
+                  background:d.verifiedAt?"rgba(5,150,105,0.2)":"rgba(217,119,6,0.2)",
+                  border:`1px solid ${d.verifiedAt?"rgba(5,150,105,0.5)":"rgba(217,119,6,0.5)"}`,
+                  borderRadius:8,padding:"4px 9px",flexShrink:0 }}>
+                <input type="checkbox" checked={!!d.verifiedAt}
+                  onChange={e=>set("verifiedAt", e.target.checked ? new Date().toISOString().split("T")[0] : null)}
+                  style={{ width:13,height:13,cursor:"pointer",accentColor:d.verifiedAt?"#059669":"#D97706" }} />
+                <span style={{ fontSize:10,fontFamily:"'DM Mono',monospace",color:d.verifiedAt?"#6EE7B7":"#FDE68A",whiteSpace:"nowrap" }}>
+                  {d.verifiedAt ? "✓ Vérifié" : "⚠ À vérifier"}
+                </span>
+              </label>
+            )}
             <button onClick={()=>exportCBPDF(d)} title="Exporter en PDF"
               style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center" }}>📄</button>
             <button onClick={()=>sendCBEmail(d)} title="Envoyer par mail"
@@ -7865,7 +7880,8 @@ function CBDashboard({ dossiers, fmtE, onOpen }) {
 
 /* ── CB Synthèse (vue catégories avec cartes enrichies) ── */
 function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search, onSearchChange }) {
-  const [collapsedSections, setCollapsedSections] = useState({});
+  // Refusé et Clos repliés par défaut
+  const [collapsedSections, setCollapsedSections] = useState({refuse:true, clos:true});
   const toggleSection = id => setCollapsedSections(p=>({...p,[id]:!p[id]}));
 
   const fmtE = (v,dec=0) => v ? Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €" : "—";
@@ -7904,81 +7920,69 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
   // Tâches Crédit-bail
   const cbTasks = tasks.filter(t => (t.labels||[]).some(l => l.toLowerCase().includes("crédit-bail")||l.toLowerCase().includes("credit-bail")||l.toLowerCase().includes("creditbail")));
 
-  // Carte enrichie
+  /* ── Carte compacte 2 lignes pleine largeur ── */
   const HCard = ({d, pal}) => {
     const {paid,total} = calcPaidLoyers(d);
     const fin0 = (d.financeurs||[])[0]||{};
     const financeurNom = fin0.financeur||"";
     const typeFinancement = d.typeFinancement||"";
     const pct = total>0 ? Math.round(paid/total*100) : 0;
+    const Tag = ({bg,color,children}) => (
+      <span style={{ fontSize:9,background:bg,color,borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif",whiteSpace:"nowrap",flexShrink:0 }}>{children}</span>
+    );
     return (
       <div onClick={()=>onOpen(d)}
-        style={{ background:"white",borderRadius:8,padding:"10px 14px",
-          border:`0.5px solid #EBEBEB`, borderLeft:`3px solid ${pal.cardBorder}`,
-          cursor:"pointer",transition:"box-shadow 0.15s",marginBottom:5 }}
-        onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(0,0,0,0.08)"}
+        style={{ background:"white",borderRadius:8,padding:"8px 12px 8px 12px",
+          border:"0.5px solid #EBEBEB", borderLeft:`3px solid ${pal.cardBorder}`,
+          cursor:"pointer",transition:"box-shadow 0.15s",marginBottom:4 }}
+        onMouseEnter={e=>e.currentTarget.style.boxShadow="0 2px 10px rgba(0,0,0,0.07)"}
         onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-        {/* Ligne 1 : référence + intitulé + montant */}
-        <div style={{ display:"flex",alignItems:"flex-start",gap:12,marginBottom:6 }}>
-          <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",flexShrink:0,marginTop:2,minWidth:70 }}>{d.reference||"—"}</span>
-          <div style={{ flex:1,minWidth:0 }}>
-            <div style={{ fontSize:12,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.intitule||"Sans titre"}</div>
-            {d.codeProjet && <div style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",marginTop:1 }}>{d.codeProjet}</div>}
+
+        {/* LIGNE 1 : réf · badge import · intitulé (flex:1) · badges · montant */}
+        <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:4 }}>
+          <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",flexShrink:0,minWidth:64 }}>{d.reference||"—"}</span>
+          {d.importedFromExcel && !d.verifiedAt && (
+            <span title="Importé depuis Excel — à vérifier" style={{ fontSize:9,background:"#FEF3C7",color:"#D97706",borderRadius:4,padding:"1px 6px",fontFamily:"'DM Mono',monospace",flexShrink:0,border:"1px solid #FDE68A",whiteSpace:"nowrap" }}>⚠ À vérifier</span>
+          )}
+          {d.importedFromExcel && d.verifiedAt && (
+            <span title={`Vérifié le ${d.verifiedAt}`} style={{ fontSize:10,color:"#059669",flexShrink:0 }}>✓</span>
+          )}
+          <div style={{ flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:6 }}>
+            <span style={{ fontSize:12,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{d.intitule||"Sans titre"}</span>
+            {d.codeProjet && <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{d.codeProjet}</span>}
           </div>
-          <span style={{ fontSize:13,fontWeight:700,color:pal.amtColor,fontFamily:"'Lora',serif",flexShrink:0,fontVariantNumeric:"tabular-nums" }}>
+          {/* Badges milieu */}
+          <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0,flexWrap:"nowrap" }}>
+            {financeurNom && <Tag bg="#DBEAFE" color="#1D4ED8">🏦 {financeurNom}</Tag>}
+            {typeFinancement && <Tag bg="#EDE9FE" color="#6D28D9">{typeFinancement}</Tag>}
+            {d.numeroContrat && <span style={{ fontSize:9,background:"#FEF9C3",color:"#92400E",borderRadius:3,padding:"1px 6px",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",flexShrink:0 }}>N° {d.numeroContrat}</span>}
+            {d.typeInvestissement && <Tag bg="#E0F7FA" color="#0E7490">{d.typeInvestissement}</Tag>}
+          </div>
+          <span style={{ fontSize:13,fontWeight:700,color:pal.amtColor,fontFamily:"'Lora',serif",flexShrink:0,fontVariantNumeric:"tabular-nums",minWidth:90,textAlign:"right" }}>
             {parseNum(d.montantHT)>0 ? fmtE(parseNum(d.montantHT)) : "—"}
           </span>
         </div>
-        {/* Ligne 2 : fournisseur + financeur + type financement + N° contrat */}
-        <div style={{ display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:5 }}>
-          {d.fournisseur && (
-            <span style={{ fontSize:9,background:"#F5F5F5",color:"#666",borderRadius:3,padding:"2px 7px",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:3 }}>
-              🏭 {d.fournisseur}
-            </span>
-          )}
-          {financeurNom && (
-            <span style={{ fontSize:9,background:"#DBEAFE",color:"#1D4ED8",borderRadius:3,padding:"2px 7px",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:3 }}>
-              🏦 {financeurNom}
-            </span>
-          )}
-          {typeFinancement && (
-            <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"2px 7px",fontFamily:"'Lora',serif" }}>
-              {typeFinancement}
-            </span>
-          )}
-          {d.numeroContrat && (
-            <span style={{ fontSize:9,background:"#FEF9C3",color:"#92400E",borderRadius:3,padding:"2px 7px",fontFamily:"'DM Mono',monospace" }}>
-              N° {d.numeroContrat}
-            </span>
-          )}
-          {d.typeInvestissement && (
-            <span style={{ fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"2px 7px",fontFamily:"'Lora',serif" }}>{d.typeInvestissement}</span>
-          )}
-          {d.site && (
-            <span style={{ fontSize:9,background:"#F5F5F5",color:"#888",borderRadius:3,padding:"2px 7px",fontFamily:"'Lora',serif" }}>📍 {d.site}</span>
-          )}
-        </div>
-        {/* Ligne 3 : dates + loyers + barre progression */}
-        <div style={{ display:"flex",alignItems:"center",gap:12 }}>
-          <div style={{ display:"flex",gap:10,flex:1,flexWrap:"wrap" }}>
-            {d.dateDemarrage && (
-              <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",gap:3 }}>
-                ▶ {fmtD(d.dateDemarrage)}
-              </span>
-            )}
-            {d.dateFin && (
-              <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",display:"flex",alignItems:"center",gap:3 }}>
-                ■ {fmtD(d.dateFin)}
+
+        {/* LIGNE 2 : fournisseur · site · dates  ──flex spacer──  barre progression */}
+        <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+          <div style={{ display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0,flexWrap:"nowrap",overflow:"hidden" }}>
+            {d.fournisseur && <Tag bg="#F5F5F5" color="#666">🏭 {d.fournisseur}</Tag>}
+            {d.site        && <Tag bg="#F0F0F0" color="#777">📍 {d.site}</Tag>}
+            {(d.dateDemarrage||d.dateFin) && (
+              <span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap",flexShrink:0 }}>
+                {d.dateDemarrage ? "▶ "+fmtD(d.dateDemarrage) : ""}
+                {d.dateDemarrage && d.dateFin ? "  " : ""}
+                {d.dateFin ? "■ "+fmtD(d.dateFin) : ""}
               </span>
             )}
           </div>
           {total>0 && (
-            <div style={{ display:"flex",alignItems:"center",gap:6,flexShrink:0 }}>
-              <div style={{ width:80,height:4,background:"#F0F0F0",borderRadius:3,overflow:"hidden" }}>
-                <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":pal.cardBorder,borderRadius:3 }} />
+            <div style={{ display:"flex",alignItems:"center",gap:5,flexShrink:0 }}>
+              <div style={{ width:100,height:4,background:"#F0F0F0",borderRadius:3,overflow:"hidden" }}>
+                <div style={{ width:`${pct}%`,height:"100%",background:pct===100?"#27AE60":pal.cardBorder,borderRadius:3,transition:"width 0.3s" }} />
               </div>
-              <span style={{ fontSize:9,fontFamily:"'DM Mono',monospace",color:"#888",fontVariantNumeric:"tabular-nums" }}>{paid}/{total}</span>
-              <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 6px",fontFamily:"'DM Mono',monospace",border:"0.5px solid #BBF7D0",fontVariantNumeric:"tabular-nums" }}>{pct}%</span>
+              <span style={{ fontSize:9,color:"#888",fontFamily:"'DM Mono',monospace",fontVariantNumeric:"tabular-nums",minWidth:28 }}>{paid}/{total}</span>
+              <span style={{ fontSize:9,background:"#F0FDF4",color:"#15803D",borderRadius:3,padding:"1px 6px",fontFamily:"'DM Mono',monospace",border:"0.5px solid #BBF7D0",fontVariantNumeric:"tabular-nums",minWidth:30,textAlign:"center" }}>{pct}%</span>
             </div>
           )}
         </div>
@@ -7992,24 +7996,28 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
       border:`0.5px solid ${pal.border}`, borderBottom:collapsed?`0.5px solid ${pal.border}`:"none",
       cursor:"pointer", userSelect:"none" }}
       onClick={()=>toggleSection(col.id)}>
-      <span style={{ fontSize:13,color:pal.nameColor,display:"inline-block",transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform 0.18s" }}>▾</span>
+      <span style={{ fontSize:13,color:pal.nameColor,display:"inline-block",
+        transform:collapsed?"rotate(-90deg)":"rotate(0deg)",transition:"transform 0.18s" }}>▾</span>
       <span style={{ fontSize:12,fontWeight:700,color:pal.nameColor,fontFamily:"'Lora',serif",flex:1 }}>{col.name}</span>
-      <span style={{ fontSize:10,background:"white",color:pal.nameColor,borderRadius:20,padding:"1px 10px",fontFamily:"'DM Mono',monospace",border:`0.5px solid ${pal.border}`,fontVariantNumeric:"tabular-nums" }}>{items.length}</span>
-      {items.length>0 && <span style={{ fontSize:10,color:pal.amtColor,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>{fmtE(items.reduce((a,d)=>a+(parseNum(d.montantHT)||0),0))} HT</span>}
+      <span style={{ fontSize:10,background:"white",color:pal.nameColor,borderRadius:20,padding:"1px 10px",
+        fontFamily:"'DM Mono',monospace",border:`0.5px solid ${pal.border}`,fontVariantNumeric:"tabular-nums" }}>{items.length}</span>
+      {items.length>0 && <span style={{ fontSize:10,color:pal.amtColor,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums" }}>
+        {fmtE(items.reduce((a,d)=>a+(parseNum(d.montantHT)||0),0))} HT
+      </span>}
     </div>
   );
 
   return (
-    <div style={{ display:"flex",flexDirection:"column" }}>
-      {/* Barre recherche dans la synthèse */}
-      <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
-        <div style={{ position:"relative",flex:"0 0 300px",maxWidth:360 }}>
+    <div style={{ display:"flex",flexDirection:"column",overflowY:"auto",flex:1 }}>
+      {/* Barre recherche */}
+      <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 16px",display:"flex",alignItems:"center",gap:10,flexShrink:0 }}>
+        <div style={{ position:"relative",flex:"0 0 280px" }}>
           <span style={{ position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#AAA",pointerEvents:"none" }}>🔍</span>
-          <input value={search} onChange={e=>onSearchChange(e.target.value)} placeholder="Rechercher dossier, fournisseur, financeur…"
+          <input value={search} onChange={e=>onSearchChange(e.target.value)} placeholder="Rechercher…"
             style={{ paddingLeft:28,paddingRight:8,paddingTop:5,paddingBottom:5,border:"1px solid #E0E0E0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",outline:"none",width:"100%",boxSizing:"border-box",background:"#FAFAFA" }} />
         </div>
         {filterFinanceur && (
-          <span style={{ fontSize:10,background:"#DBEAFE",color:"#1D4ED8",borderRadius:20,padding:"3px 10px",fontFamily:"'Lora',serif",fontWeight:600 }}>
+          <span style={{ fontSize:10,background:"#DBEAFE",color:"#1D4ED8",borderRadius:20,padding:"3px 10px",fontFamily:"'Lora',serif",fontWeight:600,flexShrink:0 }}>
             🏦 {filterFinanceur}
           </span>
         )}
@@ -8019,18 +8027,18 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
 
       {/* Tâches Crédit-bail */}
       {cbTasks.length > 0 && (
-        <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",flexShrink:0,padding:"8px 20px" }}>
-          <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:5 }}>
+        <div style={{ background:"white",borderBottom:"1px solid #ECEAE5",flexShrink:0,padding:"7px 16px" }}>
+          <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:4 }}>
             TÂCHES CRÉDIT-BAIL <span style={{ fontWeight:400,color:"#AAA" }}>({cbTasks.length})</span>
           </div>
-          <div style={{ maxHeight:5*27+"px",overflowY:"auto" }}>
+          <div style={{ maxHeight:5*26+"px",overflowY:"auto" }}>
             {cbTasks.map((t,i) => {
               const co=settings.categories.find(c=>c.name===t.category);
               const st=settings.statuses.find(s=>s.id===t.status)||settings.statuses[0];
               return (
-                <div key={t.id} style={{ display:"flex",alignItems:"center",gap:8,height:26,borderBottom:"1px solid #F5F5F5",paddingLeft:4 }}>
-                  <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",minWidth:16 }}>{i+1}</span>
-                  <span style={{ width:4,height:16,borderRadius:2,background:co?.accent||"#CCC",flexShrink:0 }} />
+                <div key={t.id} style={{ display:"flex",alignItems:"center",gap:8,height:25,borderBottom:"1px solid #F5F5F5",paddingLeft:4 }}>
+                  <span style={{ fontSize:10,color:"#CCC",fontFamily:"'Lora',serif",minWidth:14 }}>{i+1}</span>
+                  <span style={{ width:4,height:14,borderRadius:2,background:co?.accent||"#CCC",flexShrink:0 }} />
                   <span style={{ flex:1,fontSize:11,fontFamily:"'Lora',serif",color:t.completed?"#AAA":"#2C3E50",textDecoration:t.completed?"line-through":"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{t.title}</span>
                   <span style={{ fontSize:9,fontWeight:700,background:st.bg||"#EEE",color:st.color||"#888",borderRadius:3,padding:"1px 6px",fontFamily:"'Lora',serif",flexShrink:0 }}>{st.name}</span>
                   {t.dueDate && <span style={{ fontSize:10,color:"#AAA",fontFamily:"'Lora',serif",flexShrink:0 }}>{t.dueDate.split("-").reverse().join("/")}</span>}
@@ -8041,20 +8049,22 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
         </div>
       )}
 
-      {/* Sections par statut */}
-      <div style={{ padding:"12px 16px",display:"flex",flexDirection:"column",gap:8 }}>
+      {/* Sections par statut — toutes affichées, refuse/clos repliés par défaut */}
+      <div style={{ padding:"10px 14px",display:"flex",flexDirection:"column",gap:6 }}>
         {CB_KANBAN_STATUSES.map(col => {
           const pal = PAL[col.id]||PAL.default;
           const items = filteredDossiers.filter(d=>d.statut===col.id);
+          // refuse et clos : repliés par défaut (collapsedSections initialisé à true pour eux)
           const collapsed = !!collapsedSections[col.id];
-          if(items.length===0 && !search && !filterFinanceur) return null;
           return (
-            <div key={col.id} style={{ borderRadius:10,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div key={col.id} style={{ borderRadius:10,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
               <SectionHeader col={col} pal={pal} items={items} collapsed={collapsed} />
               {!collapsed && (
-                <div style={{ background:"#FAFAF8",border:`0.5px solid ${pal.border}`,borderTop:"none",borderRadius:"0 0 10px 10px",padding:"8px" }}>
+                <div style={{ background:"#FAFAF8",border:`0.5px solid ${pal.border}`,borderTop:"none",borderRadius:"0 0 10px 10px",padding:"6px 8px" }}>
                   {items.length===0
-                    ? <div style={{ fontSize:11,color:"#CCC",fontFamily:"'Lora',serif",fontStyle:"italic",padding:"8px 6px" }}>Aucun dossier{search||filterFinanceur?" correspondant":""}</div>
+                    ? <div style={{ fontSize:11,color:"#CCC",fontFamily:"'Lora',serif",fontStyle:"italic",padding:"7px 6px" }}>
+                        {search||filterFinanceur ? "Aucun dossier correspondant" : "Aucun dossier dans cette catégorie"}
+                      </div>
                     : items.map(d=><HCard key={d.id} d={d} pal={pal} />)
                   }
                 </div>
@@ -8074,6 +8084,8 @@ function CreditBailView({ tasks, onEdit, settings }) {
   const [financeursList, setFinanceursList] = useState(() => loadCBFinanceurs());
   const [activeTab, setActiveTab]       = useState("dashboard");
   const [search, setSearch]             = useState("");
+  const [importResult, setImportResult] = useState(null); // {added, skipped, errors}
+  const importRef = React.useRef(null);
 
   useEffect(()=>{ saveCBDossiers(dossiers); },[dossiers]);
   useEffect(()=>{
@@ -8088,10 +8100,180 @@ function CreditBailView({ tasks, onEdit, settings }) {
 
   const fmtE = (v,dec=0) => v ? Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €" : "—";
 
+  /* ── Import Excel ── */
+  const handleImport = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type:"array", cellDates:true });
+        // Chercher la feuille principale (contient "Suivi" ou "Capex")
+        const sheetName = wb.SheetNames.find(n => /suivi|capex/i.test(n)) || wb.SheetNames[0];
+        const ws = wb.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(ws, { header:1, defval:null, raw:false });
+
+        // Trouver la ligne d'en-têtes (contient "Libellé")
+        let headerIdx = rows.findIndex(r => r && r.some(c => typeof c==="string" && c.trim()==="Libellé"));
+        if (headerIdx===-1) { alert("Impossible de trouver les en-têtes dans ce fichier."); return; }
+        const headers = rows[headerIdx].map(h => (h||"").trim());
+
+        const col = (name) => headers.findIndex(h => h===name);
+        const iLibelle    = col("Libellé");
+        const iContrat    = col("N° Contrat");
+        const iCodeProjet = col("Code projet");
+        const iBanque     = col("Banque");
+        const iTypeContrat= col("Type de contrat");
+        const iMontantHT  = col("Montant HT");
+        const iLoyerHT    = col("Loyer HT");
+        const iCoeff      = col("Coeff");
+        const iNbLoyers   = col("Nombre de loyer");
+        const iTaux       = col("Taux");
+        const iValRes     = col("Valeur résiduelle");
+        const iDateMEP    = col("Date de mise en place");
+        const iDateFin    = col("Date de fin");
+        const iService    = col("Service");
+        const iMontantTTC = col("Montant TTC");
+        const iLoyerTTC   = col("Loyer TTC");
+
+        // Codes projet déjà présents dans l'appli
+        const existingCodes = new Set(
+          dossiers.map(d=>(d.codeProjet||"").trim()).filter(Boolean)
+        );
+        // N° contrats déjà présents
+        const existingContrats = new Set(
+          dossiers.map(d=>String(d.numeroContrat||"").trim()).filter(Boolean)
+        );
+
+        const fmtDate = (v) => {
+          if (!v) return "";
+          // Déjà une date JS (cellDates:true)
+          if (v instanceof Date) return v.toISOString().split("T")[0];
+          // Format jj/mm/aaaa ou mm/jj/aaaa
+          const s = String(v).trim();
+          const parts = s.split(/[\/\-\.]/);
+          if (parts.length===3) {
+            const [a,b,c] = parts;
+            if (c.length===4) return `${c}-${b.padStart(2,"0")}-${a.padStart(2,"0")}`;
+            if (a.length===4) return `${a}-${b.padStart(2,"0")}-${c.padStart(2,"0")}`;
+          }
+          return "";
+        };
+        const parseN = (v) => { const n=parseFloat(String(v||"").replace(/\s/g,"")); return isNaN(n)?null:n; };
+
+        let added=0, skipped=0, errors=[];
+        const newDossiers = [];
+
+        for (let i=headerIdx+1; i<rows.length; i++) {
+          const r = rows[i];
+          if (!r || !r[iLibelle]) continue;
+          const libelle = String(r[iLibelle]||"").trim();
+          if (!libelle || libelle==="Total") continue;
+
+          const codeProjet = String(r[iCodeProjet]||"").trim();
+          const numeroContrat = String(r[iContrat]||"").trim();
+
+          // Vérif doublon : code projet OU n° contrat déjà présent
+          if (codeProjet && existingCodes.has(codeProjet)) {
+            skipped++;
+            errors.push(`"${libelle}" (${codeProjet}) — code projet déjà présent, ignoré`);
+            continue;
+          }
+          if (numeroContrat && existingContrats.has(numeroContrat)) {
+            skipped++;
+            errors.push(`"${libelle}" (N°${numeroContrat}) — contrat déjà présent, ignoré`);
+            continue;
+          }
+
+          const montantHT  = parseN(r[iMontantHT]);
+          const loyerHT    = parseN(r[iLoyerHT]);
+          const loyerTTC   = parseN(r[iLoyerTTC]);
+          const montantTTC = parseN(r[iMontantTTC]);
+          const coeff      = parseN(r[iCoeff]);
+          const nbLoyers   = parseN(r[iNbLoyers]);
+          const taux       = parseN(r[iTaux]);
+          const valRes     = parseN(r[iValRes]);
+          const banque     = String(r[iBanque]||"").trim();
+          const typeContrat= String(r[iTypeContrat]||"").trim();
+          const service    = String(r[iService]||"").trim();
+          const dateMEP    = fmtDate(r[iDateMEP]);
+          const dateFin    = fmtDate(r[iDateFin]);
+
+          // Construire la ligne financeur avec les données Excel
+          const finRow = {
+            id: uid(),
+            financeur: banque||"",
+            statut: "en_cours",
+            coeff: coeff!=null ? String(coeff) : "",
+            loyerHT: loyerHT!=null ? String(Math.round(loyerHT*100)/100) : "",
+            loyerTTC: loyerTTC!=null ? String(Math.round(loyerTTC*100)/100) : "",
+            nbLoyers: nbLoyers!=null ? String(Math.round(nbLoyers)) : "",
+            valeurRes: valRes!=null ? String(Math.round(valRes*100)/100) : "",
+            fraisAnn: "",
+            montantHT: montantHT!=null ? String(montantHT) : "",
+            taux: taux!=null ? String(Math.round(taux*10000)/100) : "",
+          };
+
+          // TVA déduite si montantHT et montantTTC disponibles
+          const tvaCalc = (montantHT&&montantTTC&&montantHT>0)
+            ? Math.round((montantTTC/montantHT-1)*100)
+            : 20;
+
+          const newRef = genCBRef([...dossiers, ...newDossiers]);
+          const dossier = {
+            id: uid(),
+            reference: newRef,
+            codeProjet,
+            intitule: libelle,
+            typeInvestissement: "",
+            typeFinancement: typeContrat||"",
+            numeroContrat,
+            fournisseur: "",
+            site: service||"",
+            montantHT: montantHT!=null ? String(montantHT) : "",
+            tva: String(tvaCalc),
+            montantFinance: "",
+            duree: nbLoyers!=null ? String(Math.round(nbLoyers)) : "36",
+            periodicite: "Mensuelle",
+            valeurResPct: "",
+            statut: "montage",          // statut vide → montage par défaut, à affecter manuellement
+            notes: "",
+            financeurs: banque ? [finRow] : [],
+            documents: {},
+            dateDemarrage: dateMEP||"",
+            dateFin: dateFin||"",
+            createdAt: new Date().toISOString(),
+            importedFromExcel: true,    // flag import — nécessite vérification
+            verifiedAt: null,           // null = non vérifié, date = vérifié
+          };
+
+          // Enregistrer le code projet pour éviter doublons dans ce même import
+          if (codeProjet) existingCodes.add(codeProjet);
+          if (numeroContrat) existingContrats.add(numeroContrat);
+
+          newDossiers.push(dossier);
+          added++;
+        }
+
+        if (newDossiers.length > 0) {
+          setDossiers(p => [...newDossiers, ...p]);
+        }
+        setImportResult({ added, skipped, errors });
+        // Auto-effacer le message après 8s
+        setTimeout(()=>setImportResult(null), 8000);
+      } catch(err) {
+        alert("Erreur lors de l'import : " + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
   // Financeurs uniques présents dans les dossiers
   const uniqueFinanceurs = [...new Set(
     dossiers.flatMap(d=>(d.financeurs||[]).map(f=>f.financeur).filter(Boolean))
   )].sort();
+
+  // Nb dossiers à vérifier
+  const toVerifyCount = dossiers.filter(d=>d.importedFromExcel && !d.verifiedAt).length;
 
   // Si onglet = financeur, c'est un filtre sur la synthèse
   const isFinanceurTab = activeTab!=="dashboard" && activeTab!=="synthese";
@@ -8102,7 +8284,7 @@ function CreditBailView({ tasks, onEdit, settings }) {
     {id:"synthese",  label:"📋 Synthèse"},
   ];
 
-  const NavBtn = ({id, label}) => (
+  const NavBtn = ({id, label, badge}) => (
     <button onClick={()=>setActiveTab(id)}
       style={{ display:"block",width:"100%",textAlign:"left",padding:"9px 14px",fontSize:11,
         fontFamily:"'Lora',serif",border:"none",cursor:"pointer",
@@ -8110,7 +8292,10 @@ function CreditBailView({ tasks, onEdit, settings }) {
         color:activeTab===id?"white":"#555",
         background:activeTab===id?"#102A63":"transparent",
         borderLeft:activeTab===id?"3px solid #E67E22":"3px solid transparent" }}>
-      {label}
+      <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between" }}>
+        <span>{label}</span>
+        {badge>0 && <span style={{ fontSize:9,background:"#E67E22",color:"white",borderRadius:20,padding:"0 6px",fontFamily:"'DM Mono',monospace",flexShrink:0 }}>{badge}</span>}
+      </div>
     </button>
   );
 
@@ -8119,11 +8304,30 @@ function CreditBailView({ tasks, onEdit, settings }) {
 
       {/* Sidebar verticale gauche */}
       <div style={{ width:200,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
-        <div style={{ padding:"12px 14px",borderBottom:"1px solid #ECEAE5",flexShrink:0 }}>
+        <div style={{ padding:"12px 14px",borderBottom:"1px solid #ECEAE5",flexShrink:0,display:"flex",flexDirection:"column",gap:6 }}>
           <button onClick={openNew} style={{ ...S.btn("#102A63"),padding:"6px 10px",fontSize:11,width:"100%" }}>+ Nouveau dossier</button>
+          {/* Bouton import Excel */}
+          <button onClick={()=>importRef.current&&importRef.current.click()}
+            style={{ border:"1px solid #D1D5DB",background:"#F9FAFB",color:"#374151",borderRadius:8,padding:"5px 10px",fontSize:10,cursor:"pointer",fontFamily:"'Lora',serif",width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:5 }}
+            title="Importer depuis un fichier Excel (.xlsx)">
+            <span>📥</span><span>Importer Excel</span>
+          </button>
+          <input ref={importRef} type="file" accept=".xlsx,.xls" style={{ display:"none" }}
+            onChange={e=>{ handleImport(e.target.files[0]); e.target.value=""; }} />
         </div>
+
+        {/* Message résultat import */}
+        {importResult && (
+          <div style={{ padding:"8px 12px",background:importResult.added>0?"#F0FDF4":"#FEF9C3",borderBottom:"1px solid #E5E7EB",fontSize:10,fontFamily:"'DM Mono',monospace" }}>
+            {importResult.added>0 && <div style={{ color:"#065F46",fontWeight:700 }}>✓ {importResult.added} dossier{importResult.added>1?"s":""} importé{importResult.added>1?"s":""}</div>}
+            {importResult.skipped>0 && <div style={{ color:"#92400E" }}>⚠ {importResult.skipped} ignoré{importResult.skipped>1?"s":""}</div>}
+            {importResult.errors.slice(0,3).map((e,i)=><div key={i} style={{ color:"#6B7280",fontSize:9,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{e}</div>)}
+          </div>
+        )}
+
         <div style={{ overflowY:"auto",flex:1,padding:"8px 0" }}>
-          {NAV_ITEMS.map(({id,label})=><NavBtn key={id} id={id} label={label} />)}
+          <NavBtn id="dashboard" label="📊 Tableau de bord" />
+          <NavBtn id="synthese" label="📋 Synthèse" badge={toVerifyCount} />
 
           {uniqueFinanceurs.length>0 && (
             <div style={{ fontSize:9,color:"#AAA",padding:"10px 14px 4px",fontFamily:"'DM Mono',monospace",letterSpacing:"0.08em",textTransform:"uppercase" }}>Par financeur</div>
@@ -11799,7 +12003,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.401<br />12/05/26 à 09:01
+          v.0.432<br />13/05/26 à 18:30
         </div>
       </div>
 
