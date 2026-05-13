@@ -5608,6 +5608,88 @@ function DevView() {
   );
 }
 
+function StorageView() {
+  const [info, setInfo] = React.useState(null);
+  React.useEffect(() => { refreshInfo(); }, []);
+  const refreshInfo = () => {
+    try {
+      let total = 0, breakdown = {};
+      for (let i=0; i<localStorage.length; i++) {
+        const k = localStorage.key(i);
+        const v = localStorage.getItem(k) || "";
+        const bytes = (k.length + v.length) * 2; // UTF-16 = 2 octets/char
+        total += bytes;
+        // Regrouper par préfixe
+        const prefix = k.startsWith("cb_doc_") ? "CB - Pièces jointes"
+          : k.startsWith("creditbail_") ? "CB - Dossiers & config"
+          : k.startsWith("ech_") ? "Échéancier"
+          : k.startsWith("rcf_") ? "RCF"
+          : k.startsWith("cotation_") ? "Cotation"
+          : k.startsWith("tasks_") || k.startsWith("kanban_") ? "Tâches"
+          : k.startsWith("paiements_") ? "Paiements"
+          : k.startsWith("suivi_") ? "Suivi client"
+          : "Autres";
+        breakdown[prefix] = (breakdown[prefix]||0) + bytes;
+      }
+      // Quota estimé à 5 MB (standard navigateur)
+      const quotaBytes = 5 * 1024 * 1024;
+      setInfo({ total, breakdown, quotaBytes });
+    } catch(e) { setInfo(null); }
+  };
+
+  const fmt = b => b < 1024 ? `${b} o` : b < 1024*1024 ? `${(b/1024).toFixed(1)} Ko` : `${(b/1024/1024).toFixed(2)} Mo`;
+  const pct = b => info ? Math.min(100, (b / info.quotaBytes * 100)).toFixed(1) : 0;
+  const barColor = p => p > 80 ? "#C0392B" : p > 60 ? "#E67E22" : "#27AE60";
+
+  if (!info) return <div style={{color:"#888",fontSize:12}}>Calcul en cours…</div>;
+
+  const usedPct = parseFloat(pct(info.total));
+  const entries = Object.entries(info.breakdown).sort((a,b)=>b[1]-a[1]);
+
+  return (
+    <div style={{ maxWidth:520 }}>
+      <div style={{ fontSize:12, fontFamily:"'Lora',serif", color:"#888", marginBottom:16 }}>
+        Utilisation du stockage local (localStorage) du navigateur.
+      </div>
+
+      {/* Barre globale */}
+      <div style={{ marginBottom:20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:12, fontFamily:"'Lora',serif" }}>
+          <span style={{ fontWeight:700, color:"#2C3E50" }}>Espace utilisé</span>
+          <span style={{ color: barColor(usedPct), fontWeight:700 }}>{fmt(info.total)} / ~{fmt(info.quotaBytes)} ({usedPct} %)</span>
+        </div>
+        <div style={{ height:14, background:"#F0F0F0", borderRadius:8, overflow:"hidden" }}>
+          <div style={{ height:"100%", width:`${usedPct}%`, background:barColor(usedPct), borderRadius:8, transition:"width 0.4s" }} />
+        </div>
+        {usedPct > 70 && <div style={{ marginTop:8, fontSize:11, color:"#E67E22", fontFamily:"'Lora',serif" }}>
+          ⚠ Espace presque plein. Supprimez des pièces jointes pour libérer de l'espace.
+        </div>}
+      </div>
+
+      {/* Détail par module */}
+      <div style={{ fontSize:11, fontFamily:"'DM Mono',monospace", color:"#888", marginBottom:8, letterSpacing:"0.06em" }}>DÉTAIL PAR MODULE</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        {entries.map(([name, bytes]) => {
+          const p = parseFloat(pct(bytes));
+          return (
+            <div key={name}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:3, fontSize:11, fontFamily:"'Lora',serif" }}>
+                <span style={{ color:"#2C3E50" }}>{name}</span>
+                <span style={{ color:"#888" }}>{fmt(bytes)} ({p} %)</span>
+              </div>
+              <div style={{ height:6, background:"#F0F0F0", borderRadius:4, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${p}%`, background:"#102A63", borderRadius:4, opacity:0.7 }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <button onClick={refreshInfo} style={{ marginTop:20, border:"1px solid #E0E0E0", background:"white", borderRadius:6, padding:"6px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", color:"#888" }}>↺ Actualiser</button>
+    </div>
+  );
+}
+
 function SettingsView({ settings, onSave }) {
   const [s, setS] = useState(JSON.parse(JSON.stringify({ ...DEFAULT_SETTINGS, ...settings, hiddenTabs: settings.hiddenTabs || [], labels: settings.labels || DEFAULT_SETTINGS.labels, groqKey: settings.groqKey || "" })));
   const [tab, setTab] = useState("categories");
@@ -5773,6 +5855,10 @@ function SettingsView({ settings, onSave }) {
             <button onClick={() => setS({...s, tabOrder:ALL_TABS.map(t=>t.id), tabLabels:{}, tabIcons:{}})}
               style={{ ...S.ghost, marginTop:12, fontSize:10, color:"#999" }}>↺ Réinitialiser l'ordre, noms et icônes</button>
           </>}
+
+          {tab === "stockage" && (
+            <StorageView />
+          )}
 
           {tab === "profiles" && (
             <div>
@@ -12461,7 +12547,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.449<br />14/05/26 à 12:00
+          v.0.450<br />14/05/26 à 13:00
         </div>
       </div>
 
