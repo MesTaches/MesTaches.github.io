@@ -7112,7 +7112,9 @@ async function exportCBPDF(d) {
     const calc0 = calcCBRow({...finRow0, montantHT: d.montantHT});
     if (calc0.taux12 === null) return '';
     const nbL = parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0;
-    const echRows = genEcheancier(calc0.mttc, calc0.loyerTTC, nbL, (calc0.taux12/100)/12);
+    const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
+    const tauxPer = (calc0.taux12/100)/12 * periStep;
+    const echRows = genEcheancier(calc0.mttc, calc0.loyerTTC, nbL, tauxPer);
     if (!echRows.length) return '';
     const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
     const jourRef = startDate.getDate();
@@ -7121,7 +7123,7 @@ async function exportCBPDF(d) {
     const totalAmort = echRows.reduce((a,r)=>a+r.amort,0);
     const lignesHtml = echRows.map((row,i)=>{
       const dt = new Date(startDate);
-      dt.setMonth(dt.getMonth()+i);
+      dt.setMonth(dt.getMonth()+i*periStep);
       const maxDay = new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
       dt.setDate(Math.min(jourRef,maxDay));
       const dateStr = dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
@@ -7285,9 +7287,14 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
   React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
   const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
   const [d, setD] = useState({ ...empty, ...dossier });
+  const [origD] = useState(JSON.stringify({ ...empty, ...dossier }));
   const [tab, setTab] = useState("financeurs");
   const [newFinanceur, setNewFinanceur] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const isDirty = JSON.stringify(d) !== origD;
+  const saveAndClose = () => { onSave(d); onClose(); };
+  const handleCancel = () => { if (isDirty) { setConfirmCancel(true); } else { onClose(); } };
   const set = (k,v) => setD(p=>({...p,[k]:v}));
   const uidP = () => Math.random().toString(36).substr(2,9);
   const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
@@ -7327,12 +7334,14 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
   // Echéancier (from first financeur with enough data)
   const finRow0 = (d.financeurs||[])[0]||{};
   const calc0   = calcCBRow({...finRow0, montantHT: d.montantHT});
+  const periStep = d.periodicite==="Trimestrielle" ? 3 : 1; // mois par échéance
+  const tauxPeriode = calc0.taux12 !== null ? (calc0.taux12/100)/12 * periStep : 0;
   const ech     = calc0.taux12 !== null
-    ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, (calc0.taux12/100)/12)
+    ? genEcheancier(calc0.mttc, calc0.loyerTTC, parseInt(finRow0.nbLoyers)||parseInt(d.duree)||0, tauxPeriode)
     : [];
   const todayStr = new Date().toISOString().split('T')[0];
   const cbTotalCount = ech.length;
-  const cbPaidCount = cbTotalCount>0 ? (()=>{ const startDate=d.dateDemarrage?new Date(d.dateDemarrage):null; if(!startDate) return 0; const jourRef=startDate.getDate(); let cnt=0; for(let i=0;i<cbTotalCount;i++){const dt=new Date(startDate);dt.setMonth(dt.getMonth()+i);const md=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();dt.setDate(Math.min(jourRef,md));if(dt.toISOString().split('T')[0]<=todayStr)cnt++;else break;} return cnt;})() : 0;
+  const cbPaidCount = cbTotalCount>0 ? (()=>{ const startDate=d.dateDemarrage?new Date(d.dateDemarrage):null; if(!startDate) return 0; const jourRef=startDate.getDate(); let cnt=0; for(let i=0;i<cbTotalCount;i++){const dt=new Date(startDate);dt.setMonth(dt.getMonth()+i*periStep);const md=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();dt.setDate(Math.min(jourRef,md));if(dt.toISOString().split('T')[0]<=todayStr)cnt++;else break;} return cnt;})() : 0;
   const cbRemainCount = Math.max(0, cbTotalCount-cbPaidCount);
   const cbPct = cbTotalCount>0 ? Math.round(cbPaidCount/cbTotalCount*100) : 0;
   
@@ -7346,7 +7355,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
 
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
-      onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      onMouseDown={e=>{ if(e.target===e.currentTarget) saveAndClose(); }}>
       <div style={{ width:"min(900px,96vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
         {/* Header */}
         <div style={{ background:"#102A63",padding:"14px 22px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0 }}>
@@ -7379,7 +7388,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
               style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center" }}>📄</button>
             <button onClick={()=>sendCBEmail(d)} title="Envoyer par mail"
               style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center" }}>✉️</button>
-            <button onClick={onClose} title="Fermer"
+            <button onClick={saveAndClose} title="Fermer"
               style={{ background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.25)",color:"white",borderRadius:8,width:32,height:32,cursor:"pointer",fontSize:20,display:"flex",alignItems:"center",justifyContent:"center" }}>×</button>
           </div>
         </div>
@@ -7832,7 +7841,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                             <tbody>
                               {ech.map((row,i)=>{
                                 const d2 = new Date(startDate);
-                                d2.setMonth(d2.getMonth() + i);
+                                d2.setMonth(d2.getMonth() + i*periStep);
                                 const maxDay = new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate();
                                 d2.setDate(Math.min(jourRef, maxDay));
                                 const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -7863,7 +7872,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                               {/* Ligne Valeur Résiduelle M+1 */}
                               {calc0.vr > 0 && (() => {
                                 const vrDate = new Date(startDate);
-                                vrDate.setMonth(vrDate.getMonth() + ech.length);
+                                vrDate.setMonth(vrDate.getMonth() + ech.length * periStep);
                                 const maxDay = new Date(vrDate.getFullYear(), vrDate.getMonth()+1, 0).getDate();
                                 vrDate.setDate(Math.min(jourRef, maxDay));
                                 const vrDateStr = vrDate.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -12388,7 +12397,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.446<br />14/05/26 à 10:00
+          v.0.447<br />14/05/26 à 11:00
         </div>
       </div>
 
