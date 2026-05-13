@@ -7053,22 +7053,6 @@ async function exportCBPDF(d) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       await page.render({canvasContext: ctx, viewport: vp}).promise;
-      // Détecter page blanche : analyser la zone centrale uniquement (évite filigranes/numéros de bord)
-      const sample = ctx.getImageData(
-        Math.floor(canvas.width  * 0.1),
-        Math.floor(canvas.height * 0.1),
-        Math.floor(canvas.width  * 0.8),
-        Math.floor(canvas.height * 0.8)
-      );
-      let nonWhite = 0;
-      for (let i = 0; i < sample.data.length; i += 4) {
-        const r = sample.data[i], g = sample.data[i+1], b = sample.data[i+2];
-        if (r < 230 || g < 230 || b < 230) nonWhite++;
-      }
-      // Une page de texte dense a des milliers de pixels non-blancs
-      // Une page vide BPCE peut avoir ~50-500 px (numéros page, filigranes)
-      // Seuil à 2000 pour être sûr de filtrer les pages vraiment vides
-      if (nonWhite < 2000) continue;
       pages.push(canvas.toDataURL('image/jpeg', 0.92));
     }
     return pages;
@@ -7096,11 +7080,11 @@ async function exportCBPDF(d) {
         </div>`;
       } else {
         pages.forEach((pageImg, pi) => {
-          html += `<div style="page-break-before:always;padding:0;margin:0">
-            <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:6px 28px 4px;background:#F8F8F8;border-bottom:1px solid #ECEAE5">
+          html += `<div style="page-break-before:always;page-break-after:always;page-break-inside:avoid;margin:0;padding:0;width:100%;height:100vh;overflow:hidden;display:flex;flex-direction:column">
+            <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:4px 20px;background:#F8F8F8;border-bottom:1px solid #ECEAE5;flex-shrink:0">
               ${doc.typeName} — ${doc.name||""} · Page ${pi+1}/${pages.length}
             </div>
-            <img src="${pageImg}" style="width:100%;display:block" />
+            <img src="${pageImg}" style="flex:1;width:100%;object-fit:contain;object-position:top center;display:block;min-height:0" />
           </div>`;
         });
       }
@@ -7456,10 +7440,25 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
             <div>{lbl("MONTANT TTC (auto)")}
               <div style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2, background:"#F5F5F5", color:"#102A63", fontWeight:700 }}>{mht>0?fmtE(mttc,2):"—"}</div>
             </div>
-            <div>{lbl("DURÉE (MOIS)")}
-              <select value={d.duree} onChange={e=>set("duree",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
-                {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
-              </select>
+            <div>{lbl("NB LOYERS")}
+              {(() => {
+                const PRIO = ["termine","en_cours","attente_mep","negociation","contrat","envoyee","a_faire","refuse"];
+                const fins = d.financeurs||[];
+                let refFin = null;
+                if (fins.length === 1) { refFin = fins[0]; }
+                else if (fins.length > 1) { for (const st of PRIO) { refFin = fins.find(f=>f.statut===st); if (refFin) break; } if (!refFin) refFin = fins[0]; }
+                const autoNb = refFin?.nbLoyers ? parseInt(refFin.nbLoyers) : null;
+                const isAuto = autoNb !== null && (d.duree===null||d.duree===undefined||d.duree==="");
+                return (
+                  <div style={{ position:"relative" }}>
+                    <select value={isAuto ? String(autoNb) : (d.duree||"36")} onChange={e=>set("duree",e.target.value)}
+                      style={{ border:`1px solid ${isAuto?"#0E7490":"#E8E8E8"}`,borderRadius:8,padding:"4px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:isAuto?"#0E7490":"#2C3E50",background:isAuto?"#E0F7FA":"#FAFAFA", minHeight:30, lineHeight:1.2, appearance:"auto" }}>
+                      {DUREES.map(v=><option key={v} value={v}>{v} mois</option>)}
+                    </select>
+                    {isAuto && <span style={{ position:"absolute",right:22,top:"50%",transform:"translateY(-50%)",fontSize:8,color:"#0E7490",fontFamily:"'DM Mono',monospace",pointerEvents:"none" }}>auto</span>}
+                  </div>
+                );
+              })()}
             </div>
             <div>{lbl("PÉRIODICITÉ")}
               <select value={d.periodicite} onChange={e=>set("periodicite",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"5px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"#FAFAFA", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
@@ -7609,6 +7608,13 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                         <div>
                           <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>FRAIS ANN.</div>
                           <input type="text" inputMode="decimal" value={row.fraisAnn} onChange={e=>updFinRow(row.id,"fraisAnn",e.target.value)}
+                            placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />
+                        </div>
+
+                        {/* Assurance mensuelle */}
+                        <div>
+                          <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:3 }}>ASSURANCE/MOIS</div>
+                          <input type="text" inputMode="decimal" value={row.assuranceMens||""} onChange={e=>updFinRow(row.id,"assuranceMens",e.target.value)}
                             placeholder="0,00" style={{ ...inpS,textAlign:"right" }} />
                         </div>
 
@@ -7768,6 +7774,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                   : (() => {
                       const tvaRate   = parseFloat(d.tva)||20;
                       const fraisAnn  = parseFloat(finRow0.fraisAnn)||0;
+                      const assuranceMens = parseFloat(finRow0.assuranceMens)||0; // pas de TVA sur assurance
                       const loyerHT   = calc0.loyerHT||0;  // calculé par calcCBRow (coeff*montantHT/100 en priorité)
                       const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
                       const jourRef   = startDate.getDate();
@@ -7777,10 +7784,11 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                       const totTVALoyer = totLoyerHT * tvaRate/100;
                       const totFrais    = fraisAnn; // uniquement 1ère échéance
                       const totTVAFrais = totFrais * tvaRate/100;
+                      const totAssurance = assuranceMens * ech.length; // pas de TVA sur assurance
                       const totTVA      = totTVALoyer + totTVAFrais;
                       const totTTC      = ech.reduce((a,r,i)=>{
                         const fr = i===0 ? fraisAnn : 0;
-                        return a + loyerHT*(1+tvaRate/100) + fr*(1+tvaRate/100);
+                        return a + loyerHT*(1+tvaRate/100) + fr*(1+tvaRate/100) + assuranceMens;
                       },0);
 
                       const COLS = [
@@ -7832,7 +7840,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                                 const tvaLoyer  = loyerHT * tvaRate/100;
                                 const tvaFrais  = frais * tvaRate/100;
                                 const tvaTot    = tvaLoyer + tvaFrais;
-                                const echeanceTTC = loyerHT + tvaLoyer + frais + tvaFrais;
+                                const echeanceTTC = loyerHT + tvaLoyer + assuranceMens + frais + tvaFrais;
                                 const bg = i%2===0 ? "white" : "#FAFAFA";
                                 const isPaid = (() => {
                                   if (!d.dateDemarrage) return false;
@@ -7844,7 +7852,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                                     <td style={{ padding:"4px 7px", textAlign:"left", fontFamily:"'Lora',serif", color:isPaid?"#AAA":"#555", fontSize:10, textDecoration:isPaid?"line-through":"none" }}>{dateStr}</td>
                                     {td(fmtN(loyerHT,2), "#102A63", true)}
                                     {td(`${tvaRate.toFixed(2)} %`, "#6B7280")}
-                                    {td("—", "#AAA")}
+                                    {td(assuranceMens>0 ? fmtN(assuranceMens,2) : "—", assuranceMens>0?"#4F46E5":"#AAA", assuranceMens>0)}
                                     {td(frais>0 ? fmtN(frais,2) : "—", frais>0?"#E67E22":"#AAA", frais>0)}
                                     {td(frais>0 ? `${tvaRate.toFixed(2)} %` : "—", "#6B7280")}
                                     {td(fmtN(tvaTot,2), "#0E7490")}
@@ -7884,7 +7892,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                                 <td colSpan={2} style={{ padding:"6px 7px", fontFamily:"'Lora',serif", fontSize:10, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL LOYERS</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totLoyerHT,2)}</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#6B7280", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
-                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#4F46E5", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{assuranceMens>0?fmtN(totAssurance,2):"—"}</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fraisAnn>0?fmtN(totFrais,2):"—"}</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#6B7280", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
                                 <td style={{ padding:"6px 7px", textAlign:"right", color:"#0E7490", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTVA,2)}</td>
@@ -7931,9 +7939,19 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
             )}
           </div>
           {/* Droite : Annuler + Enregistrer */}
-          <div style={{ display:"flex",gap:8 }}>
-            <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
-            <button onClick={()=>{ onSave(d); onClose(); }} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
+          <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+            {confirmCancel ? (
+              <>
+                <span style={{ fontSize:11,color:"#B91C1C",fontFamily:"'Lora',serif",fontWeight:600 }}>Annuler sans enregistrer ?</span>
+                <button onClick={()=>{ onClose(); }} style={{ ...S.btn("#B91C1C"),fontSize:11,padding:"5px 12px" }}>Oui, annuler</button>
+                <button onClick={()=>setConfirmCancel(false)} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"5px 12px" }}>Non</button>
+              </>
+            ) : (
+              <>
+                <button onClick={handleCancel} style={{ ...S.btn("#F0F0F0","#666"),fontSize:11,padding:"7px 14px" }}>Annuler</button>
+                <button onClick={saveAndClose} style={{ ...S.btn("#102A63"),fontSize:11,padding:"7px 14px" }}>✓ Enregistrer</button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -12370,7 +12388,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.444<br />14/05/26 à 01:00
+          v.0.446<br />14/05/26 à 10:00
         </div>
       </div>
 
