@@ -7026,34 +7026,51 @@ function exportCBPDF(d) {
     });
   });
 
-  // Section PJ : images inline, PDFs embarqués en iframe pleine page
-  const pjSection = allDocs.length === 0 ? "" : (() => {
-    const items = allDocs.map(doc => {
-      const isImg = /^data:image\//i.test(doc.data||"");
-      const isPdf = /^data:application\/pdf/i.test(doc.data||"");
-      if (isImg) {
-        return `<div style="page-break-before:always;padding:28px 36px">
-          <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${doc.typeName} — ${doc.name||""}</div>
-          <img src="${doc.data}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
-        </div>`;
+  // Convertir les PDFs base64 en Blob URLs (contourne la restriction Chrome)
+  const blobUrls = [];
+  const allDocsWithBlobUrls = allDocs.map(doc => {
+    const isPdf = /^data:application\/pdf/i.test(doc.data||"");
+    if (isPdf) {
+      try {
+        const base64 = doc.data.split(",")[1];
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        const blob = new Blob([bytes], {type:"application/pdf"});
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        return { ...doc, displayUrl: url };
+      } catch(e) {
+        return { ...doc, displayUrl: doc.data };
       }
-      if (isPdf) {
-        return `<div style="page-break-before:always;margin:0;padding:0;width:100%;height:100vh">
-          <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:8px 36px 4px;border-top:1px solid #F0F0F0">${doc.typeName} — ${doc.name||""}</div>
-          <iframe src="${doc.data}" style="width:100%;height:calc(100vh - 28px);border:none;display:block" frameborder="0"></iframe>
-        </div>`;
-      }
-      // Autres fichiers : juste mention (non prévisualisable)
-      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#F8F9FB;border-radius:6px;border:1px solid #ECEAE5;margin:4px 36px">
-        <span style="font-size:18px">📎</span>
-        <div>
-          <div style="font-size:11px;font-weight:600;color:#2C3E50">${doc.name||"Fichier"}</div>
-          <div style="font-size:9px;color:#AAA">${doc.typeName} — non prévisualisable</div>
-        </div>
+    }
+    return { ...doc, displayUrl: doc.data };
+  });
+
+  // Section PJ avec Blob URLs
+  const pjSection = allDocsWithBlobUrls.length === 0 ? "" : allDocsWithBlobUrls.map(doc => {
+    const isImg = /^data:image\//i.test(doc.data||"");
+    const isPdf = /^data:application\/pdf/i.test(doc.data||"");
+    if (isImg) {
+      return `<div style="page-break-before:always;padding:28px 36px">
+        <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px">${doc.typeName} — ${doc.name||""}</div>
+        <img src="${doc.displayUrl}" style="max-width:100%;border:1px solid #ECEAE5;border-radius:4px" />
       </div>`;
-    }).join("");
-    return items;
-  })();
+    }
+    if (isPdf) {
+      return `<div style="page-break-before:always;margin:0;padding:0;width:100%;height:100vh">
+        <div style="font-size:9px;color:#AAA;text-transform:uppercase;letter-spacing:0.06em;padding:8px 36px 4px;border-top:1px solid #F0F0F0">${doc.typeName} — ${doc.name||""}</div>
+        <iframe src="${doc.displayUrl}" style="width:100%;height:calc(100vh - 28px);border:none;display:block" frameborder="0"></iframe>
+      </div>`;
+    }
+    return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:#F8F9FB;border-radius:6px;border:1px solid #ECEAE5;margin:4px 36px">
+      <span style="font-size:18px">📎</span>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:#2C3E50">${doc.name||"Fichier"}</div>
+        <div style="font-size:9px;color:#AAA">${doc.typeName} — non prévisualisable</div>
+      </div>
+    </div>`;
+  }).join("");
 
   // Échéancier
   const echSection = (()=>{
@@ -7207,8 +7224,13 @@ function exportCBPDF(d) {
     win.document.write(html);
     win.document.close();
     // Délai plus long si des PDFs sont joints (iframes à charger)
-    const delay = allDocs.some(doc => /^data:application\/pdf/i.test(doc.data||"")) ? 1800 : 600;
-    setTimeout(()=>win.print(), delay);
+    const hasPdfs = allDocs.some(doc => /^data:application\/pdf/i.test(doc.data||""));
+    const delay = hasPdfs ? 2500 : 600;
+    setTimeout(()=>{
+      win.print();
+      // Révoquer les Blob URLs après impression
+      setTimeout(()=>{ blobUrls.forEach(u=>URL.revokeObjectURL(u)); }, 5000);
+    }, delay);
   }
 }
 
@@ -7669,54 +7691,111 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                   ? <div style={{ textAlign:"center", padding:"24px", color:"#CCC", fontFamily:"'Lora',serif", fontSize:12 }}>
                       Renseignez les données du financeur (coeff, loyers) pour générer l'échéancier automatiquement.
                     </div>
-                  : (
-                    <div>
-                      <div style={{ overflowX:"auto" }}>
-                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>
-                        <thead>
-                          <tr style={{ background:"#102A63" }}>
-                            {[["N°","center"],["Date échéance","left"],["Loyer","right"],["Intérêts","right"],["Amortissement","right"],["Capital restant dû","right"]].map(([h,align])=>(
-                              <th key={h} style={{ padding:"6px 10px", color:"white", fontWeight:600, textAlign:align, fontSize:10, fontFamily:"'Lora',serif", letterSpacing:"0.04em" }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(() => {
-                            const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
-                            const jourRef   = startDate.getDate();
-                            const tdNum = (color, bold=false) => ({ padding:"5px 10px", textAlign:"right", color, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:bold?700:400 });
-                            return ech.map((row,i)=>{
-                              const d2 = new Date(startDate);
-                              d2.setMonth(d2.getMonth() + i);
-                              const maxDay = new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate();
-                              d2.setDate(Math.min(jourRef, maxDay));
-                              const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
-                              return (
-                                <tr key={i} style={{ background:i%2===0?"white":"#FAFAFA", borderBottom:"1px solid #F0F0F0" }}>
-                                  <td style={{ padding:"5px 10px", textAlign:"center", color:"#AAA", fontFamily:"'DM Mono',monospace", fontSize:10 }}>{row.n}</td>
-                                  <td style={{ padding:"5px 10px", textAlign:"left", fontFamily:"'Lora',serif", color:"#555" }}>{dateStr}</td>
-                                  <td style={tdNum("#102A63", true)}>{fmtE(row.loyer,2)}</td>
-                                  <td style={tdNum("#E67E22")}>{fmtE(row.interets,2)}</td>
-                                  <td style={tdNum("#27AE60")}>{fmtE(row.amort,2)}</td>
-                                  <td style={tdNum("#C0392B")}>{fmtE(row.capitalRestant,2)}</td>
-                                </tr>
-                              );
-                            });
-                          })()}
-                        </tbody>
-                        <tfoot>
-                          <tr style={{ background:"#F0F4FF", borderTop:"2px solid #102A63", fontWeight:700 }}>
-                            <td colSpan={2} style={{ padding:"7px 10px", fontFamily:"'Lora',serif", fontSize:11, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL</td>
-                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.loyer,0),2)}</td>
-                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.interets,0),2)}</td>
-                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#27AE60", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:700 }}>{fmtE(ech.reduce((a,r)=>a+r.amort,0),2)}</td>
-                            <td style={{ padding:"7px 10px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums" }}>—</td>
-                          </tr>
-                        </tfoot>
-                      </table>
-                    </div>
-                  </div>
-                  )}
+                  : (() => {
+                      const tvaRate   = parseFloat(d.tva)||20;
+                      const fraisAnn  = parseFloat(finRow0.fraisAnn)||0;
+                      const loyerHT   = parseFloat(finRow0.loyerHT)||0;
+                      const startDate = d.dateDemarrage ? new Date(d.dateDemarrage) : new Date();
+                      const jourRef   = startDate.getDate();
+
+                      // Totaux
+                      const totLoyerHT  = loyerHT * ech.length;
+                      const totTVALoyer = totLoyerHT * tvaRate/100;
+                      const totFrais    = fraisAnn; // uniquement 1ère échéance
+                      const totTVAFrais = totFrais * tvaRate/100;
+                      const totTVA      = totTVALoyer + totTVAFrais;
+                      const totTTC      = ech.reduce((a,r,i)=>{
+                        const fr = i===0 ? fraisAnn : 0;
+                        return a + loyerHT*(1+tvaRate/100) + fr*(1+tvaRate/100);
+                      },0);
+
+                      const COLS = [
+                        {label:"N°",           align:"center", w:36},
+                        {label:"Date échéance", align:"left",   w:90},
+                        {label:"Loyer HT",      align:"right",  w:80},
+                        {label:"TVA loyer",     align:"right",  w:58},
+                        {label:"Assurances",    align:"right",  w:72},
+                        {label:"Frais",         align:"right",  w:70},
+                        {label:"TVA frais",     align:"right",  w:58},
+                        {label:"TVA",           align:"right",  w:72},
+                        {label:"Échéance TTC",  align:"right",  w:88},
+                      ];
+                      const thStyle = (align,w) => ({ padding:"5px 7px", color:"white", fontWeight:600, textAlign:align, fontSize:9, fontFamily:"'Lora',serif", letterSpacing:"0.04em", width:w, whiteSpace:"nowrap" });
+                      const td = (val, color="#2C3E50", bold=false, align="right") => (
+                        <td style={{ padding:"4px 7px", textAlign:align, color, fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontWeight:bold?700:400, fontSize:10 }}>{val}</td>
+                      );
+
+                      return (
+                        <div style={{ overflowX:"auto" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontVariantNumeric:"tabular-nums", tableLayout:"fixed" }}>
+                            <colgroup>
+                              {COLS.map((c,i)=><col key={i} style={{ width:c.w }} />)}
+                            </colgroup>
+                            <thead>
+                              <tr style={{ background:"#102A63" }}>
+                                {COLS.map(c=><th key={c.label} style={thStyle(c.align,c.w)}>{c.label}</th>)}
+                              </tr>
+                              {/* Sous-ligne unités */}
+                              <tr style={{ background:"#1E3A7A" }}>
+                                <td colSpan={2} style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.4)", fontFamily:"'DM Mono',monospace" }}></td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>€</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>{tvaRate} %</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>€</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>€</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>{tvaRate} %</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>€</td>
+                                <td style={{ padding:"2px 7px", fontSize:8, color:"rgba(255,255,255,0.5)", textAlign:"right", fontFamily:"'DM Mono',monospace" }}>€</td>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {ech.map((row,i)=>{
+                                const d2 = new Date(startDate);
+                                d2.setMonth(d2.getMonth() + i);
+                                const maxDay = new Date(d2.getFullYear(), d2.getMonth()+1, 0).getDate();
+                                d2.setDate(Math.min(jourRef, maxDay));
+                                const dateStr = d2.toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"});
+                                const frais     = i===0 ? fraisAnn : 0;
+                                const tvaLoyer  = loyerHT * tvaRate/100;
+                                const tvaFrais  = frais * tvaRate/100;
+                                const tvaTot    = tvaLoyer + tvaFrais;
+                                const echeanceTTC = loyerHT + tvaLoyer + frais + tvaFrais;
+                                const bg = i%2===0 ? "white" : "#FAFAFA";
+                                const isPaid = (() => {
+                                  if (!d.dateDemarrage) return false;
+                                  return d2.toISOString().split('T')[0] <= new Date().toISOString().split('T')[0];
+                                })();
+                                return (
+                                  <tr key={i} style={{ background:bg, borderBottom:"1px solid #F0F0F0", opacity:isPaid?0.55:1 }}>
+                                    <td style={{ padding:"4px 7px", textAlign:"center", color:"#AAA", fontFamily:"'DM Mono',monospace", fontSize:9 }}>{row.n}</td>
+                                    <td style={{ padding:"4px 7px", textAlign:"left", fontFamily:"'Lora',serif", color:isPaid?"#AAA":"#555", fontSize:10, textDecoration:isPaid?"line-through":"none" }}>{dateStr}</td>
+                                    {td(fmtN(loyerHT,2), "#102A63", true)}
+                                    {td(`${tvaRate.toFixed(2)} %`, "#6B7280")}
+                                    {td("—", "#AAA")}
+                                    {td(frais>0 ? fmtN(frais,2) : "—", frais>0?"#E67E22":"#AAA", frais>0)}
+                                    {td(frais>0 ? `${tvaRate.toFixed(2)} %` : "—", "#6B7280")}
+                                    {td(fmtN(tvaTot,2), "#0E7490")}
+                                    {td(fmtN(echeanceTTC,2), "#102A63", true)}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr style={{ background:"#F0F4FF", borderTop:"2px solid #102A63", fontWeight:700 }}>
+                                <td colSpan={2} style={{ padding:"6px 7px", fontFamily:"'Lora',serif", fontSize:10, color:"#102A63", letterSpacing:"0.06em" }}>TOTAL</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totLoyerHT,2)}</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#6B7280", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#AAA", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#E67E22", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fraisAnn>0?fmtN(totFrais,2):"—"}</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#6B7280", fontFamily:"'Lora',serif", fontSize:10 }}>—</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#0E7490", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTVA,2)}</td>
+                                <td style={{ padding:"6px 7px", textAlign:"right", color:"#102A63", fontFamily:"'Lora',serif", fontVariantNumeric:"tabular-nums", fontSize:10, fontWeight:700 }}>{fmtN(totTTC,2)}</td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      );
+                    })()
+                }
               </div>
             )}
           </div>
@@ -12182,7 +12261,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.435<br />13/05/26 à 20:30
+          v.0.437<br />13/05/26 à 21:30
         </div>
       </div>
 
