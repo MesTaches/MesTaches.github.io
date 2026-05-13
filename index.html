@@ -6803,8 +6803,72 @@ function CBKanbanSettings() {
   );
 }
 
-function loadCBDossiers()   { try { const s=localStorage.getItem(CB_DOSSIERS_KEY);   return s?JSON.parse(s):[]; } catch { return []; } }
-function saveCBDossiers(v)  { try { localStorage.setItem(CB_DOSSIERS_KEY, JSON.stringify(v)); } catch {} }
+const CB_DOCS_PREFIX = "cb_doc_";
+
+function saveCBDocData(docId, data) {
+  try { localStorage.setItem(CB_DOCS_PREFIX + docId, data); } catch(e) {
+    console.warn("CB doc trop grand pour localStorage:", docId);
+  }
+}
+function loadCBDocData(docId) {
+  try { return localStorage.getItem(CB_DOCS_PREFIX + docId) || null; } catch { return null; }
+}
+function cleanCBDocData(activeIds) {
+  try {
+    Object.keys(localStorage).filter(k=>k.startsWith(CB_DOCS_PREFIX)).forEach(k=>{
+      const id = k.slice(CB_DOCS_PREFIX.length);
+      if (!activeIds.has(id)) localStorage.removeItem(k);
+    });
+  } catch {}
+}
+
+function loadCBDossiers() {
+  try {
+    const s = localStorage.getItem(CB_DOSSIERS_KEY);
+    if (!s) return [];
+    const dossiers = JSON.parse(s);
+    return dossiers.map(d => ({
+      ...d,
+      documents: Object.fromEntries(
+        Object.entries(d.documents||{}).map(([type, files]) => [
+          type,
+          (files||[]).map(f => ({
+            ...f,
+            data: f.dataRef ? loadCBDocData(f.dataRef) : f.data
+          }))
+        ])
+      )
+    }));
+  } catch { return []; }
+}
+
+function saveCBDossiers(v) {
+  try {
+    const activeIds = new Set();
+    const stripped = v.map(d => ({
+      ...d,
+      documents: Object.fromEntries(
+        Object.entries(d.documents||{}).map(([type, files]) => [
+          type,
+          (files||[]).map(f => {
+            if (f.data && f.data.length > 500) {
+              const ref = f.id || (f.name + "_" + (f.size||0));
+              activeIds.add(ref);
+              saveCBDocData(ref, f.data);
+              const { data, dataRef, ...meta } = f;
+              return { ...meta, dataRef: ref };
+            }
+            return f;
+          })
+        ])
+      )
+    }));
+    localStorage.setItem(CB_DOSSIERS_KEY, JSON.stringify(stripped));
+    cleanCBDocData(activeIds);
+  } catch(e) {
+    console.error("CB: impossible de sauvegarder", e);
+  }
+}
 function genCBRef(dossiers) {
   const nums = dossiers.map(d => parseInt((d.reference||"").replace("CB_",""))||0);
   const next = (nums.length ? Math.max(...nums) : 0) + 1;
@@ -12397,7 +12461,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.448<br />14/05/26 à 11:30
+          v.0.449<br />14/05/26 à 12:00
         </div>
       </div>
 
