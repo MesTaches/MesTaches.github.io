@@ -10400,140 +10400,97 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
   carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false, differFinMois=0) {
   if (!montant || !dureeM) return [];
 
-  // differFinMois = période où les intérêts s'accumulent sans paiement mensuel
-  //                 puis sont payés en une seule échéance à la fin de la période
-  //                 (ex: prêt in fine SG : 12 mois → 1 seule échéance avec cumul intérêts)
+  // dureeM = durée TOTALE (carence + differFin + differe + amortissement)
+  // differFin = intérêts accumulés sur N mois, payés en 1 seule échéance (prêt in fine)
 
-  const _avecCap   = tauxCapita > 0;
-  const avecCapita = _avecCap;
-  const rangCapita = avecCapita ? carenceMois + differFinMois + 1 : -1;
-  const offsetAmort = avecCapita ? 1 : 0;
+  const avecCapita  = tauxCapita > 0;
+  const dureeAmort  = Math.max(0, dureeM - carenceMois - (differFinMois||0) - differeMois);
 
-  // Durée totale = durée saisie (carence + differFin + différé + amortissement = dureeM)
-  // differFin génère 1 seule ligne (l'échéance de paiement groupé) au lieu de differFinMois lignes
-  const nbDifferFinLignes = differFinMois > 0 ? 1 : 0;
-  const dureeTotal = dureeM - differFinMois + nbDifferFinLignes + (_avecCap ? 1 : 0);
+  if (dureeAmort < 0) return [];
 
-  const dureeAmort = Math.max(1, dureeM - carenceMois - differeMois - differFinMois);
-
-  const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
-  const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r;
-  const rG1  = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
-  const rG2  = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
+  const r   = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
+  const rD  = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r;
+  const rG1 = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
+  const rG2 = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
   const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999;
   const ass  = parseNum(assuranceMensuelle) || 0;
 
   let capital = montant;
-
   const capitalCapitalise   = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
   const capitalApresCarence = (carenceCapitalisee && r > 0 && carenceMois > 0)
-    ? montant * Math.pow(1 + r, carenceMois)
-    : capitalCapitalise;
+    ? montant * Math.pow(1 + r, carenceMois) : capitalCapitalise;
   const pmtBase = r > 0 && dureeAmort > 0
     ? capitalApresCarence * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
     : (dureeAmort > 0 ? capitalApresCarence / dureeAmort : 0);
 
+  // Construire la séquence de phases
+  const phases = [];
+  for (let k = 0; k < carenceMois; k++)           phases.push({ type:"carence",   duree:1 });
+  if (differFinMois > 0)                           phases.push({ type:"differFin", duree:differFinMois });
+  if (avecCapita)                                  phases.push({ type:"capita",    duree:1 });
+  for (let k = 0; k < differeMois; k++)            phases.push({ type:"differe",   duree:1 });
+  for (let k = 0; k < dureeAmort; k++)             phases.push({ type:"amort",     duree:1 });
+
   const rows = [];
   let cumulInterets = 0;
+  let moisEcoule   = 0;
   const d0 = dateDebut ? new Date(dateDebut) : new Date();
 
-  // Numérotation réelle des mois (pour les dates)
-  let moisReel = 0; // mois calendaire écoulé depuis d0
-
-  for (let i = 1; i <= dureeTotal; i++) {
-    // Déterminer la phase de cette ligne
-    // Phase differFin : les mois 1..differFinMois sont regroupés en 1 seule ligne
-    let estDifferFin   = false;
-    let estCarence     = false;
-    let estCapita      = false;
-    let estDiffere     = false;
-
-    let moisDebLigne   = moisReel; // mois calendaire de début de cette ligne
-    let dureeeLigne    = 1;        // nb de mois couverts par cette ligne
-
-    if (differFinMois > 0 && i === carenceMois + 1) {
-      // Ligne groupée differFin
-      estDifferFin = true;
-      dureeeLigne  = differFinMois;
-      moisReel    += differFinMois;
-    } else if (i <= carenceMois) {
-      estCarence = true;
-      moisReel++;
-    } else if (avecCapita && i === rangCapita) {
-      estCapita = true;
-      moisReel++;
-    } else {
-      // Recalculer la position relative après differFin
-      const posApresCarence = differFinMois > 0
-        ? i - carenceMois - 1  // -1 car differFin prend 1 ligne au lieu de differFinMois
-        : i - carenceMois;
-      const offsetC = avecCapita ? 1 : 0;
-      estDiffere = posApresCarence > 0 && posApresCarence <= differeMois + offsetC && !estCapita;
-      moisReel++;
-    }
-
+  phases.forEach((ph, idx) => {
+    moisEcoule += ph.duree;
     const date = new Date(d0);
-    date.setMonth(date.getMonth() + moisReel - (estDifferFin ? 0 : 0));
-    // Pour differFin : la date est à la fin de la période groupée
-    const dateFin = new Date(d0);
-    dateFin.setMonth(dateFin.getMonth() + moisDebLigne + dureeeLigne);
-    const dateStr = (estDifferFin ? dateFin : date).toISOString().split("T")[0];
+    date.setMonth(date.getMonth() + moisEcoule);
+    const maxDay = new Date(date.getFullYear(), date.getMonth()+1, 0).getDate();
+    date.setDate(Math.min(d0.getDate(), maxDay));
+    const dateStr = date.toISOString().split("T")[0];
 
     let interets = 0, amort = 0, commGar = 0, echeance = 0;
+    const rGi = (idx+1) <= _dG1 ? rG1 : rG2;
 
-    if (estCarence) {
+    if (ph.type === "carence") {
       if (carenceCapitalisee && r > 0) {
         interets = capital * r;
         capital  = capital + interets;
         cumulInterets += interets;
       }
-      amort = 0; echeance = 0; commGar = 0;
-    } else if (estDifferFin) {
-      // Intérêts cumulés sur differFinMois mois, payés en une seule fois
-      // Utiliser le taux différé si défini, sinon taux principal
-      const rDf = tauxDiffere !== null ? rD : r;
-      interets = capital * rDf * differFinMois;
-      const rGd = 1 <= _dG1 ? rG1 : rG2;
-      commGar  = capital * rGd * differFinMois;
-      amort    = 0;
+    } else if (ph.type === "differFin") {
+      interets = capital * r * ph.duree;
+      commGar  = capital * rGi * ph.duree;
       echeance = interets + commGar + ass;
       cumulInterets += interets;
-    } else if (estCapita) {
+    } else if (ph.type === "capita") {
       interets = montant * (tauxCapita / 100);
-      amort = 0; echeance = 0; commGar = 0;
-      capital = capitalCapitalise;
+      capital  = capitalCapitalise;
       cumulInterets += interets;
-    } else if (estDiffere) {
+    } else if (ph.type === "differe") {
       interets = capital * rD;
-      amort    = 0;
-      const rGd = i <= _dG1 ? rG1 : rG2;
-      commGar  = capital * rGd;
+      commGar  = capital * rGi;
       echeance = interets + commGar + ass;
       cumulInterets += interets;
     } else {
       interets = capital * r;
-      const rGa = i <= _dG1 ? rG1 : rG2;
-      commGar  = capital * rGa;
-      if (typeAmort === "capital") {
-        amort = Math.min(capitalCapitalise / dureeAmort, capital);
-      } else {
-        amort = Math.min(pmtBase - interets, capital);
-      }
+      commGar  = capital * rGi;
+      amort    = typeAmort === "capital"
+        ? Math.min(capitalApresCarence / dureeAmort, capital)
+        : Math.min(pmtBase - interets, capital);
       echeance = amort + interets + commGar + ass;
       cumulInterets += interets;
-      capital = Math.max(0, capital - amort);
+      capital  = Math.max(0, capital - amort);
     }
 
     rows.push({
-      n: i, date: dateStr,
+      n: rows.length + 1, date: dateStr,
       echeance, capital: amort, interets, cumulInterets,
       commGarantie: commGar, assurance: ass,
       echeanceGlobale: echeance, capitalRestant: capital,
-      estCapita, estCarence, estDiffere,
-      estDifferFin: estDifferFin || false,
+      estCapita:    ph.type === "capita",
+      estCarence:   ph.type === "carence",
+      estDiffere:   ph.type === "differe",
+      estDifferFin: ph.type === "differFin",
       paye: false, datePaiement:"", commentaire:""
     });
-  }
+  });
+
   return rows;
 }
 
@@ -14229,7 +14186,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.475<br />15/05/26 à 09:00
+          v.0.476<br />15/05/26 à 09:30
         </div>
       </div>
 
