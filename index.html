@@ -10854,30 +10854,29 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
               </div>
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("Taux d'intérêt (%/an)", "Taux annuel appliqué pour calculer les intérêts (ex: 5,02 pour un PGE). C'est le taux contractuel hors commission de garantie.")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-                  <div>{lbl("Taux différé (%/an)", "Taux applicable uniquement pendant la période de différé, si différent du taux principal. Laisser vide si identique.")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 2,08 (si différent)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-                  <div>{lbl("Commission de garantie (%/an)", "Commission prélevée sur le capital restant dû (ex: 1,39% pour PGE Résilience). S'applique en plus des intérêts.")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-                  <div>{lbl("Taux capitalisation (%/an)", "Spécifique PGE : taux auquel les intérêts sont capitalisés (ajoutés au capital) lors du rang 1. Laisser vide si non applicable.")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-                  <div>{lbl("Commission garantie 2 (%/an)", "Si la commission change après une certaine durée (renseignée ci-dessous). Laisser vide si pas de changement.")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Ex: 2,00 (si différent)" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-                  <div>{lbl("Durée com. garantie 1 (mois)", "Nombre de mois pendant lesquels la commission 1 s'applique. Au-delà, la commission 2 prend le relais.")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
+                  <div>{lbl("Taux d'intérêt (%/an)", "Taux annuel des intérêts (ex: 5,02 pour PGE). Hors commission de garantie.")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Taux différé (%/an)", "Si différent du taux principal pendant le différé. Laisser vide si identique.")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Taux capitalisation (%/an)", "PGE : taux auquel les intérêts sont capitalisés au capital (rang 1).")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Commission garantie (%/an)", "Prélevée sur le capital restant dû en plus des intérêts (ex: 1,39 pour PGE).")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Commission garantie 2 (%/an)", "Si la commission change après une certaine durée. Laisser vide si pas de changement.")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Durée com. garantie 1 (mois)", "Nb de mois pour la commission 1. Au-delà, commission 2 s'applique.")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
-                  <div>{lbl("Carence (mois)", "Période sans aucun paiement : ni capital, ni intérêts. Le capital reste intact.")}
-                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,alignItems:"start" }}>
+                  <div>
+                    {lbl("Carence (mois)", "Aucun paiement : ni capital, ni intérêts.")}
+                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
                   </div>
-                  <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"3px 0"}}>
+                  <div>
+                    {lbl("Différé (mois)", "Intérêts payés, pas de capital. Ex: 12 pour PGE franchise en capital.")}
+                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
+                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
+                  </div>
+                  <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"2px 0"}}>
                     <input type="checkbox" id="carCapId" checked={d.carenceCapitalisee||false}
                       onChange={e=>set("carenceCapitalisee",e.target.checked)}
                       style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
@@ -10888,11 +10887,6 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                           {"≈ +" + Math.round(parseNum(d.montant)*parseNum(d.tauxAnnuel)/100/12*parseInt(d.carence)).toLocaleString("fr-FR") + " €"}
                         </span>}
                     </label>
-                  </div>
-                  <div>{lbl("Différé (mois)", "Période où seuls les intérêts (et commissions) sont payés, sans remboursement du capital. Ex: 12 pour un PGE avec franchise en capital.")}
-                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
                   </div>
                 </div>
               </div>
@@ -14186,7 +14180,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.473<br />15/05/26 à 01:30
+          v.0.474<br />15/05/26 à 02:00
         </div>
       </div>
 
