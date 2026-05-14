@@ -1314,7 +1314,9 @@ function CotationModal({ cotation, onSave, onClose }) {
 
 /* ── CotationView (calquée sur TasksView) ── */
 function CotationView({ settings }) {
-  const [cotations, setCotations] = React.useState(()=>loadCotations());
+  const [cotations, setCotations] = React.useState([]);
+  const [cotReady, setCotReady] = React.useState(false);
+  React.useEffect(()=>{ appDbGet("cotations").then(v=>{if(v&&Array.isArray(v))setCotations(v);setCotReady(true);}).catch(()=>setCotReady(true)); },[]);
   const [modal, setModal]         = React.useState(null);
   React.useEffect(() => { window._cotations = cotations; }, [cotations]);
   const [noteModal, setNoteModal] = React.useState(null);
@@ -6768,7 +6770,9 @@ function ReportCard({ report, onClick }) {
 
 /* ── ReportingView ── */
 function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
-  const [reports, setReports]         = React.useState(() => loadReports());
+  const [reports, setReports] = React.useState([]);
+  const [rptReady, setRptReady] = React.useState(false);
+  React.useEffect(()=>{ appDbGet("reports").then(v=>{if(v&&Array.isArray(v))setReports(v);setRptReady(true);}).catch(()=>setRptReady(true)); },[]);
   const [reportModal, setReportModal] = React.useState(null);
   const [rtColW, setRtColW]           = React.useState({ num: 28, prio: 20, title: 220, sub: 28, status: 80, category: 100, type: 80, created: 82, due: 82 });
   const [undoReport, setUndoReport]   = React.useState(null);
@@ -10585,7 +10589,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
   } finally { setAiLoading(false); }
 }
 
-function EchDossierPanel({ dossier, onSave, onClose }) {
+function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => {
     document.body.classList.add("cb-modal-open");
@@ -11478,13 +11482,20 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
 };
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
-  const [dossiers, setDossiers] = React.useState(()=>loadEchDossiers());
+  const [dossiers, setDossiers] = React.useState([]);
+  const [echReady, setEchReady] = React.useState(false);
   const [ordre, setOrdre] = React.useState(null);
   const [dragIdx, setDragIdx] = React.useState(null);
   const [activeTab, setActiveTab] = React.useState("dashboard");
   const [modal, setModal] = React.useState(null);
 
-  React.useEffect(()=>{ saveEchDossiers(dossiers); },[dossiers]);
+  // Chargement IDB au montage
+  React.useEffect(()=>{
+    appDbGet("echeancier").then(v=>{ if(v && Array.isArray(v)) setDossiers(v); setEchReady(true); }).catch(()=>setEchReady(true));
+  },[]);
+
+  // Sauvegarde IDB à chaque changement (après init)
+  React.useEffect(()=>{ if(echReady) saveEchDossiers(dossiers); },[dossiers, echReady]);
 
   const saveDossier = raw => { const d=calcDossierAuto(raw); setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]); };
   const deleteDossier = id => { if(window.confirm("Supprimer cet échéancier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
@@ -11766,7 +11777,7 @@ function EcheancierView({ tasks, settings }) {
       </div>{/* fin contenu principal */}
 
       {/* Modal */}
-      {modal && <EchDossierPanel dossier={modal} onSave={d=>{saveDossier(d);setActiveTab(d.id);}} onClose={()=>setModal(null)} />}
+      {modal && <EchDossierPanel dossier={modal} onSave={d=>{saveDossier(d);setActiveTab(d.id);}} onClose={()=>setModal(null)} settings={settings} />}
     </div>
   );
 }
@@ -12635,7 +12646,9 @@ function SuiviClientView({ settings }) {
     { id:"litige", name:"Litige", color:"#2980B9", bg:"#EBF5FB" },
     { id:"cotation", name:"Cotation", color:"#27AE60", bg:"#E8F8F5" },
   ];
-  const [clients, setClients] = React.useState(()=>loadSuiviClients());
+  const [clients, setClients] = React.useState([]);
+  const [suiviReady, setSuiviReady] = React.useState(false);
+  React.useEffect(()=>{ appDbGet("suivi_clients").then(v=>{if(v&&Array.isArray(v))setClients(v);setSuiviReady(true);}).catch(()=>setSuiviReady(true)); },[]);
   const [notes, setNotes] = React.useState(()=>loadSuiviNotes());
   const [selected, setSelected] = React.useState(null);
   React.useEffect(() => { window._suiviClients = clients; window._suiviNotes = notes; }, [clients, notes]);
@@ -13017,7 +13030,9 @@ function Tasks2Modal({ item, onSave, onClose }) {
 /* ── Tasks2View : même architecture que TasksView, colonnes cotation ── */
 function Tasks2View({ fullscreen, onToggleFullscreen }) {
   const isMobile = useIsMobile();
-  const [items, setItems]           = React.useState(()=>loadTasks2());
+  const [items, setItems] = React.useState([]);
+  const [t2Ready, setT2Ready] = React.useState(false);
+  React.useEffect(()=>{ appDbGet("tasks2").then(v=>{if(v&&Array.isArray(v))setItems(v);setT2Ready(true);}).catch(()=>setT2Ready(true)); },[]);
   const [modal, setModal]           = React.useState(null);
   const [search, setSearch]         = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("Tous");
@@ -13381,7 +13396,9 @@ function GlobalSearch({ tasks, settings, onNavigate }) {
 
 
 function PaymentsView({ settings }) {
-  const [payments, setPayments] = React.useState(() => loadPayments());
+  const [payments, setPayments] = React.useState([]);
+  const [payReady, setPayReady] = React.useState(false);
+  React.useEffect(()=>{ appDbGet("payments").then(v=>{if(v&&Array.isArray(v))setPayments(v);setPayReady(true);}).catch(()=>setPayReady(true)); },[]);
   const [selectedIds, setSelectedIds] = React.useState([]);
   const [bulkStatus, setBulkStatus] = React.useState("");
   const [modal, setModal] = React.useState(null);
@@ -14081,7 +14098,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.461<br />14/05/26 à 20:30
+          v.0.462<br />14/05/26 à 21:00
         </div>
       </div>
 
