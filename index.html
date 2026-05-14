@@ -857,6 +857,160 @@ function useIsMobile() {
   return m;
 }
 
+/* ════════════════════════════════════════════════════════
+   APP_DB  —  couche IndexedDB universelle (tous modules)
+   ════════════════════════════════════════════════════════ */
+const APP_DB_NAME    = "app_main_db";
+const APP_DB_VERSION = 1;
+
+// Stores : un par module (données principales)
+const APP_STORES = [
+  "tasks",          // Tâches principales (STORAGE_KEY)
+  "tasks2",         // Tâches v2
+  "dev",            // Dev tracker
+  "contentieux",    // Contentieux dossiers
+  "cotations",      // Cotations
+  "payments",       // Paiements
+  "reports",        // Reporting
+  "echeancier",     // Échéancier
+  "rcf",            // RCF
+  "suivi_clients",  // Suivi client
+  "meetings",       // Réunions
+  "responsables",   // Responsables
+  "settings",       // Paramètres
+  "user_profiles",  // Profils utilisateurs
+  // Corbeilles
+  "trash_tasks",
+  "trash_dev",
+  "trash_contentieux",
+  "trash_cotations",
+  "trash_reporting",
+];
+
+// Correspondance clé localStorage → store IDB
+const LS_TO_STORE = {
+  "taskmanager_v4":              "tasks",
+  "taskmanager_tasks2_v1":       "tasks2",
+  "devtracker_tasks_v1":         "dev",
+  "contentieux_dossiers_v1":     "contentieux",
+  "taskmanager_cotations":       "cotations",
+  "taskmanager_payments":        "payments",
+  "taskmanager_reports":         "reports",
+  "echeancier_dossiers_v1":      "echeancier",
+  "taskmanager_rcf_v1":          "rcf",
+  "taskmanager_suiviclient_v1":  "suivi_clients",
+  "taskmanager_meetings_v1":     "meetings",
+  "taskmanager_responsables_v1": "responsables",
+  "taskmanager_settings_v1":     "settings",
+  "taskmanager_userprofiles_v1": "user_profiles",
+  "deletedTasks":                "trash_tasks",
+  "devtracker_trash_v1":         "trash_dev",
+  "contentieux_trash_v1":        "trash_contentieux",
+  "cotation_trash_v1":           "trash_cotations",
+  "reporting_trash_v1":          "trash_reporting",
+};
+
+let _appDb = null;
+
+function openAppDB() {
+  if (_appDb) return Promise.resolve(_appDb);
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(APP_DB_NAME, APP_DB_VERSION);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      APP_STORES.forEach(name => {
+        if (!db.objectStoreNames.contains(name))
+          db.createObjectStore(name);
+      });
+    };
+    req.onsuccess  = e => { _appDb = e.target.result; resolve(_appDb); };
+    req.onerror    = e => reject(e.target.error);
+  });
+}
+
+// get(store) → data ou null
+async function appDbGet(store) {
+  try {
+    const db  = await openAppDB();
+    const tx  = db.transaction(store, "readonly");
+    const req = tx.objectStore(store).get("data");
+    return await new Promise((res, rej) => {
+      req.onsuccess = e => res(e.target.result ?? null);
+      req.onerror   = e => rej(e.target.error);
+    });
+  } catch(e) { console.error(`AppDB get(${store}):`, e); return null; }
+}
+
+// set(store, data)
+async function appDbSet(store, data) {
+  try {
+    const db  = await openAppDB();
+    const tx  = db.transaction(store, "readwrite");
+    tx.objectStore(store).put(data, "data");
+    return new Promise((res, rej) => {
+      tx.oncomplete = () => res(true);
+      tx.onerror    = e => rej(e.target.error);
+    });
+  } catch(e) { console.error(`AppDB set(${store}):`, e); return false; }
+}
+
+// getAll() → { store: data, ... } — pour l'export JSON
+async function appDbGetAll() {
+  const result = {};
+  for (const store of APP_STORES) {
+    const v = await appDbGet(store);
+    if (v !== null) result[store] = v;
+  }
+  return result;
+}
+
+// Migration automatique localStorage → IDB (une seule fois)
+async function migrateAllToIDB() {
+  const done = localStorage.getItem("app_idb_migrated_v1");
+  if (done) return;
+  let count = 0;
+  for (const [lsKey, store] of Object.entries(LS_TO_STORE)) {
+    const raw = localStorage.getItem(lsKey);
+    if (!raw) continue;
+    try {
+      const data = JSON.parse(raw);
+      await appDbSet(store, data);
+      localStorage.removeItem(lsKey);
+      count++;
+    } catch {}
+  }
+  localStorage.setItem("app_idb_migrated_v1", "1");
+  if (count > 0) console.info(`AppDB: migration OK — ${count} clé(s) migrées`);
+}
+
+// Hook React pour lire/écrire un store IDB avec state local
+// Retourne [data, setData, ready]
+function useAppStore(store, defaultValue) {
+  const [data, _setData] = useState(defaultValue);
+  const [ready, setReady] = useState(false);
+  const pendingRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      const v = await appDbGet(store);
+      if (v !== null) _setData(v);
+      setReady(true);
+    })();
+  }, [store]);
+
+  const setData = React.useCallback((valOrFn) => {
+    _setData(prev => {
+      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
+      // Écriture asynchrone sans bloquer le rendu
+      clearTimeout(pendingRef.current);
+      pendingRef.current = setTimeout(() => appDbSet(store, next), 200);
+      return next;
+    });
+  }, [store]);
+
+  return [data, setData, ready];
+}
+
 /* ─── STORAGE KEYS ─── */
 const STORAGE_KEY = "taskmanager_v4";
 const COL_WIDTHS_KEY = "taskmanager_colwidths";
@@ -969,8 +1123,8 @@ const COTATION_KEY         = "taskmanager_cotations";
 const COT_COL_WIDTHS_KEY   = "taskmanager_cot_colwidths";
 const DEFAULT_COT_WIDTHS   = { clientName:180, clientCode:72, requestDate:84, requester:90, status:90, authorizedAmount:96, need:96, obtainedAmount:96, label:105, closeDate:84 };
 
-function loadCotations()    { try { const s=localStorage.getItem(COTATION_KEY); return s?JSON.parse(s):[]; } catch { return []; } }
-function saveCotations(d)   { try { localStorage.setItem(COTATION_KEY, JSON.stringify(d)); } catch {} }
+function loadCotations() { return []; } // replaced by useAppStore
+function saveCotations(d)   { appDbSet("cotations", d); }
 
 const COT_STATUSES = [
   { id:"todo",       label:"À faire",    bg:"#F0F0F0", color:"#666",    accent:"#666"    },
@@ -1175,7 +1329,7 @@ function CotationView({ settings }) {
   const [undoCot, setUndoCot]           = React.useState(null);
   const undoCotTimerRef                 = React.useRef(null);
   const [showTrashCot, setShowTrashCot] = React.useState(false);
-  const [trashCot, setTrashCot]         = React.useState(() => { try { const s=localStorage.getItem("cotation_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [trashCot, setTrashCot] = useAppStore("trash_cotations", []);
   const saveTrashCot = t => { try { localStorage.setItem("cotation_trash_v1", JSON.stringify(t)); } catch {} };
   const thirtyDaysAgoCot = new Date(Date.now()-30*864e5).toISOString();
   const activeTrashCot   = trashCot.filter(r=>r.deletedAt>thirtyDaysAgoCot);
@@ -1484,7 +1638,7 @@ function loadUserProfiles() {
     { id: "default", name: "Moi", role: "owner", email: "", createdAt: new Date().toISOString() }
   ]; } catch { return []; }
 }
-function saveUserProfiles(p) { try { localStorage.setItem(USER_PROFILES_KEY, JSON.stringify(p)); } catch {} }
+function saveUserProfiles(p) { appDbSet("user_profiles", p); }
 
 /* ─── DEFAULT SETTINGS (1: configurable categories, types, statuses) ─── */
 const DEFAULT_SETTINGS = {
@@ -1557,8 +1711,7 @@ function loadSettings() {
 function saveSettings(s) {
   try {
     const clean = { ...s, groqKey: (s.groqKey || "").trim() };
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(clean));
-    localStorage.setItem(SETTINGS_KEY + "_backup", JSON.stringify(clean));
+    appDbSet("settings", clean);
   } catch {}
 }
 
@@ -2484,7 +2637,7 @@ function saveResponsable(name) {
   const existing = getResponsables();
   if (!existing.includes(name.trim())) {
     const updated = [name.trim(), ...existing].slice(0, 50);
-    try { localStorage.setItem(RESP_KEY, JSON.stringify(updated)); } catch {}
+    appDbSet("responsables", updated);
   }
 }
 
@@ -3488,7 +3641,7 @@ function NotificationsView({ tasks, onUpdate, settings }) {
 
 /* ─── MEETINGS VIEW ─── */
 function MeetingsView({ onAddTask }) {
-  const [meetings, setMeetings] = useState(() => { try { const s = localStorage.getItem(MEETING_STORAGE); return s ? JSON.parse(s) : []; } catch { return []; } });
+  const [meetings, setMeetings] = useAppStore("meetings", []);
   const [selected, setSelected] = useState(null);
   const [showNew, setShowNew] = useState(false);
   const [newM, setNewM] = useState(null);
@@ -4940,7 +5093,7 @@ function ContentieuxSettingsPanel({ cSettings, onSave, onClose }) {
 function ContentieuxView() {
   const uid_fn = () => Math.random().toString(36).substr(2,9);
   const [cSettings, setCSettings] = useState(() => loadContentieuxSettings());
-  const [dossiers, setDossiers]   = useState(() => { try { const s=localStorage.getItem(CONTENTIEUX_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [dossiers, setDossiers, cxReady] = useAppStore("contentieux", []);
   const [modal,      setModal]      = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [dragId,   setDragId]   = useState(null);
@@ -4957,7 +5110,7 @@ function ContentieuxView() {
   const [undoDossier, setUndoDossier] = useState(null);
   const undoTimerRef = useRef(null);
   const [showTrashCx, setShowTrashCx] = useState(false);
-  const [trashCx, setTrashCx] = useState(() => { try { const s=localStorage.getItem("contentieux_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [trashCx, setTrashCx] = useAppStore("trash_contentieux", []);
   const saveTrashCx = t => { try { localStorage.setItem("contentieux_trash_v1", JSON.stringify(t)); } catch {} };
 
   const delDossier = id => {
@@ -5404,7 +5557,7 @@ function DevView() {
   const today_fn = () => new Date().toISOString().split("T")[0];
 
   const [devSettings, setDevSettings] = useState(() => loadDevSettings());
-  const [tasks, setTasks] = useState(() => { try { const s=localStorage.getItem(DEV_STORAGE_KEY); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [tasks, setTasks, devReady] = useAppStore("dev", []);
   const [modal, setModal] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [filterCat,    setFilterCat]    = useState("Toutes");
@@ -5430,7 +5583,7 @@ function DevView() {
   const [undoDevTask, setUndoDevTask] = useState(null);
   const undoDevTimerRef = useRef(null);
   const [showTrashDev, setShowTrashDev] = useState(false);
-  const [trashDev, setTrashDev] = useState(() => { try { const s=localStorage.getItem("devtracker_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [trashDev, setTrashDev, devTrashReady] = useAppStore("trash_dev", []);
   const saveTrashDev = t => { try { localStorage.setItem("devtracker_trash_v1", JSON.stringify(t)); } catch {} };
 
   const addTask  = t => setTasks(p=>[t,...p]);
@@ -5718,6 +5871,74 @@ function StorageView() {
       })()}
 
       <button onClick={refreshInfo} style={{ marginTop:20, border:"1px solid #E0E0E0", background:"white", borderRadius:6, padding:"6px 14px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", color:"#888" }}>↺ Actualiser</button>
+
+      {/* ── Export / Import sauvegarde complète ── */}
+      <div style={{ marginTop:28, borderTop:"1px solid #F0F0F0", paddingTop:20 }}>
+        <div style={{ fontSize:12, fontWeight:700, fontFamily:"'Lora',serif", color:"#2C3E50", marginBottom:4 }}>📦 Sauvegarde complète</div>
+        <div style={{ fontSize:11, color:"#888", fontFamily:"'Lora',serif", marginBottom:14 }}>
+          Exportez toutes vos données (tous modules, y compris CB) en un fichier JSON. Importez-le pour restaurer après une réinitialisation du navigateur.
+        </div>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <button onClick={async () => {
+            try {
+              // Récupérer IDB app_db
+              const appData = await appDbGetAll();
+              // Récupérer IDB creditbail_db
+              const cbDb = await openCBDB();
+              const cbMetas = await idbGetAll(cbDb, CB_STORE_META);
+              const cbDocs  = await idbGetAll(cbDb, CB_STORE_DOCS);
+              const cbTrash = await idbGetAll(cbDb, CB_STORE_TRASH);
+              const backup = {
+                version: 1,
+                exportedAt: new Date().toISOString(),
+                appDb: appData,
+                creditbailDb: { dossiers: cbMetas, documents: cbDocs, corbeille: cbTrash },
+              };
+              const json = JSON.stringify(backup, null, 2);
+              const blob = new Blob([json], { type:"application/json" });
+              const url  = URL.createObjectURL(blob);
+              const a    = document.createElement("a");
+              a.href = url;
+              a.download = `backup_appli_${new Date().toISOString().split("T")[0]}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            } catch(e) { alert("Erreur export : " + e.message); }
+          }} style={{ background:"#102A63", color:"white", border:"none", borderRadius:8, padding:"8px 18px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", fontWeight:700 }}>
+            ⬇ Exporter sauvegarde JSON
+          </button>
+
+          <label style={{ background:"#065F46", color:"white", borderRadius:8, padding:"8px 18px", fontSize:11, cursor:"pointer", fontFamily:"'Lora',serif", fontWeight:700, display:"inline-flex", alignItems:"center", gap:6 }}>
+            ⬆ Importer sauvegarde JSON
+            <input type="file" accept=".json" style={{ display:"none" }} onChange={async e => {
+              const file = e.target.files[0]; if (!file) return;
+              const text = await file.text();
+              try {
+                const backup = JSON.parse(text);
+                if (!backup.version || !backup.appDb) { alert("Fichier invalide"); return; }
+                if (!confirm(`Importer la sauvegarde du ${backup.exportedAt?.split("T")[0]} ?\n⚠ Cela remplacera TOUTES les données actuelles.`)) return;
+                // Restaurer app_db
+                for (const [store, data] of Object.entries(backup.appDb)) {
+                  await appDbSet(store, data);
+                }
+                // Restaurer creditbail_db
+                if (backup.creditbailDb) {
+                  const cbDb = await openCBDB();
+                  await idbClear(cbDb, CB_STORE_META);
+                  await idbClear(cbDb, CB_STORE_DOCS);
+                  await idbClear(cbDb, CB_STORE_TRASH);
+                  for (const d of backup.creditbailDb.dossiers||[]) await idbPut(cbDb, CB_STORE_META, d);
+                  for (const d of backup.creditbailDb.documents||[]) await idbPut(cbDb, CB_STORE_DOCS, d);
+                  for (const d of backup.creditbailDb.corbeille||[]) await idbPut(cbDb, CB_STORE_TRASH, d);
+                }
+                alert("✅ Sauvegarde restaurée ! Rechargez la page pour voir les données.");
+              } catch(e) { alert("Erreur import : " + e.message); }
+            }} />
+          </label>
+        </div>
+        <div style={{ marginTop:8, fontSize:9, color:"#AAA", fontFamily:"'DM Mono',monospace" }}>
+          ⚠ L'import remplace toutes les données existantes. Faites d'abord un export de sauvegarde.
+        </div>
+      </div>
     </div>
   );
 }
@@ -6088,8 +6309,8 @@ const TASK_STATUSES_R = [
   { id: "done",       name: "Fait",       bg: "#D1FAE5", color: "#065F46" },
 ];
 
-function loadReports() { try { const s = localStorage.getItem(REPORTS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
-function saveReports(r) { try { localStorage.setItem(REPORTS_KEY, JSON.stringify(r)); } catch {} }
+function loadReports() { return []; } // replaced by useAppStore
+function saveReports(r) { appDbSet("reports", r); }
 
 /* ── ReportTaskRow ── */
 function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
@@ -6557,7 +6778,7 @@ function ReportingView({ tasks, onEdit, onToggle, onSaveComment, settings }) {
   const [undoReport, setUndoReport]   = React.useState(null);
   const undoRptTimerRef               = React.useRef(null);
   const [showTrashRpt, setShowTrashRpt] = React.useState(false);
-  const [trashRpt, setTrashRpt]       = React.useState(() => { try { const s=localStorage.getItem("reporting_trash_v1"); return s?JSON.parse(s):[]; } catch { return []; } });
+  const [trashRpt, setTrashRpt] = useAppStore("trash_reporting", []);
   const [showOnlyOpen, setShowOnlyOpen] = React.useState(true);
 
   const saveTrashRpt = t => { try { localStorage.setItem("reporting_trash_v1", JSON.stringify(t)); } catch {} };
@@ -6791,8 +7012,8 @@ function fmtAmountInput(v) {
   if (isNaN(num)) return String(v);
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 }
-function loadPayments() { try { const s = localStorage.getItem(PAYMENTS_KEY); return s ? JSON.parse(s) : []; } catch { return []; } }
-function savePayments(p) { try { localStorage.setItem(PAYMENTS_KEY, JSON.stringify(p)); } catch {} }
+function loadPayments() { return []; } // replaced by useAppStore
+function savePayments(p) { appDbSet("payments", p); }
 
 function PaymentModal({ payment, onSave, onClose, settings }) {
   const [d, setD] = React.useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", priority: "normal", isClientSupplier: false, notes: "" });
@@ -9406,6 +9627,304 @@ function CBSynthese({ dossiers, tasks, settings, onOpen, filterFinanceur, search
   );
 }
 
+/* ════════════════════════════════════════════════════════
+   CAPEX REPORTING CONSOLIDÉ
+   ════════════════════════════════════════════════════════ */
+function CapexReportingView({ settings }) {
+  const [cbDossiers, setCbDossiers] = useState([]);
+  const [echDossiers, setEchDossiers] = useState([]);
+  const [ready, setReady] = useState(false);
+  const [viewYear, setViewYear] = useState(new Date().getFullYear());
+  const [groupBy, setGroupBy] = useState("financeur"); // "financeur"|"type"|"site"
+
+  const fmtE = (v, d=0) => {
+    if (!v&&v!==0) return "—";
+    return new Intl.NumberFormat("fr-FR",{style:"currency",currency:"EUR",minimumFractionDigits:d,maximumFractionDigits:d}).format(v);
+  };
+
+  useEffect(() => {
+    (async () => {
+      // Charger CB depuis IDB
+      try {
+        const db    = await openCBDB();
+        const metas = await idbGetAll(db, CB_STORE_META);
+        setCbDossiers(metas);
+      } catch {}
+      // Charger Échéancier depuis IDB
+      try {
+        const ech = await appDbGet("echeancier");
+        setEchDossiers(Array.isArray(ech) ? ech : []);
+      } catch {}
+      setReady(true);
+    })();
+  }, []);
+
+  const now = new Date();
+  const nowS = now.toISOString().split("T")[0];
+
+  // Calculer les données CB
+  const cbActifs = cbDossiers.filter(d => ["misplace","signature","accepte","montage","negociation"].includes(d.statut));
+  const cbStats = cbActifs.map(d => {
+    const fin0 = (d.financeurs||[])[0]||{};
+    const c0   = calcCBRow({...fin0, montantHT: d.montantHT});
+    const periStep = d.periodicite==="Trimestrielle" ? 3 : 1;
+    const nbLMois  = parseInt(fin0.nbLoyers)||parseInt(d.duree)||0;
+    const nbEch    = Math.round(nbLMois/periStep);
+    const assurance = parseFloat(fin0.assuranceMens)||0;
+    const loyerTTC  = (c0.loyerTTC||0) + assurance;
+    const startD    = d.dateDemarrage ? new Date(d.dateDemarrage) : null;
+    const finDate   = startD && nbLMois ? (() => { const dt=new Date(startD); dt.setMonth(dt.getMonth()+nbLMois); return dt; })() : null;
+    let paid = 0;
+    if (startD && nbEch) {
+      for (let i=0;i<nbEch;i++) {
+        const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+i*periStep);
+        if (dtt.toISOString().split("T")[0]<=nowS) paid++; else break;
+      }
+    }
+    // Loyers de l'année viewYear
+    let loyerAnnee = 0;
+    if (startD && nbEch) {
+      for (let i=0;i<nbEch;i++) {
+        const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+i*periStep);
+        if (dtt.getFullYear()===viewYear) loyerAnnee+=loyerTTC;
+      }
+    }
+    return {
+      d, fin0, c0, loyerTTC, assurance, nbEch, paid, finDate, loyerAnnee,
+      montantHT: parseNum(d.montantHT)||0,
+      financeur: fin0.financeur||"Non défini",
+      type: d.typeInvestissement||"Non défini",
+      site: d.site||"Non défini",
+    };
+  });
+
+  const totalMontantHT = cbStats.reduce((a,s)=>a+s.montantHT,0);
+  const totalLoyersAnnee = cbStats.reduce((a,s)=>a+s.loyerAnnee,0);
+  const totalLoyer = cbStats.reduce((a,s)=>a+s.loyerTTC,0);
+  const encours = cbStats.reduce((a,s)=>{
+    const pct = s.nbEch>0 ? s.paid/s.nbEch : 0;
+    return a + (s.c0.mttc||0)*(1-pct);
+  },0);
+
+  // Années disponibles
+  const years = (() => {
+    const ys = new Set();
+    cbStats.forEach(s => {
+      if (s.d.dateDemarrage) ys.add(new Date(s.d.dateDemarrage).getFullYear());
+      if (s.finDate) ys.add(s.finDate.getFullYear());
+    });
+    ys.add(new Date().getFullYear());
+    return [...ys].sort();
+  })();
+
+  // Groupement
+  const grouped = cbStats.reduce((acc, s) => {
+    const key = groupBy==="financeur" ? s.financeur : groupBy==="type" ? s.type : s.site;
+    if (!acc[key]) acc[key] = { key, items:[], montant:0, loyer:0, loyerAnnee:0 };
+    acc[key].items.push(s);
+    acc[key].montant += s.montantHT;
+    acc[key].loyer   += s.loyerTTC;
+    acc[key].loyerAnnee += s.loyerAnnee;
+    return acc;
+  }, {});
+  const groupEntries = Object.values(grouped).sort((a,b)=>b.montant-a.montant);
+
+  const PALETTE = ["#102A63","#E67E22","#0E7490","#6D28D9","#065F46","#B91C1C","#1D4ED8","#7C3AED"];
+
+  if (!ready) return (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"60vh",flexDirection:"column",gap:16}}>
+      <div style={{width:36,height:36,border:"3px solid #E0E0E0",borderTopColor:"#102A63",borderRadius:"50%"}}/>
+      <div style={{fontFamily:"'Lora',serif",fontSize:13,color:"#888"}}>Chargement des données Capex…</div>
+    </div>
+  );
+
+  return (
+    <div style={{padding:"20px 24px",overflowY:"auto",flex:1,background:"#F7F6F3",minHeight:"100vh"}}>
+
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:12}}>
+        <div>
+          <div style={{fontSize:20,fontWeight:700,fontFamily:"'Lora',serif",color:"#102A63"}}>📊 Reporting Capex consolidé</div>
+          <div style={{fontSize:11,color:"#888",fontFamily:"'DM Mono',monospace",marginTop:2}}>
+            {cbActifs.length} crédit{cbActifs.length>1?"s":""}-bail actif{cbActifs.length>1?"s":""}
+            {echDossiers.length>0?` · ${echDossiers.length} échéancier${echDossiers.length>1?"s":""}` : ""}
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+          {/* Grouper par */}
+          <div style={{display:"flex",background:"#F0F0F0",borderRadius:8,padding:2,gap:2}}>
+            {[{id:"financeur",l:"🏦 Financeur"},{id:"type",l:"🔧 Type"},{id:"site",l:"📍 Site"}].map(g=>(
+              <button key={g.id} onClick={()=>setGroupBy(g.id)}
+                style={{border:"none",borderRadius:6,padding:"5px 12px",fontSize:11,fontFamily:"'Lora',serif",cursor:"pointer",
+                  background:groupBy===g.id?"white":"transparent",color:groupBy===g.id?"#102A63":"#888",
+                  fontWeight:groupBy===g.id?700:400,boxShadow:groupBy===g.id?"0 1px 3px rgba(0,0,0,0.1)":"none"}}>
+                {g.l}
+              </button>
+            ))}
+          </div>
+          {/* Sélecteur année */}
+          <div style={{display:"flex",gap:4}}>
+            {years.slice(-5).map(y=>(
+              <button key={y} onClick={()=>setViewYear(y)}
+                style={{border:`2px solid ${y===viewYear?"#102A63":"#E0E0E0"}`,borderRadius:7,padding:"4px 12px",
+                  fontSize:11,fontFamily:"'DM Mono',monospace",cursor:"pointer",
+                  background:y===viewYear?"#102A63":"white",color:y===viewYear?"white":"#555",fontWeight:y===viewYear?700:400}}>
+                {y}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* KPIs globaux */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:16}}>
+        {[
+          {icon:"💶",label:"Montant total HT",val:fmtE(totalMontantHT),color:"#102A63",bg:"#F0F5FF",bd:"#C7D7FD"},
+          {icon:"📅",label:`Loyers ${viewYear} TTC`,val:fmtE(totalLoyersAnnee),color:"#065F46",bg:"#F0FDF4",bd:"#BBF7D0"},
+          {icon:"🔄",label:"Loyer mensuel total",val:fmtE(totalLoyer),color:"#0E7490",bg:"#ECFEFF",bd:"#A5F3FC"},
+          {icon:"📉",label:"Encours estimé",val:fmtE(encours),color:"#C0392B",bg:"#FEE2E2",bd:"#FECACA"},
+        ].map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:"14px 16px",border:`1px solid ${k.bd}`,boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+            <div style={{fontSize:18,marginBottom:6}}>{k.icon}</div>
+            <div style={{fontSize:18,fontWeight:700,color:k.color,fontFamily:"'Lora',serif",marginBottom:2,fontVariantNumeric:"tabular-nums"}}>{k.val}</div>
+            <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        {/* Graphe barres par groupe */}
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",padding:"16px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+          <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888",letterSpacing:"0.06em",marginBottom:12}}>
+            MONTANT HT PAR {groupBy.toUpperCase()}
+          </div>
+          {groupEntries.length===0 ? <div style={{color:"#CCC",fontSize:11,textAlign:"center",padding:"30px 0"}}>Aucune donnée</div> : (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {groupEntries.map((g,i)=>{
+                const pct = totalMontantHT>0 ? g.montant/totalMontantHT*100 : 0;
+                const color = PALETTE[i%PALETTE.length];
+                return (
+                  <div key={g.key}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3,fontSize:11,fontFamily:"'Lora',serif"}}>
+                      <span style={{color:"#2C3E50",display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{width:8,height:8,borderRadius:2,background:color,flexShrink:0,display:"inline-block"}}/>
+                        {g.key}
+                        <span style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>({g.items.length})</span>
+                      </span>
+                      <span style={{color:"#888",fontFamily:"'DM Mono',monospace",fontSize:10,fontVariantNumeric:"tabular-nums"}}>{fmtE(g.montant)}</span>
+                    </div>
+                    <div style={{height:8,background:"#F0F0F0",borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:4}}/>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Loyers par mois pour l'année */}
+        <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",padding:"16px 18px",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+          <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888",letterSpacing:"0.06em",marginBottom:12}}>
+            LOYERS TTC / MOIS — {viewYear}
+          </div>
+          {(() => {
+            const MONTHS=["J","F","M","A","M","J","J","A","S","O","N","D"];
+            const monthTotals = Array(12).fill(0);
+            cbStats.forEach(s=>{
+              if (!s.d.dateDemarrage||!s.nbEch) return;
+              const startD=new Date(s.d.dateDemarrage), jourR=startD.getDate();
+              for (let i=0;i<s.nbEch;i++) {
+                const dtt=new Date(startD); dtt.setMonth(dtt.getMonth()+i*s.d.periStep||0||1);
+                if (dtt.getFullYear()===viewYear) monthTotals[dtt.getMonth()]+=s.loyerTTC;
+              }
+            });
+            const maxM = Math.max(...monthTotals,1);
+            const curM = now.getFullYear()===viewYear ? now.getMonth() : -1;
+            return (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:3,alignItems:"end",height:100}}>
+                {monthTotals.map((v,mi)=>{
+                  const pct=v/maxM*100;
+                  const isCur=mi===curM;
+                  return (
+                    <div key={mi} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                      <div style={{width:"100%",height:80,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+                        {v>0 ? <div style={{width:"100%",borderRadius:"3px 3px 0 0",height:`${pct}%`,minHeight:3,
+                          background:isCur?"#E67E22":"#102A63",opacity:0.8,border:isCur?"2px solid #E67E22":"none"}}/> :
+                          <div style={{width:"100%",height:2,background:"#F0F0F0",borderRadius:2}}/>}
+                      </div>
+                      <div style={{fontSize:8,color:isCur?"#E67E22":"#AAA",fontFamily:"'Lora',serif",fontWeight:isCur?700:400}}>{MONTHS[mi]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* Tableau détaillé */}
+      <div style={{background:"white",borderRadius:12,border:"1px solid #ECEAE5",overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+        <div style={{padding:"12px 18px",borderBottom:"1px solid #F0F0F0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{fontSize:11,fontFamily:"'DM Mono',monospace",color:"#888",letterSpacing:"0.06em"}}>DÉTAIL DES DOSSIERS</div>
+          <div style={{fontSize:10,color:"#AAA",fontFamily:"'Lora',serif"}}>{cbActifs.length} dossier{cbActifs.length>1?"s":""}</div>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif"}}>
+            <thead>
+              <tr style={{background:"#F8F9FB"}}>
+                {["Dossier","Site","Financeur","Type","Montant HT","Loyer/mois TTC","Loyers "+viewYear,"Avancement","Fin estimée","Statut"].map(h=>(
+                  <th key={h} style={{padding:"8px 12px",textAlign:"left",fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",letterSpacing:"0.06em",borderBottom:"1px solid #ECEAE5",whiteSpace:"nowrap",fontWeight:400}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {cbStats.sort((a,b)=>b.montantHT-a.montantHT).map(s=>{
+                const pct = s.nbEch>0 ? Math.round(s.paid/s.nbEch*100) : 0;
+                const st  = CB_KANBAN_STATUSES.find(x=>x.id===s.d.statut)||{name:s.d.statut,color:"#888",bg:"#EEE"};
+                return (
+                  <tr key={s.d.id} style={{borderBottom:"1px solid #FAFAFA"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#FAFAF8"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <td style={{padding:"8px 12px"}}>
+                      <div style={{fontWeight:600,color:"#102A63"}}>{s.d.intitule||s.d.reference}</div>
+                      <div style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace"}}>{s.d.reference} · {s.d.codeProjet||"—"}</div>
+                    </td>
+                    <td style={{padding:"8px 12px",color:"#555"}}>{s.d.site||"—"}</td>
+                    <td style={{padding:"8px 12px",color:"#555"}}>{s.financeur}</td>
+                    <td style={{padding:"8px 12px",color:"#555"}}>{s.d.typeInvestissement||"—"}</td>
+                    <td style={{padding:"8px 12px",fontWeight:700,color:"#102A63",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtE(s.montantHT)}</td>
+                    <td style={{padding:"8px 12px",color:"#0E7490",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                      {fmtE(s.loyerTTC)}
+                      {s.assurance>0&&<div style={{fontSize:9,color:"#4F46E5"}}>+{fmtE(s.assurance)} ass.</div>}
+                    </td>
+                    <td style={{padding:"8px 12px",color:"#065F46",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{s.loyerAnnee>0?fmtE(s.loyerAnnee):"—"}</td>
+                    <td style={{padding:"8px 12px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <div style={{width:60,height:5,background:"#F0F0F0",borderRadius:3,overflow:"hidden"}}>
+                          <div style={{width:`${pct}%`,height:"100%",background:pct>=100?"#059669":pct>50?"#0E7490":"#102A63",borderRadius:3}}/>
+                        </div>
+                        <span style={{fontSize:10,color:"#888",fontFamily:"'DM Mono',monospace"}}>{pct}%</span>
+                      </div>
+                      <div style={{fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",marginTop:2}}>{s.paid}/{s.nbEch}</div>
+                    </td>
+                    <td style={{padding:"8px 12px",color:"#888",fontFamily:"'DM Mono',monospace",fontSize:10,whiteSpace:"nowrap"}}>
+                      {s.finDate ? s.finDate.toLocaleDateString("fr-FR",{month:"2-digit",year:"numeric"}) : "—"}
+                    </td>
+                    <td style={{padding:"8px 12px"}}>
+                      <span style={{fontSize:9,background:st.bg,color:st.color,borderRadius:4,padding:"2px 7px",fontFamily:"'DM Mono',monospace",whiteSpace:"nowrap"}}>{st.name}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreditBailView({ tasks, onEdit, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers]         = useState([]);
@@ -9865,8 +10384,8 @@ function CreditBailView({ tasks, onEdit, settings }) {
    ÉCHÉANCIER — Storage
    ═══════════════════════════════════════════════════════════════ */
 const ECH_KEY = "echeancier_dossiers_v1";
-function loadEchDossiers()  { try { const s=localStorage.getItem(ECH_KEY); return s?JSON.parse(s):[]; } catch { return []; } }
-function saveEchDossiers(v) { try { localStorage.setItem(ECH_KEY, JSON.stringify(v)); } catch {} }
+function loadEchDossiers() { return []; } // replaced by useAppStore
+function saveEchDossiers(v) { appDbSet("echeancier", v); }
 
 const ECH_NATURE_OPTIONS = ["Prêt amortissable","Prêt in fine","Crédit-bail","Découvert","Affacturage","Prêt d'honneur","Autre"];
 const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement","Gage","Caution bancaire","Aucune","Autre"];
@@ -11282,7 +11801,7 @@ function RCFView({ settings }) {
     setLignes(l);
     if (!_db || !_auth?.currentUser) return;
     const uid = _auth.currentUser.uid;
-    _db.collection("users").doc(uid).collection("data").doc(RCF_KEY).set({ lignes: l });
+    _db.collection("users").doc(uid).collection("data").doc(RCF_KEY).set({ lignes: l }); appDbSet("rcf", { lignes: l });
   };
 
   const delLigne = (id) => save(lignes.filter(l => l.id !== id));
@@ -12016,11 +12535,11 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
 
 /* ─── SUIVI CLIENTS ─── */
 const SUIVI_CLIENT_KEY = "taskmanager_suiviclient_v1";
-function loadSuiviClients() { try { const s=localStorage.getItem(SUIVI_CLIENT_KEY); return s?JSON.parse(s):[]; } catch { return []; } }
-function saveSuiviClients(d) { try { localStorage.setItem(SUIVI_CLIENT_KEY, JSON.stringify(d)); } catch {} }
+function loadSuiviClients() { return []; } // replaced by useAppStore
+function saveSuiviClients(d) { appDbSet("suivi_clients", d); }
 const SUIVI_NOTES_KEY = "taskmanager_suiviclient_notes_v1";
-function loadSuiviNotes() { try { const s=localStorage.getItem(SUIVI_NOTES_KEY); return s?JSON.parse(s):{}; } catch { return {}; } }
-function saveSuiviNotes(d) { try { localStorage.setItem(SUIVI_NOTES_KEY, JSON.stringify(d)); } catch {} }
+function loadSuiviNotes() { return {}; } // replaced by appDbGet
+function saveSuiviNotes(d) { appDbSet("suivi_clients_notes", d); }
 
 
 function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
@@ -12377,8 +12896,8 @@ const T2_PRIOS = [
   { id:"low",    label:"▼ P4", rank:3, color:"#27AE60" },
 ];
 
-function loadTasks2()   { try { const s=localStorage.getItem(TASKS2_KEY);    return s?JSON.parse(s):[]; } catch { return []; } }
-function saveTasks2(d)  { try { localStorage.setItem(TASKS2_KEY, JSON.stringify(d)); } catch {} }
+function loadTasks2() { return []; } // replaced by useAppStore
+function saveTasks2(d)  { appDbSet("tasks2", d); }
 
 function fmtT2Eur(v) {
   if (v===""||v===null||v===undefined) return "—";
@@ -13149,29 +13668,94 @@ function PaymentsView({ settings }) {
 
 function App() {
   const [settings, setSettings] = useState(() => loadSettings());
-  const [tasks, setTasks] = useState(() => { try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : sampleTasks(settings.categories); } catch { return sampleTasks(settings.categories); } });
+  const [tasks, setTasks, tasksReady] = useAppStore("tasks", sampleTasks(settings.categories));
+  const [appReady, setAppReady] = useState(false); // IDB migration done
   const [view, setView] = useState("dashboard");
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
   const [trashSelected, setTrashSelected] = useState([]);
   const getDeletedTasks = () => {
-    try {
-      const deleted = JSON.parse(localStorage.getItem("deletedTasks") || "[]");
-      return deleted.filter(t => Date.now() - t._deletedAt < 30 * 86400000);
-    } catch(e) { return []; }
+    return appDbGet("trash_tasks").then(d => (d||[]).filter(t => Date.now() - t._deletedAt < 30 * 86400000)).catch(()=>[]);
   };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
   const dismissedRef = useRef(new Set());
-  const [undoTask, setUndoTask] = useState(null); // 2) undo
-  const [activeStopwatch, setActiveStopwatch] = useState(null); // 7) global stopwatch
+  const [undoTask, setUndoTask] = useState(null);
+  const [activeStopwatch, setActiveStopwatch] = useState(null);
   const [showDailySummary, setShowDailySummary] = useState(() => { try { var k = "taskmanager_daily_summary_last"; var d = new Date().toISOString().split("T")[0]; return localStorage.getItem(k) !== d; } catch(e) { return true; } });
   const notifTimerRef = useRef(null);
   const isMobile = useIsMobile();
   const closeDailySummary = () => { try { localStorage.setItem("taskmanager_daily_summary_last", new Date().toISOString().split("T")[0]); } catch(e) {} setShowDailySummary(false); };
 
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch {} }, [tasks]);
+  // Migration localStorage → IDB au démarrage (une seule fois)
+  useEffect(() => {
+    (async () => {
+      await migrateAllToIDB();
+      // Recharger settings depuis IDB si disponibles
+      const savedSettings = await appDbGet("settings");
+      if (savedSettings) setSettings(savedSettings);
+      setAppReady(true);
+    })();
+  }, []);
+
+  // ── Notifications push CB au démarrage (après chargement IDB) ──
+  useEffect(() => {
+    if (!appReady) return;
+    (async () => {
+      try {
+        // Demander permission si pas encore accordée
+        if (Notification.permission === "default") {
+          await Notification.requestPermission();
+        }
+        if (Notification.permission !== "granted") return;
+
+        // Charger les dossiers CB depuis IDB
+        const cbDb  = await openCBDB();
+        const metas = await idbGetAll(cbDb, CB_STORE_META);
+        const docs  = await idbGetAll(cbDb, CB_STORE_DOCS);
+        const docMap = Object.fromEntries(docs.map(d=>[d.id,d.data]));
+        const dossiers = metas.map(d=>({...d, documents:Object.fromEntries(Object.entries(d.documents||{}).map(([t,fs])=>[t,(fs||[]).map(f=>({...f,data:f.dataRef?(docMap[f.dataRef]||null):f.data}))]))}));
+
+        const alertM = parseInt(localStorage.getItem("cb_alert_months")||"6");
+        const now    = new Date();
+        const nowS   = now.toISOString().split("T")[0];
+        const alertDate = new Date(now); alertDate.setMonth(alertDate.getMonth()+alertM);
+        const alertDateS = alertDate.toISOString().split("T")[0];
+
+        const actifs = dossiers.filter(d=>["misplace","signature","accepte"].includes(d.statut));
+        const expirant = actifs.filter(d => {
+          const fin0 = (d.financeurs||[])[0]||{};
+          const nbMois = parseInt(fin0.nbLoyers)||parseInt(d.duree)||0;
+          if (!d.dateDemarrage||!nbMois) return false;
+          const dt = new Date(d.dateDemarrage); dt.setMonth(dt.getMonth()+nbMois);
+          const finS = dt.toISOString().split("T")[0];
+          return finS>=nowS && finS<=alertDateS;
+        });
+
+        if (expirant.length > 0) {
+          // Vérifier si notif déjà envoyée aujourd'hui
+          const lastNotif = localStorage.getItem("cb_notif_last");
+          if (lastNotif === nowS) return;
+          localStorage.setItem("cb_notif_last", nowS);
+
+          new Notification(`⚠ ${expirant.length} crédit${expirant.length>1?"s":""}-bail expire${expirant.length>1?"nt":""} bientôt`, {
+            body: expirant.slice(0,3).map(d=>{
+              const fin0=(d.financeurs||[])[0]||{};
+              const nbMois=parseInt(fin0.nbLoyers)||parseInt(d.duree)||0;
+              const dt=new Date(d.dateDemarrage); dt.setMonth(dt.getMonth()+nbMois);
+              const daysLeft=Math.ceil((dt-now)/86400000);
+              return `• ${d.intitule||d.reference} — J-${daysLeft}`;
+            }).join("\n") + (expirant.length>3?`\n… et ${expirant.length-3} autres`:""),
+            icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23102A63'/><text x='16' y='22' text-anchor='middle' font-size='18' fill='white'>📋</text></svg>",
+            tag: "cb-expiration",
+          });
+        }
+      } catch(e) { console.log("Notifications CB:", e.message); }
+    })();
+  }, [appReady]);
+
+  // Tasks auto-saved by useAppStore
 
   // Auto Ma journée : tâches échues ou aujourd'hui
   useEffect(() => {
@@ -13363,7 +13947,7 @@ function App() {
     }
   };
 
-  const saveSettingsFn = s => { setSettings(s); try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch {} };
+  const saveSettingsFn = s => { setSettings(s); appDbSet("settings", s); };
 
   const openNew = (arg = "") => { const pre = (arg && typeof arg === "object") ? arg : { dueDate: arg }; setModal({ id: uid(), title: "", category: "", type: "", dueDate: "", completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], pinned: false, createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false, ...pre }); };
   const openEdit = t => setModal({ ...t });
@@ -13395,6 +13979,7 @@ function App() {
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
     { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
+    { id: "capex",         label: "Capex consolidé",  icon: "📊" },
   { id: "rcf",           label: "RCF",               icon: "↺" },
   { id: "echeancier",    label: "Dettes",            icon: "▦" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
@@ -13500,7 +14085,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.459<br />14/05/26 à 10:34
+          v.0.460<br />14/05/26 à 20:00
         </div>
       </div>
 
@@ -13545,7 +14130,7 @@ function App() {
       )}
 
       {/* Full-width views vs contained views */}
-      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux" || view === "calendar" || view === "creditbail" || view === "echeancier") ? (
+      {(view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "dev" || view === "contentieux" || view === "calendar" || view === "creditbail" || view === "echeancier" || view === "capex") ? (
         <div style={{ width: "100%", flex: 1, display:"flex", flexDirection:"column" }}>
           {view === "tasks" && (
             <TasksView tasks={tasks} onDelete={delTask} onToggle={togTask} onEdit={openEdit} onAdd={openNew} onSaveComment={saveComment} onPin={onPin} fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} settings={settings} />
@@ -13572,6 +14157,9 @@ function App() {
           )}
           {view === "creditbail" && (
             <CreditBailView tasks={tasks} onEdit={openEdit} settings={settings} />
+          )}
+          {view === "capex" && (
+            <CapexReportingView settings={settings} />
           )}
           {view === "echeancier" && (
             <EcheancierView tasks={tasks} settings={settings} />
