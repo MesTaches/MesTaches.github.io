@@ -10554,14 +10554,25 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
       docText = docText.substring(0, half) + '\n[...]\n' + docText.substring(docText.length - half);
     }
     var promptText = 'Expert finance. JSON UNIQUEMENT sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes=max 360.\n\nDOCUMENT:\n' + docText;
-    var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
-      body: JSON.stringify({ model: 'gemma2-9b-it', messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 3000 })
-    });
-    if (!resp.ok) {
+    var models = ['llama-3.1-8b-instant', 'llama3-8b-8192', 'llama-3.3-70b-versatile'];
+    var resp, lastErr;
+    for (var mi = 0; mi < models.length; mi++) {
+      setAiLog('Analyse IA (' + models[mi] + ')...');
+      resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
+        body: JSON.stringify({ model: models[mi], messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 3000 })
+      });
+      if (resp.ok) break;
+      lastErr = resp.status;
       var errBody = ''; try { errBody = await resp.text(); } catch {}
+      if (resp.status === 400 && errBody.includes('decommissioned')) continue; // modèle déprécié → essayer le suivant
+      if (resp.status === 413) continue; // payload trop grand → essayer modèle différent
       throw new Error('Groq erreur ' + resp.status + (errBody ? ' : ' + errBody.substring(0,200) : ''));
+    }
+    if (!resp.ok) {
+      var errBody2 = ''; try { errBody2 = await resp.text(); } catch {}
+      throw new Error('Groq erreur ' + resp.status + (errBody2 ? ' : ' + errBody2.substring(0,200) : ''));
     }
     var data = await resp.json();
     var raw = data.choices[0].message.content.trim();
@@ -14108,7 +14119,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.464<br />14/05/26 à 22:00
+          v.0.465<br />14/05/26 à 22:30
         </div>
       </div>
 
