@@ -11268,29 +11268,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             </div>
           )}
           <button onClick={regenererLocal} style={{background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>🔄 Recalculer l'échéancier</button>
-          <label style={{cursor:"pointer"}}>
-            <input type="file" accept=".csv" style={{display:"none"}}
-              onChange={e=>{
-                const file=e.target.files[0];
-                if(!file) return;
-                const reader=new FileReader();
-                reader.onload=ev=>{
-                  const rows=parseCSVEcheancier(ev.target.result);
-                  if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
-                  const updated={...localDos,lignes:rows};
-                  const calc = window.calcDossierAuto ? window.calcDossierAuto(updated) : updated;
-                  setLocalDos(calc);
-                  saveDossier(calc);
-                  alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                };
-                reader.readAsText(file,"UTF-8");
-              }}
-            />
-            <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px",background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:8,fontSize:11,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:600,cursor:"pointer"}}>
-              📥 Importer un fichier CSV
-            </span>
-          </label>
-          <button onClick={()=>exportEchPDF(localDos)} style={{background:"#E67E22",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>📄 Exporter en PDF</button>
+
           <button onClick={()=>{const c=window.calcDossierAuto?window.calcDossierAuto(localDos):localDos;setLocalDos(c);saveDossier(c);}} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
           <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
             <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>NOTES</div>
@@ -11372,8 +11350,31 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               {/* Toolbar tableau */}
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 12px",background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",flexShrink:0}}>
                 <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""}</div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <label style={{cursor:"pointer",display:"flex"}}>
+                    <input type="file" accept=".csv" style={{display:"none"}}
+                      onChange={e=>{
+                        const file=e.target.files[0]; if(!file) return;
+                        const reader=new FileReader();
+                        reader.onload=ev=>{
+                          const rows=parseCSVEcheancier(ev.target.result);
+                          if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                          const updated={...localDos,lignes:rows};
+                          const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
+                          setLocalDos(calc); saveDossier(calc);
+                          alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                        };
+                        reader.readAsText(file,"UTF-8");
+                      }}
+                    />
+                    <span style={{fontSize:10,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
+                      📥 CSV
+                    </span>
+                  </label>
+                  <button onClick={()=>exportEchPDF(localDos)}
+                    style={{fontSize:10,fontFamily:"'Lora',serif",background:"#FFF7ED",color:"#C2410C",border:"1px solid #FED7AA",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
+                    📄 PDF
+                  </button>
                   <button onClick={()=>setEditMode(m=>!m)}
                     style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
                     {editMode?"✓ Terminer édition":"✏️ Modifier"}
@@ -11440,8 +11441,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                           :<td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow("echeanceGlobale",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
-                        {editMode?<td style={{...TD,textAlign:"right",width:75}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:75}}>{fmtE(row.capitalRestant)}</td>}
+                        {editMode?<td style={{...TD,textAlign:"right",width:92}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
+                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:92,whiteSpace:"nowrap"}}>{fmtE(row.capitalRestant)}</td>}
                         {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
                           <div style={{display:"flex",gap:2,justifyContent:"center"}}>
                             <button title="Insérer une ligne après" onClick={()=>insertRow(i)} style={{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",cursor:"pointer",fontSize:11,borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontWeight:700}}>+</button>
@@ -11457,15 +11458,15 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 </tbody>
                 <tfoot>
                   <tr style={{background:"#F0F4FF",borderTop:"2px solid #102A63",fontWeight:700}}>
-                    <td colSpan={3} style={{padding:"6px 10px",fontSize:11,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap"}}>TOTAL</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalCap)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalInt)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:11,whiteSpace:"nowrap"}}>—</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGar)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGlob)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#AAA",fontFamily:"'Lora',serif",fontSize:11,whiteSpace:"nowrap"}}>—</td>
+                    <td colSpan={3} style={{padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap",fontWeight:700}}>TOTAL</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalCap)}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalInt)}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap"}}>—</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGar)}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGlob)}</td>
+                    <td style={{padding:"2px 4px",textAlign:"right",color:"#AAA",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap"}}>—</td>
                     {editMode&&<td></td>}
                   </tr>
                 </tfoot>
@@ -14185,7 +14186,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.472<br />15/05/26 à 01:15
+          v.0.473<br />15/05/26 à 01:30
         </div>
       </div>
 
