@@ -10396,198 +10396,156 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
    AMORTISSMT = capital + intérêts (mensualité constante)
    CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
 ── */
-function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle,
-  carenceMois, tauxGarantieAnnuel, tauxDiffere, tauxCapita, differeMois, typeAmort,
-  tauxGarantie2, dureeGarantie1, carenceCapitalisee,
-  // Nouveaux paramètres PGE Résilience
-  modePGE, tauxAn1, commForfait, commPeriodeMontant, commPeriodeTaux, dureeDiff) {
-
+function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
+  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0,
+  typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false,
+  differFinMois=0, fluxPeriode=1) {
+  // fluxPeriode : tous les combien de mois un flux est généré (1=mensuel, 3=trimestriel)
+  // Le nombre de lignes est toujours dureeM (en mois), mais les flux ne tombent que
+  // tous les fluxPeriode mois. Les lignes intermédiaires ont echeance=0.
   if (!montant || !dureeM) return [];
 
-  // ── Mode PGE Résilience ──
-  if (modePGE) {
-    return calcEcheancierPGE(montant, tauxAn1||tauxAnnuel, tauxDiffere||tauxAnnuel,
-      tauxAnnuel, dureeM, dateDebut, differeMois||12,
-      commForfait||0, commPeriodeMontant||0, commPeriodeTaux||tauxGarantieAnnuel||0,
-      carenceCapitalisee||false, assuranceMensuelle||0);
-  }
+  const fp = Math.max(1, Math.round(fluxPeriode)); // fréquence de flux (1 ou 3)
 
-  // ── Mode classique (inchangé) ──
-  const parseNum = (v) => parseFloat(String(v||0).replace(/\s/g,'').replace(',','.')) || 0;
-  const avecCapita = (tauxCapita||0) > 0;
-  const r   = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
-  const rD  = (tauxDiffere != null && tauxDiffere !== '') ? ((tauxDiffere||0) / 100) / 12 : r;
-  const rG1 = (tauxGarantieAnnuel||0) > 0 ? ((tauxGarantieAnnuel||0) / 100) / 12 : 0;
-  const rG2 = (tauxGarantie2||0) > 0 ? ((tauxGarantie2||0) / 100) / 12 : rG1;
-  const dG1 = (dureeGarantie1||0) > 0 ? (dureeGarantie1||0) : 999999;
-  const rangCapita = (carenceMois||0) + 1;
-  const offsetAmort = avecCapita ? 1 : 0;
+  // Taux PAR PÉRIODE DE FLUX (pas mensuel)
+  const r   = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 * fp : 0;
+  const rD  = tauxDiffere !== null ? (tauxDiffere / 100) / 12 * fp : r;
+  const rG1 = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 * fp : 0;
+  const rG2 = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 * fp : rG1;
+  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999;
+  const ass  = parseNum(assuranceMensuelle) || 0;
 
-  const capitalCapitalise = avecCapita ? montant * (1 + (tauxCapita||0) / 100) : montant;
-  const capitalApresCarence = (carenceCapitalisee && r > 0 && (carenceMois||0) > 0)
-    ? montant * Math.pow(1 + r, carenceMois||0)
-    : capitalCapitalise;
-  const dureeAmort = dureeM;
-  const pmtBase = r > 0 && dureeAmort > 0
-    ? capitalApresCarence * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
-    : (dureeAmort > 0 ? capitalApresCarence / dureeAmort : 0);
+  // dureeM = nb total de mois
+  // Nombre de périodes de flux actives
+  const nbFluxDifferFin = differFinMois > 0 ? 1 : 0; // 1 seule ligne groupée
+  const nbFluxDiffere   = Math.round(differeMois / fp);
+  const nbFluxAmort     = Math.round((dureeM - differFinMois - differeMois - carenceMois) / fp);
+  const avecCapita      = tauxCapita > 0;
 
-  const dureeTotal = dureeM + (carenceMois||0) + offsetAmort + (differeMois||0);
-  let capital = montant, cumulInterets = 0;
+  let capital = montant;
+  const capitalCapitalise   = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
+  const capitalApresCarence = (carenceCapitalisee && r > 0 && carenceMois > 0)
+    ? montant * Math.pow(1 + r/fp, carenceMois) : capitalCapitalise;
+  const pmtBase = r > 0 && nbFluxAmort > 0
+    ? capitalApresCarence * r * Math.pow(1+r, nbFluxAmort) / (Math.pow(1+r, nbFluxAmort) - 1)
+    : (nbFluxAmort > 0 ? capitalApresCarence / nbFluxAmort : 0);
+
+  // Construire la séquence de phases (une phase = une période de flux)
+  const phases = [];
+  for (let k = 0; k < carenceMois; k++)       phases.push({ type:"carence",   mois:1 });
+  if (differFinMois > 0)                       phases.push({ type:"differFin", mois:differFinMois });
+  if (avecCapita)                              phases.push({ type:"capita",    mois:fp });
+  for (let k = 0; k < nbFluxDiffere; k++)      phases.push({ type:"differe",   mois:fp });
+  for (let k = 0; k < nbFluxAmort; k++)        phases.push({ type:"amort",     mois:fp });
+
   const rows = [];
+  let cumulInterets = 0;
+  let moisEcoule    = 0;
+  const d0 = dateDebut ? new Date(dateDebut) : new Date();
+  let fluxIdx = 0; // compteur pour _dG1
 
-  function addMonths(dateStr, n) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    d.setMonth(d.getMonth() + n);
-    return d.toISOString().split('T')[0];
-  }
+  phases.forEach((ph) => {
+    const moisDebutPhase = moisEcoule;
 
-  for (let i = 1; i <= dureeTotal; i++) {
-    const estCarence  = i <= (carenceMois||0);
-    const estCapita   = avecCapita && i === rangCapita;
-    const estDiffere  = !estCarence && !estCapita && i <= (carenceMois||0) + offsetAmort + (differeMois||0);
-    let interets = 0, amort = 0, echeance = 0, commGar = 0, ass = parseNum(assuranceMensuelle);
-
-    if (estCarence) {
-      if (carenceCapitalisee && r > 0) {
-        interets = capital * r; capital += interets; cumulInterets += interets;
+    // Lignes intermédiaires sans flux (pour fp > 1)
+    if (ph.mois > 1 && ph.type !== "differFin") {
+      for (let m = 1; m < ph.mois; m++) {
+        moisEcoule++;
+        const dt = new Date(d0);
+        dt.setMonth(dt.getMonth() + moisEcoule);
+        const mx = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate();
+        dt.setDate(Math.min(d0.getDate(), mx));
+        rows.push({
+          n: rows.length + 1, date: dt.toISOString().split("T")[0],
+          echeance: 0, capital: 0, interets: 0, cumulInterets,
+          commGarantie: 0, assurance: 0,
+          echeanceGlobale: 0, capitalRestant: capital,
+          estCapita: false, estCarence: ph.type==="carence",
+          estDiffere: ph.type==="differe", estDifferFin: false,
+          estSansFlux: true,
+          paye: false, datePaiement:"", commentaire:""
+        });
       }
-      amort = 0; echeance = 0; commGar = 0;
-    } else if (estCapita) {
-      interets = montant * ((tauxCapita||0) / 100);
-      capital = capitalCapitalise; amort = 0; echeance = 0; commGar = 0;
+    }
+
+    // Ligne de flux principale
+    moisEcoule += (ph.type === "differFin" ? ph.mois : 1);
+    const date = new Date(d0);
+    date.setMonth(date.getMonth() + moisEcoule);
+    const maxDay = new Date(date.getFullYear(), date.getMonth()+1, 0).getDate();
+    date.setDate(Math.min(d0.getDate(), maxDay));
+    const dateStr = date.toISOString().split("T")[0];
+
+    let interets = 0, amort = 0, commGar = 0, echeance = 0;
+    fluxIdx++;
+    const rGi = fluxIdx <= _dG1 ? rG1 : rG2;
+
+    if (ph.type === "carence") {
+      if (carenceCapitalisee && r > 0) {
+        interets = capital * r / fp; // mensuel
+        capital  = capital + interets;
+        cumulInterets += interets;
+      }
+    } else if (ph.type === "differFin") {
+      interets = capital * (tauxAnnuel / 100) / 12 * ph.mois;
+      commGar  = capital * (tauxGarantieAnnuel / 100) / 12 * ph.mois;
+      echeance = interets + commGar + ass;
       cumulInterets += interets;
-    } else if (estDiffere) {
-      const rGd = i <= dG1 ? rG1 : rG2;
-      interets = capital * rD; amort = 0; commGar = capital * rGd;
-      echeance = interets + commGar + ass; cumulInterets += interets;
-    } else {
-      const rGa = i <= dG1 ? rG1 : rG2;
-      interets = capital * r; commGar = capital * rGa;
-      amort = typeAmort === 'capital'
-        ? Math.min(capitalApresCarence / dureeAmort, capital)
+    } else if (ph.type === "capita") {
+      interets = montant * (tauxCapita / 100);
+      capital  = capitalCapitalise;
+      cumulInterets += interets;
+    } else if (ph.type === "differe") {
+      interets = capital * rD;
+      commGar  = capital * rGi;
+      echeance = interets + commGar + ass;
+      cumulInterets += interets;
+    } else { // amort
+      interets = capital * r;
+      commGar  = capital * rGi;
+      amort    = typeAmort === "capital"
+        ? Math.min(capitalApresCarence / nbFluxAmort, capital)
         : Math.min(pmtBase - interets, capital);
-      echeance = amort + interets + commGar + ass; cumulInterets += interets;
-      capital = Math.max(0, capital - amort);
+      echeance = amort + interets + commGar + ass;
+      cumulInterets += interets;
+      capital  = Math.max(0, capital - amort);
     }
 
     rows.push({
-      n: i, date: addMonths(dateDebut, i-1),
-      echeance: Math.round(echeance*100)/100,
-      capital: Math.round(amort*100)/100,
-      interets: Math.round(interets*100)/100,
-      cumulInterets: Math.round(cumulInterets*100)/100,
-      commGarantie: Math.round(commGar*100)/100,
-      assurance: Math.round(ass*100)/100,
-      echeanceGlobale: Math.round((echeance)*100)/100,
-      capitalRestant: Math.round(capital*100)/100,
-      estCarence, estCapita, estDiffere,
-      estSansFlux: !estCarence && !estCapita && !estDiffere && amort===0 && interets===0 && echeance===0,
-      paye: false, datePaiement: '', commentaire: ''
+      n: rows.length + 1, date: dateStr,
+      echeance, capital: amort, interets, cumulInterets,
+      commGarantie: commGar, assurance: ass,
+      echeanceGlobale: echeance, capitalRestant: capital,
+      estCapita:    ph.type === "capita",
+      estCarence:   ph.type === "carence",
+      estDiffere:   ph.type === "differe",
+      estDifferFin: ph.type === "differFin",
+      estSansFlux:  false,
+      paye: false, datePaiement:"", commentaire:""
     });
-  }
-  return rows;
-}
-
-// ── Moteur PGE Résilience ──
-function calcEcheancierPGE(montant, tauxAn1, tauxDiff, tauxAmort, dureeAmort, dateDebut,
-  dureeDiff, commForfait, commPeriodeMontant, commPeriodeTaux,
-  interetsCapitalises, assuranceMensuelle) {
-
-  const periodiciteDef = 'mensuelle'; // toujours mensuel en interne
-  const r1   = (tauxAn1  / 100) / 12;
-  const rD   = (tauxDiff / 100) / 12;
-  const rA   = (tauxAmort/ 100) / 12;
-  const ass  = assuranceMensuelle || 0;
-
-  function addMonths(dateStr, n) {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    d.setMonth(d.getMonth() + n);
-    return d.toISOString().split('T')[0];
-  }
-
-  function commPeriode(cap, idx) {
-    if (commPeriodeMontant > 0) return commPeriodeMontant;
-    if (commPeriodeTaux > 0) return cap * (commPeriodeTaux / 100) / 12;
-    return 0;
-  }
-
-  // Capital après phase 0
-  const inter0 = montant * (tauxAn1 / 100);
-  const capitalP1 = interetsCapitalises ? montant + inter0 : montant;
-
-  // PMT phase 2
-  const pmt = rA > 0 && dureeAmort > 0
-    ? capitalP1 * rA * Math.pow(1+rA, dureeAmort) / (Math.pow(1+rA, dureeAmort) - 1)
-    : (dureeAmort > 0 ? capitalP1 / dureeAmort : 0);
-
-  const rows = [];
-  let cumul = 0;
-
-  // Rang 0 — paiement annuel
-  cumul += inter0;
-  rows.push({
-    n: 0, date: dateDebut || '',
-    echeance: Math.round((inter0 + commForfait)*100)/100,
-    capital: 0,
-    interets: Math.round(inter0*100)/100,
-    cumulInterets: Math.round(cumul*100)/100,
-    commGarantie: Math.round(commForfait*100)/100,
-    assurance: 0,
-    echeanceGlobale: Math.round((inter0 + commForfait)*100)/100,
-    capitalRestant: Math.round(capitalP1*100)/100,
-    estPhase0: true, estCarence: false, estCapita: false, estDiffere: false,
-    estSansFlux: false, paye: false, datePaiement: '', commentaire: ''
   });
 
-  // Phase 1 — différé 12 mois
-  let capital = capitalP1;
-  for (let i = 1; i <= dureeDiff; i++) {
-    const inter = capital * rD;
-    const comm  = commPeriode(capital, i);
-    cumul += inter;
-    rows.push({
-      n: i, date: addMonths(dateDebut, i),
-      echeance: Math.round((inter + comm + ass)*100)/100,
-      capital: 0,
-      interets: Math.round(inter*100)/100,
-      cumulInterets: Math.round(cumul*100)/100,
-      commGarantie: Math.round(comm*100)/100,
-      assurance: ass,
-      echeanceGlobale: Math.round((inter + comm + ass)*100)/100,
-      capitalRestant: Math.round(capital*100)/100,
-      estPhase0: false, estCarence: false, estCapita: false, estDiffere: true,
-      estSansFlux: false, paye: false, datePaiement: '', commentaire: ''
-    });
-  }
-
-  // Phase 2 — amortissement
-  for (let i = 0; i < dureeAmort; i++) {
-    const inter = capital * rA;
-    const amort = Math.min(pmt - inter, capital);
-    const comm  = commPeriode(capital, dureeDiff + 1 + i);
-    cumul += inter;
-    capital = Math.max(0, capital - amort);
-    rows.push({
-      n: dureeDiff + 1 + i, date: addMonths(dateDebut, dureeDiff + 1 + i),
-      echeance: Math.round((amort + inter + comm + ass)*100)/100,
-      capital: Math.round(amort*100)/100,
-      interets: Math.round(inter*100)/100,
-      cumulInterets: Math.round(cumul*100)/100,
-      commGarantie: Math.round(comm*100)/100,
-      assurance: ass,
-      echeanceGlobale: Math.round((amort + inter + comm + ass)*100)/100,
-      capitalRestant: Math.round(capital*100)/100,
-      estPhase0: false, estCarence: false, estCapita: false, estDiffere: false,
-      estSansFlux: false, paye: false, datePaiement: '', commentaire: ''
-    });
-  }
-
   return rows;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ECHEANCIER DOSSIER MODAL (panneau latéral)
+   ═══════════════════════════════════════════════════════════════ */
+/* ── Helpers IA Échéancier ── */
+async function echExtractPdfText(file) {
+  var pdfjsLib = window['pdfjs-dist/build/pdf'];
+  if (!pdfjsLib) throw new Error('PDF.js non chargé');
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  var ab = await file.arrayBuffer();
+  var pdf = await pdfjsLib.getDocument({ data: ab }).promise;
+  var text = '';
+  for (var i = 1; i <= pdf.numPages; i++) {
+    var page = await pdf.getPage(i);
+    var tc = await page.getTextContent();
+    text += tc.items.map(function(it){ return it.str; }).join(' ') + '\n';
+  }
+  return text.trim();
+}
 function echExtractXlsxText(file) {
   return new Promise(function(resolve, reject) {
     var reader = new FileReader();
@@ -10938,67 +10896,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
               </div>
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
-
-                {/* Toggle Mode PGE Résilience */}
-                <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 12px",border:"1px solid #BFDBFE",marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:d.modePGE?10:0}}>
-                    <input type="checkbox" id="modePGEid" checked={d.modePGE||false}
-                      onChange={e=>set("modePGE",e.target.checked)}
-                      style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
-                    <label htmlFor="modePGEid" style={{fontSize:11,fontFamily:"'Lora',serif",color:"#102A63",cursor:"pointer",fontWeight:700,userSelect:"none"}}>
-                      Mode PGE Résilience
-                    </label>
-                    <span style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>— 3 phases : An 1 · Différé · Amortissement</span>
-                  </div>
-
-                  {d.modePGE && (
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-                      <div>
-                        {lbl("Taux An 1 (%/an)", "Taux pour calculer les intérêts de la 1ère année (payés en bloc au rang 0)")}
-                        <input type="text" inputMode="decimal" value={d.tauxAn1||""} onChange={e=>set("tauxAn1",e.target.value)} placeholder="Ex: 2,99" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Taux différé (%/an)", "Taux pendant les 12 mois de différé (phase 1)")}
-                        <input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Ex: 4,14" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Taux amort. (%/an)", "Taux pendant l'amortissement (phase 2)")}
-                        <input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 4,14" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Commission forfaitaire An 1 (€)", "Prélevée en une fois au rang 0 (ex: 50 000)")}
-                        <input type="text" inputMode="decimal" value={d.commForfait||""} onChange={e=>set("commForfait",e.target.value)} placeholder="Ex: 50000" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Commission périodique (€/période)", "Montant fixe par mensualité ou trimestre (ex: 7 107,77)")}
-                        <input type="text" inputMode="decimal" value={d.commPeriodeMontant||""} onChange={e=>set("commPeriodeMontant",e.target.value)} placeholder="Ex: 7107,77 ou laisser vide" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Commission périodique (%/an)", "Ou en % annuel sur capital restant (si pas de montant fixe)")}
-                        <input type="text" inputMode="decimal" value={d.commPeriodeTaux||""} onChange={e=>set("commPeriodeTaux",e.target.value)} placeholder="Ex: 0,83 ou laisser vide" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div>
-                        {lbl("Durée différé (mois)", "Durée de la phase de différé après le rang 0 (généralement 12 mois)")}
-                        <input type="text" inputMode="numeric" value={d.dureeDiff||""} onChange={e=>set("dureeDiff",e.target.value)} placeholder="12" style={{ border:"1px solid #BFDBFE",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                      </div>
-                      <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"3px 0"}}>
-                        <input type="checkbox" id="interCapPGEid" checked={d.carenceCapitalisee||false}
-                          onChange={e=>set("carenceCapitalisee",e.target.checked)}
-                          style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
-                        <label htmlFor="interCapPGEid" style={{fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",cursor:"pointer",userSelect:"none"}}>
-                          Intérêts An 1 <strong>capitalisés</strong> au capital
-                          {(d.carenceCapitalisee && parseNum(d.montant)>0 && parseNum(d.tauxAn1||d.tauxAnnuel)>0) &&
-                            <span style={{color:"#102A63",fontWeight:700,marginLeft:6}}>
-                              {"≈ +" + Math.round(parseNum(d.montant)*parseNum(d.tauxAn1||d.tauxAnnuel)/100).toLocaleString("fr-FR") + " €"}
-                            </span>}
-                        </label>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Champs taux classiques (cachés en mode PGE) */}
-                {!d.modePGE && <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
                   <div>{lbl("Taux d'intérêt (%/an)", "Taux annuel des intérêts (ex: 5,02 pour PGE). Hors commission de garantie.")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                   <div>{lbl("Taux différé (%/an)", "Si différent du taux principal pendant le différé. Laisser vide si identique.")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                   <div>{lbl("Taux capitalisation (%/an)", "PGE : taux auquel les intérêts sont capitalisés au capital (rang 1).")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
@@ -11007,7 +10905,6 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                   <div>{lbl("Durée com. garantie 1 (mois)", "Nb de mois pour la commission 1. Au-delà, commission 2 s'applique.")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                 </div>
               </div>
-              }{/* fin !modePGE taux classiques */}
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,alignItems:"start" }}>
@@ -11335,7 +11232,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t,tip)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em",display:"flex",alignItems:"center",gap:4}}>{t}{tip&&<span title={tip} style={{cursor:"help",color:"#CCC",fontSize:11,fontFamily:"sans-serif",letterSpacing:0}}>ⓘ</span>}</div>;
   const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false,parseInt(localDos.differFin)||0,parseInt(localDos.fluxPeriode)||1,localDos.modePGE||false,parseNum(localDos.tauxAn1)||0,parseNum(localDos.commForfait)||0,parseNum(localDos.commPeriodeMontant)||0,parseNum(localDos.commPeriodeTaux)||0,parseInt(localDos.dureeDiff)||12);
+    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false,parseInt(localDos.differFin)||0,parseInt(localDos.fluxPeriode)||1);
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
     const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
   };
@@ -14339,7 +14236,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.480<br />14/05/26 à 23:55
+          v.0.479<br />15/05/26 à 11:00
         </div>
       </div>
 
