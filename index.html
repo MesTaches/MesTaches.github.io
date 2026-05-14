@@ -319,21 +319,114 @@ async function fbLogout() {
   <script type="text/javascript">
 /* ── Import CSV Échéancier ── */
 function parseCSVEcheancier(text) {
-  const parseNum = (s) => {
-    if (!s || s.trim() === '' || s.trim() === '0,00') return 0;
-    return parseFloat(s.replace(/\s/g, '').replace(/,/g, '.')) || 0;
+  const pN = (s) => {
+    if (s === null || s === undefined || String(s).trim() === '') return 0;
+    return parseFloat(String(s).replace(/\s/g,'').replace(/\u00a0/g,'').replace(/,/g,'.')) || 0;
   };
-  const parseDate = (s) => {
+  const pD = (s) => {
     if (!s) return '';
-    s = s.trim();
-    // Format JJ/MM/AAAA → AAAA-MM-JJ
-    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    s = String(s).trim();
+    const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
     return s;
   };
 
-  const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+  const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim());
   if (lines.length < 2) return [];
+  const sep = lines[0].includes(';') ? ';' : ',';
+  const headers = lines[0].split(sep).map(h => h.replace(/^\uFEFF/,'').trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+
+  const fi = (tests) => headers.findIndex(h => tests.some(t => h.includes(t)));
+  const idx = {
+    rang:     fi(['rang','n°','n']),
+    statut:   fi(['statut']),
+    type:     fi(['type']),
+    date:     fi(['date']),
+    capAvant: fi(['capital restant du avant','capital restant d']).concat ? fi(['capital restant d']) : fi(['capital restant d']),
+    capRbt:   fi(['rembourse','remboursé','capital rembours']),
+    inter:    fi(['interets','intérêts','int']).concat ? fi(['interet']) : fi(['interet']),
+    cumul:    fi(['cumul']),
+    comm:     fi(['commission','garantie']),
+    ech:      fi(['echeance global','échéance global','echeance']),
+    capApres: fi(['apres','après','capital restant du apres']),
+    capOui:   fi(['capitalise','capitalisé']),
+  };
+
+  // Re-map avec des clés propres
+  const H = headers;
+  const I = {
+    rang:     H.findIndex(h=>h==='rang'||h==='n\u00b0'||h==='n'||h==='rang'),
+    statut:   H.findIndex(h=>h.includes('statut')),
+    type:     H.findIndex(h=>h==='type'),
+    date:     H.findIndex(h=>h.includes('date')),
+    capAvant: H.findIndex(h=>h.includes('capital restant d') && !h.includes('apres') && !h.includes('apr')),
+    capRbt:   H.findIndex(h=>h.includes('rembours')),
+    inter:    H.findIndex(h=>(h.includes('interet')||h.includes('inter')) && !h.includes('cumul') && !h.includes('capitalise')),
+    cumul:    H.findIndex(h=>h.includes('cumul')),
+    comm:     H.findIndex(h=>h.includes('commission') || h.includes('garantie')),
+    ech:      H.findIndex(h=>h.includes('echeance') || h.includes('echéance')),
+    capApres: H.findIndex(h=>(h.includes('apres')||h.includes('après')) && h.includes('capital')),
+    capOui:   H.findIndex(h=>h.includes('capitalise')||h.includes('capitalis')),
+  };
+
+  const rows = [];
+  let cumulCalc = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g,''));
+    if (cols.length < 3) continue;
+
+    const date    = pD(I.date >= 0 ? cols[I.date] : '');
+    const capital = Math.abs(pN(I.capRbt  >= 0 ? cols[I.capRbt]  : '0'));
+    const inter   = Math.abs(pN(I.inter   >= 0 ? cols[I.inter]   : '0'));
+    const comm    = Math.abs(pN(I.comm    >= 0 ? cols[I.comm]    : '0'));
+    const ech     = Math.abs(pN(I.ech     >= 0 ? cols[I.ech]     : '0'));
+    const capR    = Math.abs(pN(I.capApres >= 0 ? cols[I.capApres] : (I.capAvant >= 0 ? cols[I.capAvant] : '0')));
+    const capOui  = I.capOui >= 0 ? (cols[I.capOui]||'').toLowerCase().trim() === 'oui' : false;
+    const statut  = I.statut >= 0 ? (cols[I.statut]||'').trim() : '';
+    const type    = I.type   >= 0 ? (cols[I.type]  ||'').trim() : '';
+
+    cumulCalc += inter;
+
+    // Type de ligne basé sur la colonne Type
+    const typeL = type.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const estDifferFin = typeL.includes('fine') || typeL.includes('in fine');
+    const estDiffere   = typeL.includes('differe') || typeL.includes('différé');
+    const estCapita    = capOui;
+    const estSansFlux  = capital === 0 && inter === 0 && comm === 0 && ech === 0 && !estDifferFin && !estCapita;
+    const estCarence   = estSansFlux && !estDiffere;
+    const estAmort     = !estDifferFin && !estDiffere && !estCapita && !estSansFlux && capital > 0;
+
+    rows.push({
+      n: rows.length + 1,
+      date, statut, type,
+      echeance: ech, capital, interets: inter,
+      cumulInterets: cumulCalc,
+      commGarantie: comm, assurance: 0,
+      echeanceGlobale: ech, capitalRestant: capR,
+      estCapita, estCarence, estDiffere,
+      estDifferFin, estSansFlux, estAmort,
+      paye: false, datePaiement: '', commentaire: ''
+    });
+  }
+  return rows;
+}
+
+// Parser XLSX via SheetJS (utilisé quand le fichier est .xlsx)
+function parseXLSXEcheancier(arrayBuffer) {
+  try {
+    const wb = XLSX.read(arrayBuffer, { type:'array', cellDates:true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_csv(ws, { dateNF:'DD/MM/YYYY', FS:';' });
+    return parseCSVEcheancier(data);
+  } catch(e) {
+    console.error('XLSX parse error:', e);
+    return [];
+  }
+}
 
   // Détecter le séparateur ; ou ,
   const sep = lines[0].includes(';') ? ';' : ',';
@@ -11046,7 +11139,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                   <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace" }}>
                     <thead style={{ position:"sticky",top:0,zIndex:2 }}>
                       <tr style={{ background:"#102A63" }}>
-                        {["N°","Date","Type","Échéance","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Échéance globale","Capital restant dû"].map(h=>(
+                        {["N°","Date","Statut","Type","Échéance","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Échéance globale","Capital restant dû"].map(h=>(
                           <th key={h} style={{ padding:"7px 8px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:h==="N°"||h==="Payé"||h==="Type"?"center":"right",fontSize:10,fontFamily:"'Lora',serif" }}>{h}</th>
                         ))}
                       </tr>
@@ -11062,6 +11155,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                             outline: isNext ? "1px solid #FDE68A" : "none",
                             opacity: row.estSansFlux ? 0.55 : 1 }}>
                             <td style={{ padding:"5px 8px",textAlign:"center",color:"#888",fontWeight:600,fontSize:11,fontFamily:"'DM Mono',monospace" }}>{row.n}</td>
+                            <td style={{ padding:"5px 8px",fontSize:9,color:"#6B7280",fontFamily:"'Lora',serif",whiteSpace:"nowrap",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis" }}>{row.statut||""}</td>
                             <td style={{ padding:"5px 8px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'DM Mono',monospace",fontSize:11 }}>
                               {row.date.split("-").reverse().join("/")}
                             </td>
@@ -11399,23 +11493,37 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 <div style={{fontSize:10,color:"#888",fontFamily:"'Lora',serif"}}>{lignes.length} ligne{lignes.length>1?"s":""}</div>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   <label style={{cursor:"pointer",display:"flex"}}>
-                    <input type="file" accept=".csv" style={{display:"none"}}
+                    <input type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}}
                       onChange={e=>{
                         const file=e.target.files[0]; if(!file) return;
-                        const reader=new FileReader();
-                        reader.onload=ev=>{
-                          const rows=parseCSVEcheancier(ev.target.result);
-                          if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
-                          const updated={...localDos,lignes:rows};
-                          const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
-                          setLocalDos(calc); saveDossier(calc);
-                          alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                        };
-                        reader.readAsText(file,"UTF-8");
+                        const ext=file.name.split('.').pop().toLowerCase();
+                        if(ext==='xlsx'||ext==='xls'){
+                          const reader=new FileReader();
+                          reader.onload=ev=>{
+                            const rows=parseXLSXEcheancier(ev.target.result);
+                            if(rows.length===0){alert("Aucune ligne trouvée dans le fichier.");return;}
+                            const updated={...localDos,lignes:rows};
+                            const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
+                            setLocalDos(calc); saveDossier(calc);
+                            alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                          };
+                          reader.readAsArrayBuffer(file);
+                        } else {
+                          const reader=new FileReader();
+                          reader.onload=ev=>{
+                            const rows=parseCSVEcheancier(ev.target.result);
+                            if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
+                            const updated={...localDos,lignes:rows};
+                            const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
+                            setLocalDos(calc); saveDossier(calc);
+                            alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
+                          };
+                          reader.readAsText(file,"UTF-8");
+                        }
                       }}
                     />
                     <span style={{fontSize:10,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
-                      📥 CSV
+                      📥 CSV/Excel
                     </span>
                   </label>
                   <button onClick={()=>exportEchPDF(localDos)}
@@ -11505,7 +11613,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 </tbody>
                 <tfoot>
                   <tr style={{background:"#F0F4FF",borderTop:"2px solid #102A63",fontWeight:700}}>
-                    <td colSpan={3} style={{padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap",fontWeight:700}}>TOTAL</td>
+                    <td colSpan={4} style={{padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap",fontWeight:700}}>TOTAL</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalCap)}</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalInt)}</td>
@@ -11532,12 +11640,154 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   if (!lg.length) return dos;
   var nowS = new Date().toISOString().split("T")[0];
 
-  // ── Montant = somme versements ou somme capital remboursé ──
+  // ── Montant = somme versements ou capital initial (1ère ligne) ──
   var totalVers = (dos.versements||[]).reduce(function(a,v){
     return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
   }, 0);
   var totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
   var montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
+
+  // ── Durée totale ──
+  var dureeAuto = String(lg.length);
+
+  // ── Date fin ──
+  var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
+  var dateFin = dates.length ? dates[dates.length-1] : "";
+
+  // ── Calcul des taux PAR STATUT ──
+  // Regrouper les lignes par statut
+  var statuts = {};
+  lg.forEach(function(r) {
+    var st = r.statut || "default";
+    if (!statuts[st]) statuts[st] = [];
+    statuts[st].push(r);
+  });
+
+  // Pour chaque statut, calculer taux intérêt et commission implicites
+  // depuis les lignes avec flux (intérêts > 0)
+  var tauxParStatut = {};
+  var commParStatut = {};
+
+  Object.keys(statuts).forEach(function(st) {
+    var lines = statuts[st];
+    // Lignes avec intérêts réels (non nuls, non capitalisés)
+    var lignesFlux = lines.filter(function(r){
+      return (r.interets||0) > 0 && !r.estCapita && !r.estSansFlux;
+    });
+
+    if (lignesFlux.length > 0) {
+      // Taux mensuel implicite = médiane de (intérêts / capital_avant)
+      var tauxMens = [];
+      lignesFlux.forEach(function(r) {
+        var capAvant = (r.capitalRestant||0) + (r.capital||0);
+        // Si capAvant est 0, essayer capital restant dû de la ligne
+        if (capAvant <= 0) capAvant = r.capitalRestant||0;
+        if (capAvant > 0 && (r.interets||0) > 0) {
+          tauxMens.push(r.interets / capAvant);
+        }
+      });
+      if (tauxMens.length > 0) {
+        tauxMens.sort(function(a,b){return a-b;});
+        var med = tauxMens[Math.floor(tauxMens.length/2)];
+        // Détecter si les intérêts sont calculés sur N mois (in fine)
+        // En comparant avec la durée de la phase
+        tauxParStatut[st] = (med * 12 * 100).toFixed(4);
+      }
+
+      // Commission garantie implicite
+      var commMens = [];
+      lignesFlux.forEach(function(r) {
+        var capAvant = (r.capitalRestant||0) + (r.capital||0);
+        if (capAvant <= 0) capAvant = r.capitalRestant||0;
+        if (capAvant > 0 && (r.commGarantie||0) > 0) {
+          commMens.push(r.commGarantie / capAvant);
+        }
+      });
+      if (commMens.length > 0) {
+        commMens.sort(function(a,b){return a-b;});
+        var medC = commMens[Math.floor(commMens.length/2)];
+        commParStatut[st] = (medC * 12 * 100).toFixed(4);
+      }
+    }
+
+    // Cas spécial : In fine — les intérêts couvrent toute la période
+    var lignesInFine = lines.filter(function(r){ return r.estDifferFin; });
+    if (lignesInFine.length > 0 && lignesFlux.length === 0) {
+      // Chercher une ligne In fine avec intérêts
+      var lfin = lignesInFine.find(function(r){ return (r.interets||0) > 0; });
+      if (lfin) {
+        // Compter le nb de mois de la phase in fine
+        var nbMoisFin = lines.length;
+        var capB = lfin.capitalRestant + (lfin.capital||0);
+        if (capB <= 0) capB = lg[0] ? (lg[0].capitalRestant||0) : 0;
+        if (capB > 0) {
+          var tauxInFine = (lfin.interets / capB / nbMoisFin * 12 * 100).toFixed(4);
+          tauxParStatut[st] = tauxInFine;
+        }
+        if ((lfin.commGarantie||0) > 0 && capB > 0) {
+          commParStatut[st] = (lfin.commGarantie / capB / nbMoisFin * 12 * 100).toFixed(4);
+        }
+      }
+    }
+  });
+
+  // Taux principal = taux du statut ayant le plus de lignes d'amortissement
+  var statutPrincipal = Object.keys(statuts).reduce(function(best, st) {
+    var n = statuts[st].filter(function(r){ return r.estAmort || (r.capital||0) > 0; }).length;
+    var nb = best ? statuts[best].filter(function(r){ return r.estAmort || (r.capital||0) > 0; }).length : 0;
+    return n > nb ? st : best;
+  }, null);
+
+  var tauxAuto = "";
+  var commAuto = "";
+  var tauxDiffereAuto = "";
+
+  if (statutPrincipal && tauxParStatut[statutPrincipal]) {
+    tauxAuto = tauxParStatut[statutPrincipal];
+    commAuto = commParStatut[statutPrincipal] || "";
+  }
+
+  // Taux différé = taux du statut sans capital remboursé (différé pur)
+  Object.keys(statuts).forEach(function(st) {
+    if (st !== statutPrincipal) {
+      var hasDiffere = statuts[st].some(function(r){ return r.estDiffere; });
+      var hasAmort   = statuts[st].some(function(r){ return r.estAmort || (r.capital||0) > 0; });
+      if (hasDiffere && !hasAmort && tauxParStatut[st]) {
+        tauxDiffereAuto = tauxParStatut[st];
+      }
+    }
+  });
+
+  // Construire le résumé des taux par statut pour affichage
+  var tauxResume = Object.keys(tauxParStatut).map(function(st) {
+    return st + ": " + tauxParStatut[st] + "%" +
+      (commParStatut[st] ? " (gar. " + commParStatut[st] + "%)" : "");
+  }).join(" | ");
+
+  // ── Capital restant actuel ──
+  var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
+  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+
+  // RÈGLE : ne jamais écraser un champ déjà saisi
+  var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
+  var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
+  var hasGarantieSaisie = dos.tauxGarantie && String(dos.tauxGarantie).trim() !== "";
+  var hasTauxDifSaisi   = dos.tauxDiffere && String(dos.tauxDiffere).trim() !== "";
+
+  return Object.assign({}, dos, {
+    montant:      hasMontantSaisi ? dos.montant : (String(montantAuto) || dos.montant),
+    duree:        dureeAuto,
+    tauxAnnuel:   hasTauxSaisi ? dos.tauxAnnuel : (tauxAuto || ""),
+    tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || dos.tauxDiffere || ""),
+    tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
+    dateFin:      dateFin,
+    capitalRestantActuel: capitalRestantActuel,
+    totalVersements: totalVers || montantAuto,
+    tauxResume: tauxResume, // pour affichage info dans l'interface
+    tauxParStatut: tauxParStatut,
+    commParStatut: commParStatut,
+  });
+};
 
   // ── Durée totale ──
   var dureeAuto = String(lg.length);
@@ -11860,6 +12110,20 @@ function EcheancierView({ tasks, settings }) {
                             <div style={{ fontSize:12,fontWeight:600,color:f.color||"#2C3E50",fontFamily:"'Lora',serif" }}>{f.val}</div>
                           </div>
                         ))}
+                      </div>
+                      {/* Taux par statut (si import avec plusieurs statuts) */}
+                      {dos.tauxParStatut && Object.keys(dos.tauxParStatut).length > 0 && (
+                        <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:12 }}>
+                          {Object.entries(dos.tauxParStatut).map(([st,tx])=>(
+                            <div key={st} style={{ background:"#F0F5FF",borderRadius:6,padding:"4px 10px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63" }}>
+                              <span style={{ fontWeight:700 }}>{st}</span>
+                              <span style={{ color:"#888",margin:"0 4px" }}>·</span>
+                              <span style={{ color:"#C0392B",fontWeight:600 }}>{Number(tx).toFixed(2)} %</span>
+                              {dos.commParStatut?.[st] && <span style={{ color:"#6D28D9",marginLeft:6 }}>gar. {Number(dos.commParStatut[st]).toFixed(2)} %</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       </div>
                       {/* Timeline structure + position actuelle */}
                       {totalT > 0 && (
@@ -14236,7 +14500,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.479<br />15/05/26 à 11:00
+          v.0.481<br />15/05/26 à 12:30
         </div>
       </div>
 
