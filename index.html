@@ -3966,7 +3966,7 @@ function exportTasksPDF(tasks, settings) {
     +(overdue.length?tbl(overdue,'🔴 EN RETARD','#C0392B'):'')
     +Object.keys(byType).map(function(k){return tbl(byType[k],'📋 '+k.toUpperCase(),'#102A63');}).join('')
     +(done.length?tbl(done,'✅ TERMINÉES','#27AE60'):'')
-    +'<div class="ftr"><span>Export Tâches — '+now+'</span><span>v.0.240</span></div></div>';
+    +'<div class="ftr"><span>Export Tâches — '+now+'</span><span>v.0.242</span></div></div>';
   buildPDFWindow(html,'Export Tâches');
 }
 
@@ -4007,7 +4007,7 @@ function exportSuiviClientPDF(clients, notes, suiviTypes) {
     +'</div>'
     +cards(open,'📂 DOSSIERS OUVERTS','#102A63')
     +cards(closed,'✅ DOSSIERS CLÔTURÉS','#27AE60')
-    +'<div class="ftr"><span>Export Suivi Clients — '+now+'</span><span>v.0.240</span></div></div>';
+    +'<div class="ftr"><span>Export Suivi Clients — '+now+'</span><span>v.0.242</span></div></div>';
   buildPDFWindow(html,'Export Suivi Clients');
 }
 
@@ -4046,7 +4046,7 @@ function exportCotationPDF(cotations) {
     +ST.map(function(st){return'<div class="stat"><div class="sv" style="color:'+st.color+';font-size:18px">'+((groups[st.id]||[]).length)+'</div><div class="sl">'+st.label.toUpperCase()+'</div></div>';}).join('')
     +'</div>'
     +ST.map(function(st){return tbl(groups[st.id]||[],st);}).join('')
-    +'<div class="ftr"><span>Export Cotations — '+now+'</span><span>v.0.240</span></div></div>';
+    +'<div class="ftr"><span>Export Cotations — '+now+'</span><span>v.0.242</span></div></div>';
   buildPDFWindow(html,'Export Cotations');
 }
 
@@ -9878,7 +9878,7 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
    CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
 ── */
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0) {
+  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false) {
   if (!montant || !dureeM) return [];
   // dureeM = durée de remboursement du capital uniquement
   // dureeTotal = durée complète incluant toutes les périodes
@@ -9907,10 +9907,14 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
 
   // Durée amortissement = total - carence - (1 si capita) - différé
   const capitalCapitalise = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
+  // Si carence avec capitalisation, calculer le capital après carence
+  const capitalApresCarence = carenceCapitalisee && r > 0 && carenceMois > 0
+    ? montant * Math.pow(1 + r, carenceMois)
+    : capitalCapitalise;
   const dureeAmort = dureeM; // dureeM = durée amortissement saisie directement
   const pmtBase    = r > 0 && dureeAmort > 0
-    ? capitalCapitalise * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
-    : (dureeAmort > 0 ? capitalCapitalise / dureeAmort : 0);
+    ? capitalApresCarence * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
+    : (dureeAmort > 0 ? capitalApresCarence / dureeAmort : 0);
 
   const rows = [];
   let cumulInterets = 0;
@@ -9930,9 +9934,15 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
     estDiffere = !estCarence && !estCapita && i <= carenceMois + offsetAmort + differeMois;
 
     if (estCarence) {
-      // Carence : aucun paiement, capital reste à montant initial
-      interets = 0; amort = 0; echeance = 0; commGar = 0;
-      // capital inchangé (= montant)
+      // Carence : aucun paiement sortant
+      if (carenceCapitalisee && r > 0) {
+        // Intérêts calculés et ajoutés au capital (reportés)
+        interets = capital * r;
+        capital = capital + interets; // capitalisation mensuelle
+        cumulInterets += interets;
+      }
+      amort = 0; echeance = 0; commGar = 0;
+      // interets affiché dans colonne mais écheance = 0
     } else if (estCapita) {
       // Capitalisation : les intérêts s'ajoutent au capital, aucun flux sortant
       interets = montant * (tauxCapita / 100);
@@ -10019,7 +10029,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
       else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') combinedText += '\n\n[EXCEL: ' + f.name + ']\n' + await echExtractXlsxText(f);
     }
     setAiLog('Analyse Groq en cours...');
-    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + combinedText.substring(0, 28000);
+    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\ncarenceCapitalisee=true UNIQUEMENT si le contrat mentionne explicitement que les interets sont capitalises ou composes pendant la periode de carence/differe (ex: "interets capitalises", "interets composes annuellement", "interets ajoutes au capital"). carenceCapitalisee=false si le contrat parle d interets reportes, differes, ou si aucune capitalisation n est mentionnee. Baser cette valeur UNIQUEMENT sur le texte du contrat fourni. Si info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + combinedText.substring(0, 28000);
     var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
@@ -10046,6 +10056,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
         differe: p.differe ? String(p.differe) : prev.differe,
         tauxDiffere: p.tauxDiffere ? String(p.tauxDiffere) : prev.tauxDiffere,
         tauxGarantie: p.tauxGarantie ? String(p.tauxGarantie) : prev.tauxGarantie,
+        carenceCapitalisee: p.carenceCapitalisee !== undefined ? p.carenceCapitalisee : prev.carenceCapitalisee,
         objet: p.objet || prev.objet,
         notes: p.notes || prev.notes,
         lignes: (p.lignes && p.lignes.length > 1) ? p.lignes.map(function(l, i) {
@@ -10094,7 +10105,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
       parseInt(d.carence)||0, parseNum(d.tauxGarantie)||0,
       d.tauxDiffere ? parseNum(d.tauxDiffere) : null,
       parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites",
-      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0
+      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0, d.carenceCapitalisee||false
     );
     // Préserver les données de paiement si déjà saisies
     const merged = rows.map((r,i) => {
@@ -10286,6 +10297,19 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
                     <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
+                  </div>
+                  <div style={{ gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"2px 0 4px",borderBottom:"1px solid #F0F0F0",marginBottom:2 }}>
+                    <input type="checkbox" id="carCapId" checked={d.carenceCapitalisee||false}
+                      onChange={e=>set("carenceCapitalisee",e.target.checked)}
+                      style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
+                    <label htmlFor="carCapId" style={{fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",cursor:"pointer",userSelect:"none"}}>
+                      Intérêts de carence <strong>capitalisés</strong> au capital
+                    </label>
+                    {(d.carenceCapitalisee && parseInt(d.carence) > 0 && parseNum(d.montant) > 0 && parseNum(d.tauxAnnuel) > 0) && (
+                      <span style={{fontSize:10,color:"#102A63",fontWeight:700,fontFamily:"'Lora',serif",marginLeft:4}}>
+                        ≈ +{Math.round(parseNum(d.montant) * parseNum(d.tauxAnnuel)/100/12 * parseInt(d.carence)).toLocaleString("fr-FR")} €
+                      </span>
+                    )}
                   </div>
                   <div>{lbl("Différé add. (mois) — intérêts seuls")}
                     <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
@@ -10576,7 +10600,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em"}}>{t}</div>;
   const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0);
+    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false);
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
     const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
   };
@@ -13479,7 +13503,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.456<br />14/05/26 à 19:30
+          v.0.456<br />11/05/26 à 10:30
         </div>
       </div>
 
