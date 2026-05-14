@@ -11186,7 +11186,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const inpL={border:"1px solid #E8E8E8",borderRadius:6,padding:"5px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white"};
   const lblL=(t,tip)=><div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",marginBottom:3,letterSpacing:"0.06em",display:"flex",alignItems:"center",gap:4}}>{t}{tip&&<span title={tip} style={{cursor:"help",color:"#CCC",fontSize:11,fontFamily:"sans-serif",letterSpacing:0}}>ⓘ</span>}</div>;
   const regenererLocal=()=>{
-    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false);
+    const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false,parseInt(localDos.differFin)||0);
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
     const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
   };
@@ -13777,7 +13777,10 @@ function App() {
   const [showTrash, setShowTrash] = useState(false);
   const [trashSelected, setTrashSelected] = useState([]);
   const getDeletedTasks = () => {
-    return appDbGet("trash_tasks").then(d => (d||[]).filter(t => Date.now() - t._deletedAt < 30 * 86400000)).catch(()=>[]);
+    try {
+      const deleted = JSON.parse(localStorage.getItem("deletedTasks") || "[]");
+      return deleted.filter(t => Date.now() - t._deletedAt < 30 * 86400000);
+    } catch { return []; }
   };
   const [modal, setModal] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -14186,7 +14189,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.476<br />15/05/26 à 09:30
+          v.0.477<br />15/05/26 à 10:00
         </div>
       </div>
 
