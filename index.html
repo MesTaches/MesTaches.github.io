@@ -11235,13 +11235,13 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           </div>
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
               <div>{lblL("Taux d'intérêt (%/an)", "Taux annuel des intérêts (ex: 5,02 pour PGE). Hors commission de garantie.")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="0,73" style={inpL}/></div>
               <div>{lblL("Taux différé (%/an)", "Si le taux d'intérêt pendant le différé est différent du taux principal. Laisser vide si identique.")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
+              <div>{lblL("Taux capitalisation (%/an)", "PGE uniquement : taux auquel les intérêts sont capitalisés au capital lors du rang 1.")}<input type="text" value={localDos.tauxCapita||""} onChange={e=>setL("tauxCapita",e.target.value)} placeholder="0,5" style={inpL}/></div>
               <div>{lblL("Com. garantie (%/an)", "Commission prélevée sur le capital restant dû en plus des intérêts (ex: 1,39 pour PGE).")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="1,00" style={inpL}/></div>
               <div>{lblL("Com. garantie 2 (%/an)", "Commission alternative si elle change après un certain nombre de mois.")}<input type="text" value={localDos.tauxGarantie2||""} onChange={e=>setL("tauxGarantie2",e.target.value)} placeholder="2,00" style={inpL}/></div>
-              <div style={{gridColumn:"1/-1"}}>{lblL("Durée com. gar. 1 (mois)", "Nombre de mois pendant lesquels la commission 1 s'applique. Laisser vide si pas de changement.")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inpL}/></div>
-              <div>{lblL("Taux capitalisation (%/an)", "PGE uniquement : taux auquel les intérêts sont capitalisés au capital lors du rang 1.")}<input type="text" value={localDos.tauxCapita||""} onChange={e=>setL("tauxCapita",e.target.value)} placeholder="0,5" style={inpL}/></div>
+              <div>{lblL("Durée com. gar. 1 (mois)", "Nombre de mois pendant lesquels la commission 1 s'applique. Laisser vide si pas de changement.")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inpL}/></div>
             </div>
           </div>
           <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
@@ -11457,15 +11457,15 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 </tbody>
                 <tfoot>
                   <tr style={{background:"#F0F4FF",borderTop:"2px solid #102A63",fontWeight:700}}>
-                    <td colSpan={3} style={{padding:"6px 10px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em"}}>TOTAL</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(totalCap)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(totalInt)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#888",fontFamily:"'DM Mono',monospace",fontSize:11}}>—</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(totalGar)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700}}>{fmtE(totalGlob)}</td>
-                    <td style={{padding:"6px 8px",textAlign:"right",color:"#AAA",fontFamily:"'DM Mono',monospace",fontSize:11}}>—</td>
+                    <td colSpan={3} style={{padding:"6px 10px",fontSize:11,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap"}}>TOTAL</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalCap)}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalInt)}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:11,whiteSpace:"nowrap"}}>—</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGar)}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalGlob)}</td>
+                    <td style={{padding:"6px 8px",textAlign:"right",color:"#AAA",fontFamily:"'Lora',serif",fontSize:11,whiteSpace:"nowrap"}}>—</td>
                     {editMode&&<td></td>}
                   </tr>
                 </tfoot>
@@ -14185,7 +14185,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.471<br />15/05/26 à 01:00
+          v.0.472<br />15/05/26 à 01:15
         </div>
       </div>
 
