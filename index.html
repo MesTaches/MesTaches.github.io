@@ -6001,9 +6001,18 @@ function SettingsView({ settings, onSave }) {
           {tab === "general" && <>
             <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace", marginBottom: 14 }}>Réglages généraux de l'application et de l'assistant IA.</div>
             <div style={{ background: "#FAFAFA", border: "1px solid #ECEAE5", borderRadius: 12, padding: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API GROQ</div>
-              <input type="password" value={s.groqKey || ""} onChange={e => setS({ ...s, groqKey: e.target.value })} placeholder="gsk_…" style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
-              <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé gratuite disponible sur console.groq.com</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API GROQ (IA)</div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <input type="password" value={s.groqKey || ""} onChange={e => setS({ ...s, groqKey: e.target.value })} placeholder="gsk_…" style={{ ...S.input, flex:1, fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
+                {s.groqKey ? (
+                  <span style={{ fontSize:10, color:"#059669", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", flexShrink:0 }}>✓ Clé renseignée</span>
+                ) : (
+                  <span style={{ fontSize:10, color:"#E67E22", fontFamily:"'DM Mono',monospace", whiteSpace:"nowrap", flexShrink:0 }}>⚠ Non renseignée</span>
+                )}
+              </div>
+              <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>
+                Clé gratuite sur <strong>console.groq.com</strong> — utilisée par l'assistant IA (import échéancier, résumés, etc.) — stockée uniquement dans votre navigateur
+              </div>
               <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:10, fontSize:11, fontFamily:"'Lora',serif", color:"#555", userSelect:"none" }}>
                 <input type="checkbox" checked={s.showAiDebug||false} onChange={e=>setS({...s, showAiDebug:e.target.checked})} style={{ accentColor:"#102A63", cursor:"pointer", width:14, height:14 }} />
                 Afficher le statut de l'assistant IA (mode debug)
@@ -6227,20 +6236,7 @@ function SettingsView({ settings, onSave }) {
           </>}
         </div>
         <div style={{ padding: "14px 24px", borderTop: "1px solid #F0F0F0" }}>
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.06em", marginBottom: 6 }}>🤖 CLÉ API GROQ (ASSISTANT IA — gratuit sur console.groq.com)</div>
-            <input type="password" value={s.groqKey || ""} onChange={e => setS({ ...s, groqKey: e.target.value })}
-              placeholder="gsk_…"
-              style={{ ...S.input, width: "100%", fontSize: 11, fontFamily: "'DM Mono',monospace", letterSpacing: "0.05em" }} />
-            <div style={{ fontSize: 9, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 4 }}>Clé gratuite disponible sur console.groq.com — stockée uniquement dans votre navigateur</div>
-            <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", marginTop:10,
-                            fontSize:11, fontFamily:"'Lora',serif", color:"#555", userSelect:"none" }}>
-              <input type="checkbox" checked={s.showAiDebug||false}
-                     onChange={e=>setS({...s, showAiDebug:e.target.checked})}
-                     style={{ accentColor:"#102A63", cursor:"pointer", width:14, height:14 }} />
-              Afficher le statut de l'assistant IA (mode debug)
-            </label>
-          </div>
+
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button onClick={() => setS(JSON.parse(JSON.stringify(DEFAULT_SETTINGS)))} style={{ ...S.btn("#F0F0F0", "#666") }}>Réinitialiser</button>
             <button onClick={() => { onSave(s); }} style={{ ...S.btn("#102A63") }}>✓ Enregistrer</button>
@@ -10609,7 +10605,7 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
   const [aiLog, setAiLog] = React.useState("");
   const openFilePicker = () => { var i2=document.createElement('input'); i2.type='file'; i2.multiple=true; i2.accept='.pdf,.xlsx,.xls,.csv'; i2.onchange=function(e){ setAiFiles(function(p){ return p.concat(Array.from(e.target.files)); }); setAiError(""); }; i2.click(); };
   const removeAiFile = (idx) => setAiFiles(function(p){ return p.filter(function(_,j){ return j!==idx; }); });
-  const runAI = () => { var key=(loadSettings().groqKey||'').trim(); if(!key){setAiError('Clé Groq manquante dans Paramètres.');return;} if(aiFiles.length===0){setAiError('Déposez au moins un fichier.');return;} echAnalyzeWithAI(aiFiles,key,setAiLog,setAiError,setAiLoading,setD,setAiOpen,setAiFiles); };
+  const runAI = () => { var key=(settings?.groqKey||'').trim(); if(!key){setAiError('Clé API Groq manquante. Renseignez-la dans Paramètres → Général.');return;} if(aiFiles.length===0){setAiError('Déposez au moins un fichier.');return;} echAnalyzeWithAI(aiFiles,key,setAiLog,setAiError,setAiLoading,setD,setAiOpen,setAiFiles); };
   
   const lbl = (t) => <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",
     marginBottom:3,letterSpacing:"0.06em",textTransform:"uppercase" }}>{t}</div>;
@@ -14085,7 +14081,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.460<br />14/05/26 à 20:00
+          v.0.461<br />14/05/26 à 20:30
         </div>
       </div>
 
