@@ -10545,21 +10545,24 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
       if (ext === 'pdf') combinedText += '\n\n[PDF: ' + f.name + ']\n' + await echExtractPdfText(f);
       else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') combinedText += '\n\n[EXCEL: ' + f.name + ']\n' + await echExtractXlsxText(f);
     }
-    setAiLog('Analyse Groq en cours...');
-    // Découpage intelligent : garder début (infos contrat) + fin (dernières échéances)
-    var MAX_CHARS = 11000;
+    setAiLog('Analyse IA en cours...');
+    // Découpage : garder début (infos contrat) + fin (échéances)
+    var MAX_CHARS = 6000;
     var docText = combinedText;
     if (docText.length > MAX_CHARS) {
       var half = Math.floor(MAX_CHARS / 2);
-      docText = docText.substring(0, half) + '\n\n[... document tronqué ...]\n\n' + docText.substring(docText.length - half);
+      docText = docText.substring(0, half) + '\n[...]\n' + docText.substring(docText.length - half);
     }
-    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\ncarenceCapitalisee=true UNIQUEMENT si interets capitalises/composes ajoutes au capital. false sinon. Si info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + docText;
+    var promptText = 'Expert finance. JSON UNIQUEMENT sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes=max 360.\n\nDOCUMENT:\n' + docText;
     var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
-      body: JSON.stringify({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 4000 })
+      body: JSON.stringify({ model: 'gemma2-9b-it', messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 3000 })
     });
-    if (!resp.ok) throw new Error('Groq error ' + resp.status);
+    if (!resp.ok) {
+      var errBody = ''; try { errBody = await resp.text(); } catch {}
+      throw new Error('Groq erreur ' + resp.status + (errBody ? ' : ' + errBody.substring(0,200) : ''));
+    }
     var data = await resp.json();
     var raw = data.choices[0].message.content.trim();
     var f1 = raw.indexOf('{'), l1 = raw.lastIndexOf('}');
@@ -14105,7 +14108,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.463<br />14/05/26 à 21:30
+          v.0.464<br />14/05/26 à 22:00
         </div>
       </div>
 
