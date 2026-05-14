@@ -2087,7 +2087,7 @@ function RichTextAiBtn({ editorRef, groqKey, onChange }) {
         })
       });
       const data = await resp.json();
-      const result = data.choices?.[0]?.message?.content?.trim();
+      const result = data.(choices && choices[0])?.message?.content?.trim();
       if (result && editorRef.current) {
         editorRef.current.innerHTML = result;
         onChange(result);
@@ -2273,7 +2273,7 @@ function AIAssistant({ text, onApply, onClose, settings }) {
       });
       if (!resp.ok) { const err = await resp.json().catch(() => ({})); setResult(`Erreur API (${resp.status}) : ${err?.error?.message || "inconnue"}`); setLoading(false); return; }
       const data = await resp.json();
-      setResult(data.choices?.[0]?.message?.content || "Erreur : réponse vide.");
+      setResult(data.(choices && choices[0])?.message?.content || "Erreur : réponse vide.");
     } catch (e) { setResult(`Erreur de connexion : ${e.message}`); }
     setLoading(false);
   };
@@ -3755,7 +3755,7 @@ function MeetingsView({ onAddTask }) {
     try {
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
       const data = await resp.json();
-      setRecap(data.choices?.[0]?.message?.content || "Erreur de génération.");
+      setRecap(data.(choices && choices[0])?.message?.content || "Erreur de génération.");
     } catch { setRecap("Erreur de connexion."); }
     setLoadingRecap(false);
   };
@@ -11768,27 +11768,6 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
   var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
 
-  // RÈGLE : ne jamais écraser un champ déjà saisi
-  var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
-  var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
-  var hasGarantieSaisie = dos.tauxGarantie && String(dos.tauxGarantie).trim() !== "";
-  var hasTauxDifSaisi   = dos.tauxDiffere && String(dos.tauxDiffere).trim() !== "";
-
-  return Object.assign({}, dos, {
-    montant:      hasMontantSaisi ? dos.montant : (String(montantAuto) || dos.montant),
-    duree:        dureeAuto,
-    tauxAnnuel:   hasTauxSaisi ? dos.tauxAnnuel : (tauxAuto || ""),
-    tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || dos.tauxDiffere || ""),
-    tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
-    dateFin:      dateFin,
-    capitalRestantActuel: capitalRestantActuel,
-    totalVersements: totalVers || montantAuto,
-    tauxResume: tauxResume, // pour affichage info dans l'interface
-    tauxParStatut: tauxParStatut,
-    commParStatut: commParStatut,
-  });
-};
-
   // ── Durée totale ──
   var dureeAuto = String(lg.length);
 
@@ -11850,19 +11829,23 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
 
   // RÈGLE : ne jamais écraser un champ déjà saisi par l'utilisateur
-  // On ne recalcule que les champs vides ou purement dérivés (dateFin, capitalRestantActuel)
   var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
   var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
   var hasGarantieSaisie = dos.tauxGarantie && String(dos.tauxGarantie).trim() !== "";
+  var hasTauxDifSaisi   = dos.tauxDiffere && String(dos.tauxDiffere).trim() !== "";
 
   return Object.assign({}, dos, {
     montant:      hasMontantSaisi ? dos.montant : (String(montantAuto) || dos.montant),
     duree:        dureeAuto,
     tauxAnnuel:   hasTauxSaisi ? dos.tauxAnnuel : (tauxAuto || ""),
+    tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || dos.tauxDiffere || ""),
     tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
     dateFin:      dateFin,
     capitalRestantActuel: capitalRestantActuel,
     totalVersements: totalVers || montantAuto,
+    tauxResume: tauxResume,
+    tauxParStatut: tauxParStatut,
+    commParStatut: commParStatut,
   });
 };
 function EcheancierView({ tasks, settings }) {
@@ -12119,7 +12102,7 @@ function EcheancierView({ tasks, settings }) {
                               <span style={{ fontWeight:700 }}>{st}</span>
                               <span style={{ color:"#888",margin:"0 4px" }}>·</span>
                               <span style={{ color:"#C0392B",fontWeight:600 }}>{Number(tx).toFixed(2)} %</span>
-                              {dos.commParStatut?.[st] && <span style={{ color:"#6D28D9",marginLeft:6 }}>gar. {Number(dos.commParStatut[st]).toFixed(2)} %</span>}
+                              {dos.commParStatut && dos.commParStatut[st] && <span style={{ color:"#6D28D9",marginLeft:6 }}>gar. {Number(dos.commParStatut[st]).toFixed(2)} %</span>}
                             </div>
                           ))}
                         </div>
@@ -12754,7 +12737,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
       setAiDebug("📨 HTTP " + resp.status);
       if (!resp.ok) { const err = await resp.json().catch(()=>({})); setAiDebug("❌ Erreur API " + resp.status + " : " + (err?.error?.message||"")); setAiLoading(false); return; }
       const data = await resp.json();
-      const raw = data.choices?.[0]?.message?.content?.trim() || "";
+      const raw = data.(choices && choices[0])?.message?.content?.trim() || "";
       setAiDebug("✅ Groq OK : " + raw.substring(0,120));
       let parsed = {};
       try { parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim()); } catch(e) { setAiDebug("⚠️ JSON.parse échoué sur: " + raw.substring(0,80)); }
@@ -14500,7 +14483,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.481<br />15/05/26 à 12:30
+          v.0.482<br />15/05/26 à 13:00
         </div>
       </div>
 
