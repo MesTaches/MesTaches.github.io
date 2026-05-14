@@ -3966,7 +3966,7 @@ function exportTasksPDF(tasks, settings) {
     +(overdue.length?tbl(overdue,'🔴 EN RETARD','#C0392B'):'')
     +Object.keys(byType).map(function(k){return tbl(byType[k],'📋 '+k.toUpperCase(),'#102A63');}).join('')
     +(done.length?tbl(done,'✅ TERMINÉES','#27AE60'):'')
-    +'<div class="ftr"><span>Export Tâches — '+now+'</span><span>v.0.242</span></div></div>';
+    +'<div class="ftr"><span>Export Tâches — '+now+'</span><span>v.0.240</span></div></div>';
   buildPDFWindow(html,'Export Tâches');
 }
 
@@ -4007,7 +4007,7 @@ function exportSuiviClientPDF(clients, notes, suiviTypes) {
     +'</div>'
     +cards(open,'📂 DOSSIERS OUVERTS','#102A63')
     +cards(closed,'✅ DOSSIERS CLÔTURÉS','#27AE60')
-    +'<div class="ftr"><span>Export Suivi Clients — '+now+'</span><span>v.0.242</span></div></div>';
+    +'<div class="ftr"><span>Export Suivi Clients — '+now+'</span><span>v.0.240</span></div></div>';
   buildPDFWindow(html,'Export Suivi Clients');
 }
 
@@ -4046,7 +4046,7 @@ function exportCotationPDF(cotations) {
     +ST.map(function(st){return'<div class="stat"><div class="sv" style="color:'+st.color+';font-size:18px">'+((groups[st.id]||[]).length)+'</div><div class="sl">'+st.label.toUpperCase()+'</div></div>';}).join('')
     +'</div>'
     +ST.map(function(st){return tbl(groups[st.id]||[],st);}).join('')
-    +'<div class="ftr"><span>Export Cotations — '+now+'</span><span>v.0.242</span></div></div>';
+    +'<div class="ftr"><span>Export Cotations — '+now+'</span><span>v.0.240</span></div></div>';
   buildPDFWindow(html,'Export Cotations');
 }
 
@@ -9907,8 +9907,7 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
 
   // Durée amortissement = total - carence - (1 si capita) - différé
   const capitalCapitalise = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
-  // Si carence avec capitalisation, calculer le capital après carence
-  const capitalApresCarence = carenceCapitalisee && r > 0 && carenceMois > 0
+  const capitalApresCarence = (carenceCapitalisee && r > 0 && carenceMois > 0)
     ? montant * Math.pow(1 + r, carenceMois)
     : capitalCapitalise;
   const dureeAmort = dureeM; // dureeM = durée amortissement saisie directement
@@ -9934,15 +9933,14 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
     estDiffere = !estCarence && !estCapita && i <= carenceMois + offsetAmort + differeMois;
 
     if (estCarence) {
-      // Carence : aucun paiement sortant
       if (carenceCapitalisee && r > 0) {
-        // Intérêts calculés et ajoutés au capital (reportés)
         interets = capital * r;
-        capital = capital + interets; // capitalisation mensuelle
+        capital = capital + interets;
         cumulInterets += interets;
+      } else {
+        interets = 0;
       }
       amort = 0; echeance = 0; commGar = 0;
-      // interets affiché dans colonne mais écheance = 0
     } else if (estCapita) {
       // Capitalisation : les intérêts s'ajoutent au capital, aucun flux sortant
       interets = montant * (tauxCapita / 100);
@@ -10029,7 +10027,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
       else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') combinedText += '\n\n[EXCEL: ' + f.name + ']\n' + await echExtractXlsxText(f);
     }
     setAiLog('Analyse Groq en cours...');
-    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\ncarenceCapitalisee=true UNIQUEMENT si le contrat mentionne explicitement que les interets sont capitalises ou composes pendant la periode de carence/differe (ex: "interets capitalises", "interets composes annuellement", "interets ajoutes au capital"). carenceCapitalisee=false si le contrat parle d interets reportes, differes, ou si aucune capitalisation n est mentionnee. Baser cette valeur UNIQUEMENT sur le texte du contrat fourni. Si info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + combinedText.substring(0, 28000);
+    var promptText = 'Tu es expert en finance dentreprise. Analyse ces documents et reponds UNIQUEMENT avec un JSON valide sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\ncarenceCapitalisee=true UNIQUEMENT si le contrat indique explicitement que les interets sont capitalises/composes et ajoutes au capital pendant la carence. false si interets reportes/differes sans ajout au capital, ou si non mentionne. Baser sur le texte du contrat uniquement. Si info absente: null ou 0. lignes = tableau echeances (max 360).\n\nDOCUMENTS:\n' + combinedText.substring(0, 28000);
     var resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
@@ -10056,7 +10054,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
         differe: p.differe ? String(p.differe) : prev.differe,
         tauxDiffere: p.tauxDiffere ? String(p.tauxDiffere) : prev.tauxDiffere,
         tauxGarantie: p.tauxGarantie ? String(p.tauxGarantie) : prev.tauxGarantie,
-        carenceCapitalisee: p.carenceCapitalisee !== undefined ? p.carenceCapitalisee : prev.carenceCapitalisee,
+        carenceCapitalisee: p.carenceCapitalisee !== undefined ? Boolean(p.carenceCapitalisee) : prev.carenceCapitalisee,
         objet: p.objet || prev.objet,
         notes: p.notes || prev.notes,
         lignes: (p.lignes && p.lignes.length > 1) ? p.lignes.map(function(l, i) {
@@ -10298,18 +10296,17 @@ function EchDossierPanel({ dossier, onSave, onClose }) {
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
                   </div>
-                  <div style={{ gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"2px 0 4px",borderBottom:"1px solid #F0F0F0",marginBottom:2 }}>
+                  <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"3px 0"}}>
                     <input type="checkbox" id="carCapId" checked={d.carenceCapitalisee||false}
                       onChange={e=>set("carenceCapitalisee",e.target.checked)}
                       style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
                     <label htmlFor="carCapId" style={{fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",cursor:"pointer",userSelect:"none"}}>
                       Intérêts de carence <strong>capitalisés</strong> au capital
+                      {(d.carenceCapitalisee && parseInt(d.carence)>0 && parseNum(d.montant)>0 && parseNum(d.tauxAnnuel)>0) &&
+                        <span style={{color:"#102A63",fontWeight:700,marginLeft:6}}>
+                          {"≈ +" + Math.round(parseNum(d.montant)*parseNum(d.tauxAnnuel)/100/12*parseInt(d.carence)).toLocaleString("fr-FR") + " €"}
+                        </span>}
                     </label>
-                    {(d.carenceCapitalisee && parseInt(d.carence) > 0 && parseNum(d.montant) > 0 && parseNum(d.tauxAnnuel) > 0) && (
-                      <span style={{fontSize:10,color:"#102A63",fontWeight:700,fontFamily:"'Lora',serif",marginLeft:4}}>
-                        ≈ +{Math.round(parseNum(d.montant) * parseNum(d.tauxAnnuel)/100/12 * parseInt(d.carence)).toLocaleString("fr-FR")} €
-                      </span>
-                    )}
                   </div>
                   <div>{lbl("Différé add. (mois) — intérêts seuls")}
                     <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
@@ -13503,7 +13500,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.456<br />11/05/26 à 10:30
+          v.0.459<br />14/05/26 à 10:34
         </div>
       </div>
 
