@@ -10456,7 +10456,7 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
       amort = 0; echeance = 0; commGar = 0;
     } else if (estCapita) {
       interets = montant * ((tauxCapita||0) / 100);
-      capital = capitalCapitalise; amort = 0; ech = 0; commGar = 0;
+      capital = capitalCapitalise; amort = 0; echeance = 0; commGar = 0;
       cumulInterets += interets;
     } else if (estDiffere) {
       const rGd = i <= dG1 ? rG1 : rG2;
