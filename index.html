@@ -10728,10 +10728,13 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   const fmtP = (v) => isNaN(Number(v))?"—":Number(v).toFixed(4)+" %";
 
   const lignes = d.lignes||[];
-  const totalEch = lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0);
-  const totalInt = lignes.reduce((a,r)=>a+(r.interets||0),0);
-  const totalGar = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
-  const totalAss = lignes.reduce((a,r)=>a+(r.assurance||0),0);
+  const totalEch  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0);
+  const totalInt  = lignes.reduce((a,r)=>a+(r.interets||0),0);
+  const totalCap  = lignes.reduce((a,r)=>a+(r.capital||0),0);
+  const totalGar  = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
+  const totalAss  = lignes.reduce((a,r)=>a+(r.assurance||0),0);
+  const totalAss2 = totalAss;
+  const totalGlob = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
   const nowPanel = new Date().toISOString().split("T")[0];
   const paye     = lignes.filter(r=>r.date<=nowPanel).length;
   const restant  = lignes.length - paye;
@@ -14189,7 +14192,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.477<br />15/05/26 à 10:00
+          v.0.478<br />15/05/26 à 10:30
         </div>
       </div>
 
