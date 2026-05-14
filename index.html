@@ -10399,38 +10399,34 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
   carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false) {
   if (!montant || !dureeM) return [];
-  // dureeM = durée de remboursement du capital uniquement
-  // dureeTotal = durée complète incluant toutes les périodes
-  const _avecCap = tauxCapita > 0;
-  const dureeTotal = dureeM + carenceMois + (_avecCap ? 1 : 0) + differeMois;
 
-  const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
-  const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r; // taux pendant différé
-  const rG1  = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
-  const rG2  = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
-  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999; // si pas de durée saisie → taux 1 toujours
-  const ass  = parseNum(assuranceMensuelle) || 0;
-
-  // Structure chronologique :
-  // Rangs 1..carenceMois          → Carence (aucun paiement, capital = montant)
-  // Rang  carenceMois+1           → Capitalisation (si avecCapita, capital += intérêts)
-  // Rangs carenceMois+2..+differ  → Différé (intérêts seulement)
-  // Rangs suivants                → Amortissement
-  const avecCapita  = tauxCapita > 0;
-  const rangCapita  = avecCapita ? carenceMois + 1 : -1;
+  // dureeM = durée TOTALE du contrat (carence + différé + amortissement = dureeM)
+  // dureeAmort = durée réelle d'amortissement du capital
+  const _avecCap   = tauxCapita > 0;
+  const avecCapita = _avecCap;
+  const rangCapita = avecCapita ? carenceMois + 1 : -1;
   const offsetAmort = avecCapita ? 1 : 0;
 
-  // Capital AVANT capitalisation = montant initial
-  // Capital APRÈS capitalisation = montant * (1 + tauxCapita/100)
-  let capital = montant; // démarre au montant initial
+  // Durée totale = telle que saisie (pas d'ajout de carence/différé)
+  const dureeTotal = dureeM + (_avecCap ? 1 : 0); // seule la capitalisation ajoute 1 rang
 
-  // Durée amortissement = total - carence - (1 si capita) - différé
-  const capitalCapitalise = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
+  // Durée amortissement = durée totale moins les périodes spéciales
+  const dureeAmort = Math.max(1, dureeM - carenceMois - differeMois);
+
+  const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
+  const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r;
+  const rG1  = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 : 0;
+  const rG2  = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 : rG1;
+  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999;
+  const ass  = parseNum(assuranceMensuelle) || 0;
+
+  let capital = montant;
+
+  const capitalCapitalise   = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
   const capitalApresCarence = (carenceCapitalisee && r > 0 && carenceMois > 0)
     ? montant * Math.pow(1 + r, carenceMois)
     : capitalCapitalise;
-  const dureeAmort = dureeM; // dureeM = durée amortissement saisie directement
-  const pmtBase    = r > 0 && dureeAmort > 0
+  const pmtBase = r > 0 && dureeAmort > 0
     ? capitalApresCarence * r * Math.pow(1+r, dureeAmort) / (Math.pow(1+r, dureeAmort) - 1)
     : (dureeAmort > 0 ? capitalApresCarence / dureeAmort : 0);
 
@@ -10545,29 +10541,71 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
       if (ext === 'pdf') combinedText += '\n\n[PDF: ' + f.name + ']\n' + await echExtractPdfText(f);
       else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') combinedText += '\n\n[EXCEL: ' + f.name + ']\n' + await echExtractXlsxText(f);
     }
-    setAiLog('Analyse IA en cours...');
-    // Découpage : garder début (infos contrat) + fin (échéances)
-    var MAX_CHARS = 6000;
-    var docText = combinedText;
-    if (docText.length > MAX_CHARS) {
-      var half = Math.floor(MAX_CHARS / 2);
-      docText = docText.substring(0, half) + '\n[...]\n' + docText.substring(docText.length - half);
+
+    // ── Compression intelligente du tableau d'amortissement ──
+    // Détecter les lignes qui ressemblent à des échéances (date + montants)
+    function compressAmortTable(text) {
+      var lines = text.split('\n');
+      var tableLines = [];
+      var metaLines = [];
+      var dateRe = /\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4}[\/\-]\d{2}[\/\-]\d{2}/;
+      var amountRe = /[\d\s]{3,}[,\.]\d{2}/;
+      lines.forEach(function(l) {
+        var clean = l.trim();
+        if (!clean) return;
+        // Ligne de tableau = contient une date ET au moins 2 montants
+        var amounts = clean.match(/[\d\s]+[,\.][\d]{2}/g) || [];
+        if (dateRe.test(clean) && amounts.length >= 2) {
+          // Compresser : extraire date et montants uniquement
+          var date = (clean.match(dateRe) || [''])[0];
+          var nums = amounts.map(function(a){ return a.replace(/\s/g,''); });
+          tableLines.push(date + '|' + nums.join('|'));
+        } else if (clean.length > 5 && tableLines.length === 0) {
+          // Avant le tableau = métadonnées du contrat
+          metaLines.push(clean);
+        }
+      });
+      return {
+        meta: metaLines.join('\n').substring(0, 2000),
+        table: tableLines.join('\n') // CSV compact : date|capital|intérêts|total...
+      };
     }
-    var promptText = 'Expert finance. JSON UNIQUEMENT sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes=max 360.\n\nDOCUMENT:\n' + docText;
+
+    var compressed = compressAmortTable(combinedText);
+    var hasTable = compressed.table.length > 50;
+
+    setAiLog('Analyse IA en cours...');
+
+    // Construire le prompt avec les données compressées
+    var docText;
+    if (hasTable) {
+      // Tableau détecté : envoyer métadonnées + tableau CSV complet
+      docText = '=INFOS CONTRAT=\n' + compressed.meta +
+                '\n\n=TABLEAU AMORTISSEMENT (date|col1|col2|...)=\n' + compressed.table;
+    } else {
+      // Pas de tableau détecté : découpage classique début+fin
+      var MAX = 6000, half = Math.floor(MAX/2);
+      docText = combinedText.length > MAX
+        ? combinedText.substring(0, half) + '\n[...]\n' + combinedText.substring(combinedText.length - half)
+        : combinedText;
+    }
+
+    var promptText = 'Expert finance. JSON UNIQUEMENT sans markdown:\n{"intitule":"","creancier":"","reference":"","montant":0,"tauxAnnuel":0,"duree":0,"dateDebut":"YYYY-MM-DD","typeAmort":"annuites","assuranceMensuelle":0,"carence":0,"differe":0,"tauxDiffere":null,"tauxGarantie":0,"carenceCapitalisee":false,"objet":"","notes":"","lignes":[{"date":"YYYY-MM-DD","capital":0,"interets":0,"assurance":0,"total":0}]}\nSi info absente: null ou 0. lignes=TOUTES les échéances du tableau (max 360). Pour chaque ligne du tableau: date=date échéance, capital=amortissement capital, interets=intérêts+commissions, total=montant total dû.\n\nDOCUMENT:\n' + docText;
+
     var models = ['llama-3.1-8b-instant', 'llama3-8b-8192', 'llama-3.3-70b-versatile'];
     var resp, lastErr;
     for (var mi = 0; mi < models.length; mi++) {
-      setAiLog('Analyse IA (' + models[mi] + ')...');
+      setAiLog('Analyse IA (' + models[mi] + ')' + (hasTable ? ' — ' + compressed.table.split('\n').length + ' lignes détectées' : '') + '...');
       resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + groqKey },
-        body: JSON.stringify({ model: models[mi], messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 3000 })
+        body: JSON.stringify({ model: models[mi], messages: [{ role: 'user', content: promptText }], temperature: 0.1, max_tokens: 6000 })
       });
       if (resp.ok) break;
       lastErr = resp.status;
       var errBody = ''; try { errBody = await resp.text(); } catch {}
-      if (resp.status === 400 && errBody.includes('decommissioned')) continue; // modèle déprécié → essayer le suivant
-      if (resp.status === 413) continue; // payload trop grand → essayer modèle différent
+      if (resp.status === 400 && errBody.includes('decommissioned')) continue;
+      if (resp.status === 413) continue;
       throw new Error('Groq erreur ' + resp.status + (errBody ? ' : ' + errBody.substring(0,200) : ''));
     }
     if (!resp.ok) {
@@ -10961,11 +10999,11 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                   <div>Renseignez les informations du prêt puis cliquez sur "Générer l'échéancier"</div>
                 </div>
               : <div style={{ flex:1,overflowY:"auto" }}>
-                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif" }}>
+                  <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace" }}>
                     <thead style={{ position:"sticky",top:0,zIndex:2 }}>
                       <tr style={{ background:"#102A63" }}>
                         {["N°","Date","Type","Échéance","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Échéance globale","Capital restant dû"].map(h=>(
-                          <th key={h} style={{ padding:"7px 8px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:h==="N°"||h==="Payé"||h==="Type"?"center":"right",fontSize:10 }}>{h}</th>
+                          <th key={h} style={{ padding:"7px 8px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:h==="N°"||h==="Payé"||h==="Type"?"center":"right",fontSize:10,fontFamily:"'Lora',serif" }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -10973,12 +11011,13 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                       {lignes.map((row,i)=>{
                         const isPast = row.date < new Date().toISOString().split("T")[0];
                         const isNext = !row.paye && i === paye;
+                        const numStyle = { padding:"5px 8px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 };
                         return (
                           <tr key={i} style={{ background: row.paye?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",
                             borderBottom:"1px solid #F0F0F0",
                             outline: isNext ? "1px solid #FDE68A" : "none" }}>
-                            <td style={{ padding:"5px 8px",textAlign:"center",color:"#888",fontWeight:600 }}>{row.n}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400 }}>
+                            <td style={{ padding:"5px 8px",textAlign:"center",color:"#888",fontWeight:600,fontSize:11,fontFamily:"'DM Mono',monospace" }}>{row.n}</td>
+                            <td style={{ padding:"5px 8px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'DM Mono',monospace",fontSize:11 }}>
                               {row.date.split("-").reverse().join("/")}
                             </td>
                             <td style={{ padding:"5px 8px",textAlign:"center" }}>
@@ -10990,15 +11029,14 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                                     ? <span style={{ fontSize:9,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Différé</span>
                                     : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
                             </td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#27AE60" }}>{fmtE(row.capital)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#C0392B" }}>{fmtE(row.interets)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#888",fontStyle:"italic" }}>{fmtE(row.cumulInterets)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#6D28D9" }}>{fmtE(row.commGarantie)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#E67E22" }}>{fmtE(row.assurance)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",fontWeight:700,color:"#0E7490" }}>{fmtE(row.echeanceGlobale)}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color:"#2C3E50",fontWeight:600 }}>{fmtE(row.capitalRestant)}</td>
-
+                            <td style={{ ...numStyle,fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
+                            <td style={{ ...numStyle,color:"#27AE60" }}>{fmtE(row.capital)}</td>
+                            <td style={{ ...numStyle,color:"#C0392B" }}>{fmtE(row.interets)}</td>
+                            <td style={{ ...numStyle,color:"#888",fontStyle:"italic" }}>{fmtE(row.cumulInterets)}</td>
+                            <td style={{ ...numStyle,color:"#6D28D9" }}>{fmtE(row.commGarantie)}</td>
+                            <td style={{ ...numStyle,color:"#E67E22" }}>{fmtE(row.assurance)}</td>
+                            <td style={{ ...numStyle,fontWeight:700,color:"#0E7490" }}>{fmtE(row.echeanceGlobale)}</td>
+                            <td style={{ ...numStyle,color:"#2C3E50",fontWeight:600 }}>{fmtE(row.capitalRestant)}</td>
                           </tr>
                         );
                       })}
@@ -11006,10 +11044,10 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                     <tfoot>
                       <tr style={{ background:"#F8F9FB",borderTop:"2px solid #ECEAE5",fontWeight:700 }}>
                         <td colSpan={2} style={{ padding:"6px 8px",fontSize:10,fontFamily:"'Lora',serif" }}>TOTAL</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#102A63" }}>{fmtE(totalEch)}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#27AE60" }}>{fmtE(lignes.reduce((a,r)=>a+r.capital,0))}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#C0392B" }}>{fmtE(totalInt)}</td>
-                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#E67E22" }}>{fmtE(totalAss)}</td>
+                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{fmtE(totalEch)}</td>
+                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{fmtE(lignes.reduce((a,r)=>a+r.capital,0))}</td>
+                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{fmtE(totalInt)}</td>
+                        <td style={{ padding:"6px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 }}>{fmtE(totalAss)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -11158,7 +11196,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div>{lblL("Type amortissement")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités constantes</option><option value="capital">Capital constant</option></select></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-            <div>{lblL("Durée remboursement (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
+            <div>{lblL("Durée totale contrat (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
 
             <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
             <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
@@ -14119,7 +14157,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.465<br />14/05/26 à 22:30
+          v.0.467<br />14/05/26 à 23:30
         </div>
       </div>
 
