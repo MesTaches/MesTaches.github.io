@@ -10397,21 +10397,24 @@ const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement"
    CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
 ── */
 function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false) {
+  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0, typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false, differFinMois=0) {
   if (!montant || !dureeM) return [];
 
-  // dureeM = durée TOTALE du contrat (carence + différé + amortissement = dureeM)
-  // dureeAmort = durée réelle d'amortissement du capital
+  // differFinMois = période où les intérêts s'accumulent sans paiement mensuel
+  //                 puis sont payés en une seule échéance à la fin de la période
+  //                 (ex: prêt in fine SG : 12 mois → 1 seule échéance avec cumul intérêts)
+
   const _avecCap   = tauxCapita > 0;
   const avecCapita = _avecCap;
-  const rangCapita = avecCapita ? carenceMois + 1 : -1;
+  const rangCapita = avecCapita ? carenceMois + differFinMois + 1 : -1;
   const offsetAmort = avecCapita ? 1 : 0;
 
-  // Durée totale = telle que saisie (pas d'ajout de carence/différé)
-  const dureeTotal = dureeM + (_avecCap ? 1 : 0); // seule la capitalisation ajoute 1 rang
+  // Durée totale = durée saisie (carence + differFin + différé + amortissement = dureeM)
+  // differFin génère 1 seule ligne (l'échéance de paiement groupé) au lieu de differFinMois lignes
+  const nbDifferFinLignes = differFinMois > 0 ? 1 : 0;
+  const dureeTotal = dureeM - differFinMois + nbDifferFinLignes + (_avecCap ? 1 : 0);
 
-  // Durée amortissement = durée totale moins les périodes spéciales
-  const dureeAmort = Math.max(1, dureeM - carenceMois - differeMois);
+  const dureeAmort = Math.max(1, dureeM - carenceMois - differeMois - differFinMois);
 
   const r    = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 : 0;
   const rD   = tauxDiffere !== null ? (tauxDiffere / 100) / 12 : r;
@@ -10434,33 +10437,71 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
   let cumulInterets = 0;
   const d0 = dateDebut ? new Date(dateDebut) : new Date();
 
+  // Numérotation réelle des mois (pour les dates)
+  let moisReel = 0; // mois calendaire écoulé depuis d0
+
   for (let i = 1; i <= dureeTotal; i++) {
-    // Dates strictement chronologiques
+    // Déterminer la phase de cette ligne
+    // Phase differFin : les mois 1..differFinMois sont regroupés en 1 seule ligne
+    let estDifferFin   = false;
+    let estCarence     = false;
+    let estCapita      = false;
+    let estDiffere     = false;
+
+    let moisDebLigne   = moisReel; // mois calendaire de début de cette ligne
+    let dureeeLigne    = 1;        // nb de mois couverts par cette ligne
+
+    if (differFinMois > 0 && i === carenceMois + 1) {
+      // Ligne groupée differFin
+      estDifferFin = true;
+      dureeeLigne  = differFinMois;
+      moisReel    += differFinMois;
+    } else if (i <= carenceMois) {
+      estCarence = true;
+      moisReel++;
+    } else if (avecCapita && i === rangCapita) {
+      estCapita = true;
+      moisReel++;
+    } else {
+      // Recalculer la position relative après differFin
+      const posApresCarence = differFinMois > 0
+        ? i - carenceMois - 1  // -1 car differFin prend 1 ligne au lieu de differFinMois
+        : i - carenceMois;
+      const offsetC = avecCapita ? 1 : 0;
+      estDiffere = posApresCarence > 0 && posApresCarence <= differeMois + offsetC && !estCapita;
+      moisReel++;
+    }
+
     const date = new Date(d0);
-    date.setMonth(date.getMonth() + i - 1);
-    const dateStr = date.toISOString().split("T")[0];
+    date.setMonth(date.getMonth() + moisReel - (estDifferFin ? 0 : 0));
+    // Pour differFin : la date est à la fin de la période groupée
+    const dateFin = new Date(d0);
+    dateFin.setMonth(dateFin.getMonth() + moisDebLigne + dureeeLigne);
+    const dateStr = (estDifferFin ? dateFin : date).toISOString().split("T")[0];
 
     let interets = 0, amort = 0, commGar = 0, echeance = 0;
-    let estCapita = false, estCarence = false, estDiffere = false;
-
-    estCarence = i <= carenceMois;
-    estCapita  = avecCapita && i === rangCapita;
-    estDiffere = !estCarence && !estCapita && i <= carenceMois + offsetAmort + differeMois;
 
     if (estCarence) {
       if (carenceCapitalisee && r > 0) {
         interets = capital * r;
-        capital = capital + interets;
+        capital  = capital + interets;
         cumulInterets += interets;
-      } else {
-        interets = 0;
       }
       amort = 0; echeance = 0; commGar = 0;
+    } else if (estDifferFin) {
+      // Intérêts cumulés sur differFinMois mois, payés en une seule fois
+      // Utiliser le taux différé si défini, sinon taux principal
+      const rDf = tauxDiffere !== null ? rD : r;
+      interets = capital * rDf * differFinMois;
+      const rGd = 1 <= _dG1 ? rG1 : rG2;
+      commGar  = capital * rGd * differFinMois;
+      amort    = 0;
+      echeance = interets + commGar + ass;
+      cumulInterets += interets;
     } else if (estCapita) {
-      // Capitalisation : les intérêts s'ajoutent au capital, aucun flux sortant
       interets = montant * (tauxCapita / 100);
       amort = 0; echeance = 0; commGar = 0;
-      capital = capitalCapitalise; // capital passe à montant + intérêts capitalisés
+      capital = capitalCapitalise;
       cumulInterets += interets;
     } else if (estDiffere) {
       interets = capital * rD;
@@ -10474,22 +10515,22 @@ function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuel
       const rGa = i <= _dG1 ? rG1 : rG2;
       commGar  = capital * rGa;
       if (typeAmort === "capital") {
-        amort    = Math.min(capitalCapitalise / dureeAmort, capital);
+        amort = Math.min(capitalCapitalise / dureeAmort, capital);
       } else {
-        amort    = Math.min(pmtBase - interets, capital);
+        amort = Math.min(pmtBase - interets, capital);
       }
       echeance = amort + interets + commGar + ass;
       cumulInterets += interets;
       capital = Math.max(0, capital - amort);
     }
 
-    const echeanceGlobale = echeance; // = tout inclus
     rows.push({
       n: i, date: dateStr,
       echeance, capital: amort, interets, cumulInterets,
       commGarantie: commGar, assurance: ass,
-      echeanceGlobale, capitalRestant: capital,
+      echeanceGlobale: echeance, capitalRestant: capital,
       estCapita, estCarence, estDiffere,
+      estDifferFin: estDifferFin || false,
       paye: false, datePaiement:"", commentaire:""
     });
   }
@@ -10684,7 +10725,8 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
       parseInt(d.carence)||0, parseNum(d.tauxGarantie)||0,
       d.tauxDiffere ? parseNum(d.tauxDiffere) : null,
       parseNum(d.tauxCapita)||0, parseInt(d.differe)||0, d.typeAmort||"annuites",
-      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0, d.carenceCapitalisee||false
+      parseNum(d.tauxGarantie2)||0, parseInt(d.dureeGarantie1)||0, d.carenceCapitalisee||false,
+      parseInt(d.differFin)||0
     );
     // Préserver les données de paiement si déjà saisies
     const merged = rows.map((r,i) => {
@@ -10865,14 +10907,19 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,alignItems:"start" }}>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,alignItems:"start" }}>
                   <div>
                     {lbl("Carence (mois)", "Aucun paiement : ni capital, ni intérêts.")}
                     <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
                   </div>
                   <div>
-                    {lbl("Différé (mois)", "Intérêts payés, pas de capital. Ex: 12 pour PGE franchise en capital.")}
+                    {lbl("Différé in fine (mois)", "Intérêts accumulés, payés en 1 seule échéance en fin de période. Ex: prêt in fine 1 an = 12.")}
+                    <input type="text" inputMode="numeric" value={d.differFin||""} onChange={e=>set("differFin",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#C2410C",background:"#FFF7ED",minHeight:28 }} />
+                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>1 seule échéance groupée</div>
+                  </div>
+                  <div>
+                    {lbl("Différé (mois)", "Intérêts payés chaque mois, pas de capital.")}
                     <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
                   </div>
@@ -11022,9 +11069,11 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                                 ? <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Capitalisation</span>
                                 : row.estCarence
                                   ? <span style={{ fontSize:9,background:"#FEE2E2",color:"#B91C1C",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Carence</span>
-                                  : row.estDiffere
-                                    ? <span style={{ fontSize:9,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Différé</span>
-                                    : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
+                                  : row.estDifferFin
+                                    ? <span style={{ fontSize:9,background:"#FFF7ED",color:"#C2410C",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>In fine</span>
+                                    : row.estDiffere
+                                      ? <span style={{ fontSize:9,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Différé</span>
+                                      : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
                             </td>
                             <td style={{ ...numStyle,fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
                             <td style={{ ...numStyle,color:"#27AE60" }}>{fmtE(row.capital)}</td>
@@ -14180,7 +14229,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.474<br />15/05/26 à 02:00
+          v.0.475<br />15/05/26 à 09:00
         </div>
       </div>
 
