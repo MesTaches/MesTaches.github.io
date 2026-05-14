@@ -327,56 +327,43 @@ function parseCSVEcheancier(text) {
     if (!s) return '';
     s = String(s).trim();
     const m1 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (m1) return `${m1[3]}-${m1[2]}-${m1[1]}`;
+    if (m1) return m1[3]+'-'+m1[2]+'-'+m1[1];
     const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`;
+    if (m2) return m2[1]+'-'+m2[2]+'-'+m2[3];
     return s;
   };
 
-  const lines = text.replace(/\r/g,'').split('\n').filter(l => l.trim());
+  const lines = text.replace(/\r/g,'').split('\n').filter(function(l){ return l.trim(); });
   if (lines.length < 2) return [];
   const sep = lines[0].includes(';') ? ';' : ',';
-  const headers = lines[0].split(sep).map(h => h.replace(/^\uFEFF/,'').trim().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+  const headers = lines[0].split(sep).map(function(h){
+    return h.replace(/^\uFEFF/,'').trim().toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  });
 
-  const fi = (tests) => headers.findIndex(h => tests.some(t => h.includes(t)));
-  const idx = {
-    rang:     fi(['rang','n°','n']),
+  const H = headers;
+  const fi = function(tests){ return H.findIndex(function(h){ return tests.some(function(t){ return h.includes(t); }); }); };
+
+  const I = {
+    rang:     fi(['rang']),
     statut:   fi(['statut']),
     type:     fi(['type']),
     date:     fi(['date']),
-    capAvant: fi(['capital restant du avant','capital restant d']).concat ? fi(['capital restant d']) : fi(['capital restant d']),
-    capRbt:   fi(['rembourse','remboursé','capital rembours']),
-    inter:    fi(['interets','intérêts','int']).concat ? fi(['interet']) : fi(['interet']),
+    capAvant: H.findIndex(function(h){ return h.includes('capital') && h.includes('restant') && !h.includes('apres') && !h.includes('apr') && !h.includes('rbt') && !h.includes('rembours'); }),
+    capRbt:   fi(['rembours']),
+    inter:    H.findIndex(function(h){ return (h.includes('interet') || (h.includes('int') && !h.includes('capitalise'))) && !h.includes('cumul'); }),
     cumul:    fi(['cumul']),
-    comm:     fi(['commission','garantie']),
-    ech:      fi(['echeance global','échéance global','echeance']),
-    capApres: fi(['apres','après','capital restant du apres']),
-    capOui:   fi(['capitalise','capitalisé']),
-  };
-
-  // Re-map avec des clés propres
-  const H = headers;
-  const I = {
-    rang:     H.findIndex(h=>h==='rang'||h==='n\u00b0'||h==='n'||h==='rang'),
-    statut:   H.findIndex(h=>h.includes('statut')),
-    type:     H.findIndex(h=>h==='type'),
-    date:     H.findIndex(h=>h.includes('date')),
-    capAvant: H.findIndex(h=>h.includes('capital restant d') && !h.includes('apres') && !h.includes('apr')),
-    capRbt:   H.findIndex(h=>h.includes('rembours')),
-    inter:    H.findIndex(h=>(h.includes('interet')||h.includes('inter')) && !h.includes('cumul') && !h.includes('capitalise')),
-    cumul:    H.findIndex(h=>h.includes('cumul')),
-    comm:     H.findIndex(h=>h.includes('commission') || h.includes('garantie')),
-    ech:      H.findIndex(h=>h.includes('echeance') || h.includes('echéance')),
-    capApres: H.findIndex(h=>(h.includes('apres')||h.includes('après')) && h.includes('capital')),
-    capOui:   H.findIndex(h=>h.includes('capitalise')||h.includes('capitalis')),
+    comm:     H.findIndex(function(h){ return h.includes('commission') || (h.includes('garantie') && !h.includes('prime')); }),
+    ech:      H.findIndex(function(h){ return h.includes('echeance') && (h.includes('global') || h.includes('total') || !h.includes('date')); }),
+    capApres: H.findIndex(function(h){ return h.includes('capital') && h.includes('restant') && (h.includes('apres') || h.includes('apr') || h.includes('rbt')); }),
+    capOui:   fi(['capitalise','capitalis']),
   };
 
   const rows = [];
   let cumulCalc = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g,''));
+    const cols = lines[i].split(sep).map(function(col){ return col.trim().replace(/^"|"$/g,''); });
     if (cols.length < 3) continue;
 
     const date    = pD(I.date >= 0 ? cols[I.date] : '');
@@ -391,29 +378,29 @@ function parseCSVEcheancier(text) {
 
     cumulCalc += inter;
 
-    // Type de ligne basé sur la colonne Type
     const typeL = type.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const estDifferFin = typeL.includes('fine') || typeL.includes('in fine');
-    const estDiffere   = typeL.includes('differe') || typeL.includes('différé');
+    const estDifferFin = typeL.includes('fine');
+    const estDiffere   = typeL.includes('differe') || typeL.includes('differe');
     const estCapita    = capOui;
     const estSansFlux  = capital === 0 && inter === 0 && comm === 0 && ech === 0 && !estDifferFin && !estCapita;
-    const estCarence   = estSansFlux && !estDiffere;
     const estAmort     = !estDifferFin && !estDiffere && !estCapita && !estSansFlux && capital > 0;
 
     rows.push({
       n: rows.length + 1,
-      date, statut, type,
-      echeance: ech, capital, interets: inter,
+      date: date, statut: statut, type: type,
+      echeance: ech, capital: capital, interets: inter,
       cumulInterets: cumulCalc,
       commGarantie: comm, assurance: 0,
       echeanceGlobale: ech, capitalRestant: capR,
-      estCapita, estCarence, estDiffere,
-      estDifferFin, estSansFlux, estAmort,
+      estCapita: estCapita, estCarence: false,
+      estDiffere: estDiffere, estDifferFin: estDifferFin,
+      estSansFlux: estSansFlux, estAmort: estAmort,
       paye: false, datePaiement: '', commentaire: ''
     });
   }
   return rows;
 }
+
 
 // Parser XLSX via SheetJS (utilisé quand le fichier est .xlsx)
 function parseXLSXEcheancier(arrayBuffer) {
@@ -2087,7 +2074,7 @@ function RichTextAiBtn({ editorRef, groqKey, onChange }) {
         })
       });
       const data = await resp.json();
-      const result = data.(choices && choices[0])?.message?.content?.trim();
+      const result = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim();
       if (result && editorRef.current) {
         editorRef.current.innerHTML = result;
         onChange(result);
@@ -2273,7 +2260,7 @@ function AIAssistant({ text, onApply, onClose, settings }) {
       });
       if (!resp.ok) { const err = await resp.json().catch(() => ({})); setResult(`Erreur API (${resp.status}) : ${err?.error?.message || "inconnue"}`); setLoading(false); return; }
       const data = await resp.json();
-      setResult(data.(choices && choices[0])?.message?.content || "Erreur : réponse vide.");
+      setResult((data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "Erreur : réponse vide.");
     } catch (e) { setResult(`Erreur de connexion : ${e.message}`); }
     setLoading(false);
   };
@@ -3755,7 +3742,7 @@ function MeetingsView({ onAddTask }) {
     try {
       const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
       const data = await resp.json();
-      setRecap(data.(choices && choices[0])?.message?.content || "Erreur de génération.");
+      setRecap((data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "Erreur de génération.");
     } catch { setRecap("Erreur de connexion."); }
     setLoadingRecap(false);
   };
@@ -12737,7 +12724,7 @@ function TasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, on
       setAiDebug("📨 HTTP " + resp.status);
       if (!resp.ok) { const err = await resp.json().catch(()=>({})); setAiDebug("❌ Erreur API " + resp.status + " : " + (err?.error?.message||"")); setAiLoading(false); return; }
       const data = await resp.json();
-      const raw = data.(choices && choices[0])?.message?.content?.trim() || "";
+      const raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim() || "";
       setAiDebug("✅ Groq OK : " + raw.substring(0,120));
       let parsed = {};
       try { parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim()); } catch(e) { setAiDebug("⚠️ JSON.parse échoué sur: " + raw.substring(0,80)); }
@@ -14483,7 +14470,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.482<br />15/05/26 à 13:00
+          v.0.483<br />15/05/26 à 14:00
         </div>
       </div>
 
