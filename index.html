@@ -11469,8 +11469,17 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const tegDossier = (() => {
     const mv = lignes.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)
             || parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
-    const dur = (lignes.filter(r=>!r.estVersement&&!r.estSansFlux).length||1)/12;
-    return mv>0 && dur>0 ? ((totalInt+totalGar)/mv/dur*100).toFixed(2)+"%" : "—";
+    // Même durée que TAUX & COÛT : dates réelles des lignes numérotées
+    const lgN = lignes.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
+    const dMin = lgN.length ? lgN[0].date : null;
+    const dMax = lgN.length ? lgN[lgN.length-1].date : null;
+    const dur = dMin&&dMax
+      ? Math.max((new Date(dMax)-new Date(dMin))/(1000*60*60*24*365.25), 0.08)
+      : (lgN.length||12)/12;
+    // totalInt exclut estCapita (décaissés), totalGar inclut tout
+    const tI = lignes.reduce((a,r)=>a+(r.estCapita?0:(r.interets||0)),0);
+    const tG = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
+    return mv>0 && dur>0 ? ((tI+tG)/mv/dur*100).toFixed(2)+"%" : "—";
   })();
   const hasCap=parseNum(localDos.tauxCapita)>0;
   const car=parseInt(localDos.carence)||0;
@@ -11592,7 +11601,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
               const TauxRow = ({label,taux,montant,isGarantie,isTotal,isTEG,isCapita}) => (
                 <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isTEG?"#FED7AA":isTotal?"#A7F3D0":isGarantie?"#E9D5FF":isCapita?"#EDE9FE":"#DBEAFE")}}>
-                  <div style={{flex:"0 0 auto",background:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":isCapita?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
+                  <div style={{flex:"0 0 56px",width:56,background:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":isCapita?"#7C3AED":"#1D4ED8",padding:"6px 4px",display:"flex",alignItems:"center",justifyContent:"center"}}>
                     <span style={{fontSize:taux?12:10,fontWeight:800,color:"white",fontFamily:"'Lora',serif",letterSpacing:"-0.02em"}}>{taux?fmtT(taux):"capit."}</span>
                   </div>
                   <div style={{flex:1,background:isTEG?"#FFF7ED":isTotal?"#F0FDF4":isGarantie?"#FAFAFF":isCapita?"#F5F3FF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
@@ -11633,14 +11642,35 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             })()}
           </div>
           <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
-            <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PÉRIODES</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-              <div>{lblL("Différé (mois)", "Calculé auto depuis l'échéancier importé")}<input type="text"
-                value={localDos.lignes&&localDos.lignes.length>0?(localDos.lignes.filter(r=>r.estDiffere).length||localDos.differe||""):(localDos.differe||"")}
-                onChange={e=>setL("differe",e.target.value)}
-                readOnly={!!(localDos.lignes&&localDos.lignes.length>0)}
-                placeholder="Ex: 12" style={{...inpL,background:localDos.lignes&&localDos.lignes.length>0?"#F9FAFB":"white"}}/></div>
+            <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
+              PÉRIODES
+              <span style={{fontSize:8,fontWeight:500,color:"#6B7280",background:"#FEF3C7",borderRadius:4,padding:"1px 5px"}}>calculé auto</span>
             </div>
+            {(()=>{
+              const lgAll2 = localDos.lignes||[];
+              const nDif = lgAll2.filter(r=>r.estDiffere).length;
+              const nAmort = lgAll2.filter(r=>r.estAmort).length;
+              const nVers = lgAll2.filter(r=>r.estVersement).length;
+              const nCap = lgAll2.filter(r=>r.estCapita).length;
+              const roStyle = {...inpL, background:"#F9FAFB", color:"#6B7280", cursor:"default"};
+              const StatLine = ({label, val}) => val>0 ? (
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+                  <span style={{fontSize:10,color:"#92400E",fontFamily:"'Lora',serif"}}>{label}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:"#78350F",fontFamily:"'DM Mono',monospace"}}>{val} mois</span>
+                </div>
+              ) : null;
+              return lgAll2.length>0 ? (
+                <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                  <StatLine label="Différé" val={nDif}/>
+                  <StatLine label="Amortissement" val={nAmort}/>
+                  {nCap>0&&<StatLine label="Int. capitalisés" val={nCap}/>}
+                  {nVers>0&&<StatLine label="Versements" val={nVers}/>}
+                  {nDif===0&&nAmort===0&&<span style={{fontSize:10,color:"#AAA",fontFamily:"'Lora',serif"}}>—</span>}
+                </div>
+              ) : (
+                <div>{lblL("Différé (mois)")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="Ex: 12" style={inpL}/></div>
+              );
+            })()}
           </div>
           {total>0 && (
             <div>
@@ -14825,7 +14855,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.528<br />16/05/26 à 10:00
+          v.0.529<br />16/05/26 à 10:00
         </div>
       </div>
 
