@@ -11809,6 +11809,32 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   if (!lg.length) return dos;
   var nowS = new Date().toISOString().split("T")[0];
 
+  // ── Recorriger les flags depuis le champ type (migration données anciennes) ──
+  lg = lg.map(function(r) {
+    var tL = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+    var estVersement = tL.includes("versement");
+    var estInFine    = tL.includes("fine");
+    var estDiffere   = tL.includes("differe");
+    var estCapita    = r.estCapita || (r.capitalisé === "Oui") || false;
+    var inter  = r.interets || 0;
+    var cap    = r.capital || 0;
+    var comm   = r.commGarantie || 0;
+    var ech    = r.echeanceGlobale || 0;
+    // In fine sans flux = lignes in fine avec montants à 0
+    var estDifferFin = estInFine && !estCapita && cap===0 && inter===0 && comm===0;
+    var estSansFlux  = !estInFine && !estDiffere && !estCapita && !estVersement && cap===0 && inter===0 && comm===0 && ech===0;
+    var estAmort     = !estInFine && !estDiffere && !estCapita && !estSansFlux && !estVersement && cap>0;
+    return Object.assign({}, r, {
+      estVersement: estVersement,
+      estDifferFin: estDifferFin,
+      estDiffere:   estDiffere,
+      estCapita:    estCapita,
+      estSansFlux:  estSansFlux,
+      estAmort:     estAmort,
+      estCarence:   false
+    });
+  });
+
   // ── Totaux ──
   var totalVersAmt = lg.reduce(function(a,r){ return a + (r.estVersement ? (r.versement||r.capital||0) : 0); }, 0);
   var totalCapRbt  = lg.reduce(function(a,r){ return a + (r.estVersement ? 0 : (r.capital||0)); }, 0);
@@ -14617,7 +14643,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.514<br />16/05/26 à 08:00
+          v.0.515<br />16/05/26 à 09:00
         </div>
       </div>
 
