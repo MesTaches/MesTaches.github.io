@@ -11131,28 +11131,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-              <div style={{gridColumn:"1/-1"}}>
-                {lbl("DATES DE VERSEMENT DES FONDS")}
-                <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                  {(d.versements||[]).map((v,vi)=>(
-                    <div key={vi} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:6,alignItems:"end"}}>
-                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Date</div><input type="date" value={v.date||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],date:e.target.value};set("versements",vs);}} style={inp}/></div>
-                      <div><div style={{fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div><input type="text" value={v.montant||""} onChange={e=>{const vs=[...(d.versements||[])];vs[vi]={...vs[vi],montant:e.target.value};set("versements",vs);}} placeholder="1 000 000" style={inp}/></div>
-                      <button onClick={()=>set("versements",(d.versements||[]).filter((_,j)=>j!==vi))} style={{border:"none",background:"#FEE2E2",color:"#DC2626",borderRadius:6,padding:"6px 8px",cursor:"pointer",fontSize:13,height:36}}>×</button>
-                    </div>
-                  ))}
-                  <button onClick={()=>set("versements",[...(d.versements||[]),{date:"",montant:""}])} style={{fontSize:11,fontFamily:"'Lora',serif",background:"#F0FDF4",color:"#065F46",border:"1px solid #BBF7D0",borderRadius:6,padding:"5px 10px",cursor:"pointer",textAlign:"left"}}>+ Ajouter un versement</button>
-                </div>
-              </div>
-              <div>{lbl("Assurance mensuelle (€)")}<input type="text" inputMode="decimal" value={d.assuranceMensuelle||""} onChange={e=>set("assuranceMensuelle",e.target.value)} placeholder="0,00" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-              <div>{lbl("Garantie")}
-                <select value={d.garantie||""} onChange={e=>set("garantie",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}>
-                  <option value="">—</option>
-                  {ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}
-                </select>
-              </div>
+              
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
@@ -11558,7 +11537,6 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PÉRIODES</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-              <div>{lblL("Différé in fine (mois)", "Mois où intérêts accumulés, payés en 1 seule échéance")}<input type="text" value={localDos.differFin||""} onChange={e=>setL("differFin",e.target.value)} placeholder="Ex: 12" style={inpL}/></div>
               <div>{lblL("Différé (mois)", "Calculé auto depuis l'échéancier importé")}<input type="text"
                 value={localDos.lignes&&localDos.lignes.length>0?(localDos.lignes.filter(r=>r.estDiffere).length||localDos.differe||""):(localDos.differe||"")}
                 onChange={e=>setL("differe",e.target.value)}
@@ -11827,25 +11805,20 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   if (!lg.length) return dos;
   var nowS = new Date().toISOString().split("T")[0];
 
-  // ── Montant = somme versements ou capital initial (1ère ligne) ──
-  var totalVers = (dos.versements||[]).reduce(function(a,v){
-    return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
-  }, 0);
-  // Versements : augmentent le capital, ne sont pas des remboursements
+  // ── Totaux ──
   var totalVersAmt = lg.reduce(function(a,r){ return a + (r.estVersement ? (r.versement||r.capital||0) : 0); }, 0);
-  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.estVersement ? 0 : (r.capital||0)); }, 0);
-  // Montant = versements si présents, sinon total capital remboursé
-  var montantAuto = totalVersAmt > 0 ? totalVersAmt : (totalVers > 0 ? totalVers : totalCapRbt);
+  var totalCapRbt  = lg.reduce(function(a,r){ return a + (r.estVersement ? 0 : (r.capital||0)); }, 0);
+  var montantAuto  = totalVersAmt > 0 ? totalVersAmt : totalCapRbt;
 
-  // ── Durée totale ──
+  // ── Durée / dates ──
   var dureeAuto = String(lg.length);
-
-  // ── Date fin ──
   var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
   var dateFin = dates.length ? dates[dates.length-1] : "";
 
-  // ── Calcul des taux PAR STATUT ──
-  // Regrouper les lignes par statut
+  // ── Compter les phases depuis les lignes ──
+  var nbDiffere = lg.filter(function(r){ return r.estDiffere && !r.estSansFlux; }).length;
+
+  // ── Grouper par statut ──
   var statuts = {};
   lg.forEach(function(r) {
     var st = r.statut || "default";
@@ -11853,45 +11826,33 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     statuts[st].push(r);
   });
 
-  // Pour chaque statut, calculer taux intérêt et commission implicites
-  // depuis les lignes avec flux (intérêts > 0)
+  // ── Calculer taux implicite par statut ──
   var tauxParStatut = {};
   var commParStatut = {};
 
   Object.keys(statuts).forEach(function(st) {
     var lines = statuts[st];
-    // Lignes avec intérêts réels (non nuls, non capitalisés)
+    // Lignes avec intérêts réels et capital connu
     var lignesFlux = lines.filter(function(r){
-      return (r.interets||0) > 0 && !r.estCapita && !r.estSansFlux;
+      return (r.interets||0) > 0 && !r.estCapita && !r.estSansFlux && !r.estVersement;
     });
-
     if (lignesFlux.length > 0) {
-      // Taux mensuel implicite = médiane de (intérêts / capital_avant)
       var tauxMens = [];
       lignesFlux.forEach(function(r) {
         var capAvant = (r.capitalRestant||0) + (r.capital||0);
-        // Si capAvant est 0, essayer capital restant dû de la ligne
         if (capAvant <= 0) capAvant = r.capitalRestant||0;
-        if (capAvant > 0 && (r.interets||0) > 0) {
-          tauxMens.push(r.interets / capAvant);
-        }
+        if (capAvant > 0) tauxMens.push(r.interets / capAvant);
       });
       if (tauxMens.length > 0) {
         tauxMens.sort(function(a,b){return a-b;});
         var med = tauxMens[Math.floor(tauxMens.length/2)];
-        // Détecter si les intérêts sont calculés sur N mois (in fine)
-        // En comparant avec la durée de la phase
         tauxParStatut[st] = (med * 12 * 100).toFixed(4);
       }
-
-      // Commission garantie implicite
       var commMens = [];
       lignesFlux.forEach(function(r) {
         var capAvant = (r.capitalRestant||0) + (r.capital||0);
         if (capAvant <= 0) capAvant = r.capitalRestant||0;
-        if (capAvant > 0 && (r.commGarantie||0) > 0) {
-          commMens.push(r.commGarantie / capAvant);
-        }
+        if (capAvant > 0 && (r.commGarantie||0) > 0) commMens.push(r.commGarantie / capAvant);
       });
       if (commMens.length > 0) {
         commMens.sort(function(a,b){return a-b;});
@@ -11899,132 +11860,55 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
         commParStatut[st] = (medC * 12 * 100).toFixed(4);
       }
     }
-
-    // Cas spécial : In fine — les intérêts couvrent toute la période
-    var lignesInFine = lines.filter(function(r){ return r.estDifferFin; });
-    if (lignesInFine.length > 0 && lignesFlux.length === 0) {
-      // Chercher une ligne In fine avec intérêts
-      var lfin = lignesInFine.find(function(r){ return (r.interets||0) > 0; });
-      if (lfin) {
-        // Compter le nb de mois de la phase in fine
-        var nbMoisFin = lines.length;
-        var capB = lfin.capitalRestant + (lfin.capital||0);
-        if (capB <= 0) capB = lg[0] ? (lg[0].capitalRestant||0) : 0;
-        if (capB > 0) {
-          var tauxInFine = (lfin.interets / capB / nbMoisFin * 12 * 100).toFixed(4);
-          tauxParStatut[st] = tauxInFine;
-        }
-        if ((lfin.commGarantie||0) > 0 && capB > 0) {
-          commParStatut[st] = (lfin.commGarantie / capB / nbMoisFin * 12 * 100).toFixed(4);
-        }
-      }
-    }
   });
 
-  // Taux principal = taux du statut ayant le plus de lignes d'amortissement
-  var statutPrincipal = Object.keys(statuts).reduce(function(best, st) {
-    var n = statuts[st].filter(function(r){ return r.estAmort || (r.capital||0) > 0; }).length;
-    var nb = best ? statuts[best].filter(function(r){ return r.estAmort || (r.capital||0) > 0; }).length : 0;
-    return n > nb ? st : best;
-  }, null);
-
+  // ── Identifier les statuts ──
+  // tauxAnnuel = taux du statut "Prêt" (ou premier statut)
+  // tauxAmort  = taux du statut contenant de l'amortissement
+  // tauxDiffere = taux du statut contenant du différé sans amortissement
   var tauxAuto = "";
-  var commAuto = "";
+  var tauxAmortAuto = "";
   var tauxDiffereAuto = "";
+  var commAuto = "";
 
-  if (statutPrincipal && tauxParStatut[statutPrincipal]) {
-    tauxAuto = tauxParStatut[statutPrincipal];
-    commAuto = commParStatut[statutPrincipal] || "";
-  }
+  // Statut Prêt = statut avec lignes in fine / sans flux (carence) / première phase
+  var statutPret = null;
+  var statutAmort = null;
+  var statutDiffPur = null;
 
-  // Taux différé = taux du statut sans capital remboursé (différé pur)
   Object.keys(statuts).forEach(function(st) {
-    if (st !== statutPrincipal) {
-      var hasDiffere = statuts[st].some(function(r){ return r.estDiffere; });
-      var hasAmort   = statuts[st].some(function(r){ return r.estAmort || (r.capital||0) > 0; });
-      if (hasDiffere && !hasAmort && tauxParStatut[st]) {
-        tauxDiffereAuto = tauxParStatut[st];
-      }
+    var lines = statuts[st];
+    var hasAmort  = lines.some(function(r){ return r.estAmort || (r.capital||0)>0; });
+    var hasDiffere = lines.some(function(r){ return r.estDiffere; });
+    var hasInFine  = lines.some(function(r){ return r.estDifferFin; });
+    var hasSansFlux = lines.every(function(r){ return r.estSansFlux || r.estVersement || r.estCapita || r.estDifferFin; });
+    var stL = st.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+
+    if (stL.includes("pret") || stL.includes("prêt") || hasInFine || hasSansFlux) {
+      statutPret = st;
     }
+    if (hasAmort) statutAmort = st;
+    if (hasDiffere && !hasAmort) statutDiffPur = st;
   });
 
-  // Construire le résumé des taux par statut pour affichage
-  var tauxResume = Object.keys(tauxParStatut).map(function(st) {
-    return st + ": " + tauxParStatut[st] + "%" +
-      (commParStatut[st] ? " (gar. " + commParStatut[st] + "%)" : "");
-  }).join(" | ");
+  if (statutPret && tauxParStatut[statutPret]) tauxAuto = tauxParStatut[statutPret];
+  else if (Object.keys(tauxParStatut).length > 0) tauxAuto = Object.values(tauxParStatut)[0];
+
+  if (statutAmort && tauxParStatut[statutAmort]) tauxAmortAuto = tauxParStatut[statutAmort];
+  if (statutDiffPur && tauxParStatut[statutDiffPur]) tauxDiffereAuto = tauxParStatut[statutDiffPur];
+  else if (statutAmort && tauxParStatut[statutAmort]) tauxDiffereAuto = tauxParStatut[statutAmort]; // même taux si pas de différé pur
+
+  if (statutAmort && commParStatut[statutAmort]) commAuto = commParStatut[statutAmort];
+  else if (statutPret && commParStatut[statutPret]) commAuto = commParStatut[statutPret];
 
   // ── Capital restant actuel ──
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
   var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
 
-  // ── Durée totale ──
-  var dureeAuto = String(lg.length);
-
-  // ── Date fin ──
-  var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
-  var dateFin = dates.length ? dates[dates.length-1] : "";
-
-  // ── Détecter la périodicité (en mois) depuis l'écart entre rangs avec flux ──
-  var rangsFlux = lg.filter(function(r){ return (r.interets||0) > 0 || (r.capital||0) > 0; });
-  var periodicite = 1; // mensuelle par défaut
-  if (rangsFlux.length >= 2) {
-    var ecarts = [];
-    for (var i = 1; i < Math.min(rangsFlux.length, 5); i++) {
-      var d1 = new Date(rangsFlux[i-1].date||"2000-01-01");
-      var d2 = new Date(rangsFlux[i].date||"2000-01-01");
-      var diff = Math.round((d2 - d1) / (1000*60*60*24*30));
-      if (diff > 0) ecarts.push(diff);
-    }
-    if (ecarts.length > 0) {
-      ecarts.sort(function(a,b){return a-b;});
-      periodicite = ecarts[Math.floor(ecarts.length/2)] || 1;
-    }
-  }
-  var nbPeriodesAn = Math.round(12 / periodicite);
-
-  // ── TEG réel = total intérêts payés / montant initial / durée (années) × 100 ──
-  var amortsLg = lg.filter(function(r){ return (r.capital||0) > 0 && (r.interets||0) > 0; });
-  var tauxAuto = "";
-  if (lg.length > 0) {
-    var totalInterets = lg.reduce(function(a,r){ return a + (r.interets||0); }, 0);
-    var dureeAn = lg.length / 12;
-    var montantBase = parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",",".")) || montantAuto;
-    if (totalInterets > 0 && montantBase > 0 && dureeAn > 0) {
-      tauxAuto = (totalInterets / montantBase / dureeAn * 100).toFixed(2);
-    }
-  }
-
-  // ── Commission garantie : médiane sur les rangs d'amortissement ──
-  var commAuto = "";
-  if (amortsLg.length >= 3) {  // toujours recalculer depuis les lignes
-    var start2 = Math.floor(amortsLg.length * 0.25);
-    var end2   = Math.floor(amortsLg.length * 0.75);
-    var comms  = [];
-    for (var k = start2; k <= end2; k++) {
-      var rc = amortsLg[k];
-      var capAvantC = (rc.capitalRestant||0) + (rc.capital||0);
-      if (rc && capAvantC > 0 && (rc.commGarantie||0) > 0) {
-        comms.push((rc.commGarantie / capAvantC) * nbPeriodesAn * 100);
-      }
-    }
-    if (comms.length > 0) {
-      comms.sort(function(a,b){return a-b;});
-      commAuto = comms[Math.floor(comms.length/2)].toFixed(2);
-    }
-  }
-
-  // ── Capital restant actuel ──
-  var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
-  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
-
-  // Calculer durée différé depuis les lignes
-  var nbDiffere = lg.filter(function(r){ return r.estDiffere && !r.estSansFlux; }).length;
-  var nbSansFlux = lg.filter(function(r){ return r.estSansFlux; }).length;
-
-  // RÈGLE : ne jamais écraser un champ déjà saisi par l'utilisateur
+  // ── Règle : ne pas écraser les champs déjà saisis ──
   var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
   var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
+  var hasTauxAmortSaisi = dos.tauxAmort && String(dos.tauxAmort).trim() !== "";
   var hasGarantieSaisie = dos.tauxGarantie && String(dos.tauxGarantie).trim() !== "";
   var hasTauxDifSaisi   = dos.tauxDiffere && String(dos.tauxDiffere).trim() !== "";
 
@@ -12032,17 +11916,19 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     montant:      hasMontantSaisi ? dos.montant : (String(montantAuto) || dos.montant),
     duree:        dureeAuto,
     tauxAnnuel:   hasTauxSaisi ? dos.tauxAnnuel : (tauxAuto || ""),
-    tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || dos.tauxDiffere || ""),
-    differe:      String(nbDiffere || dos.differe || ""),
+    tauxAmort:    hasTauxAmortSaisi ? dos.tauxAmort : (tauxAmortAuto || ""),
+    tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || ""),
     tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
+    differe:      String(nbDiffere || dos.differe || ""),
     dateFin:      dateFin,
     capitalRestantActuel: capitalRestantActuel,
-    totalVersements: totalVers || montantAuto,
-    tauxResume: tauxResume,
+    totalVersements: totalVersAmt || montantAuto,
     tauxParStatut: tauxParStatut,
     commParStatut: commParStatut,
   });
 };
+
+
 function EcheancierView({ tasks, settings }) {
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState([]);
@@ -14686,7 +14572,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.508<br />16/05/26 à 02:00
+          v.0.509<br />16/05/26 à 03:00
         </div>
       </div>
 
