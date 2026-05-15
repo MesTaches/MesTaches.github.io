@@ -11263,18 +11263,21 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                       {lignes.map((row,i)=>{
                         const isPast = row.date < new Date().toISOString().split("T")[0];
                         const isNext = !row.paye && i === paye;
-                        const numStyle = { padding:"5px 8px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11 };
+                        const numStyle = { padding:"3px 6px",textAlign:"right",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap" };
                         return (
                           <tr key={i} style={{ background: row.paye?"#F0FDF4":isNext?"#FFFBEB":row.estSansFlux?"#FAFAFA":i%2===0?"white":"#FAFAFA",
                             borderBottom:"1px solid #F0F0F0",
                             outline: isNext ? "1px solid #FDE68A" : "none",
                             opacity: row.estSansFlux ? 0.55 : 1 }}>
-                            <td style={{ padding:"5px 8px",textAlign:"center",color:"#888",fontWeight:600,fontSize:11,fontFamily:"'DM Mono',monospace" }}>{row.n}</td>
+                            <td style={{ padding:"3px 6px",textAlign:"center",color:"#888",fontWeight:600,fontSize:10,fontFamily:"'Lora',serif" }}>{row.n}</td>
                             <td style={{ padding:"5px 8px",fontSize:9,color:"#6B7280",fontFamily:"'Lora',serif",whiteSpace:"nowrap",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis" }}>{row.statut||""}</td>
-                            <td style={{ padding:"5px 8px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'DM Mono',monospace",fontSize:11 }}>
+                            <td style={{ padding:"3px 6px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap" }}>
                               {row.date.split("-").reverse().join("/")}
                             </td>
-                            <td style={{ padding:"5px 8px",textAlign:"center" }}>
+                            <td style={{ padding:"3px 6px",textAlign:"center",color:"#6B7280",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis" }}>
+                              {row.statut||""}
+                            </td>
+                            <td style={{ padding:"3px 6px",textAlign:"center" }}>
                               {row.estCapita
                                 ? <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Capitalisation</span>
                                 : row.estCarence
@@ -11303,15 +11306,15 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                     </tbody>
                     <tfoot>
                       <tr style={{ background:"#F0F4FF",borderTop:"2px solid #102A63",fontWeight:700 }}>
-                        <td colSpan={3} style={{ padding:"7px 8px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em" }}>TOTAL</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(totalCap)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(totalInt)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#888",fontFamily:"'DM Mono',monospace",fontSize:11 }}>—</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(totalGar)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(totalAss2)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'DM Mono',monospace",fontSize:11,fontWeight:700 }}>{fmtE(totalGlob)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#AAA",fontFamily:"'DM Mono',monospace",fontSize:11 }}>—</td>
+                        <td colSpan={4} style={{ padding:"3px 6px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap" }}>TOTAL</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>{fmtE(totalCap)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>{fmtE(totalInt)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:10 }}>—</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(totalGar)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(totalAss2)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#0E7490",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(totalGlob)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#AAA",fontFamily:"'Lora',serif",fontSize:10 }}>—</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -11668,7 +11671,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
                 <thead style={{position:"sticky",top:0,zIndex:2}}>
                   <tr style={{background:"#102A63"}}>
-                    {["N°","Date","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
+                    {["N°","Date","Statut","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
                       <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
@@ -14613,7 +14616,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.496<br />15/05/26 à 20:00
+          v.0.497<br />15/05/26 à 20:30
         </div>
       </div>
 
