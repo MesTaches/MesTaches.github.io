@@ -482,7 +482,7 @@ function exportEchPDF(dos) {
   const lignes = dos.lignes||[];
 
   const typeLabel = (row) => {
-    if (row.estCapita)  return '<span class="badge cap">Capitalisation</span>';
+    if (row.estCapita)  return '<span class="badge cap">Intérêts capit.</span>';
     if (row.estCarence) return '<span class="badge car">Carence</span>';
     if (row.estDiffere) return '<span class="badge dif">Différé</span>';
     return '<span class="badge amo">Amortissement</span>';
@@ -493,7 +493,6 @@ function exportEchPDF(dos) {
       <td class="c">${row.n}</td>
       <td class="c">${fmtD(row.date)}</td>
       <td class="c">${typeLabel(row)}</td>
-      <td>${fmtE(row.echeance)}</td>
       <td>${fmtE(row.capital)}</td>
       <td>${fmtE(row.interets)}</td>
       <td>${fmtE(row.cumulInterets)}</td>
@@ -11156,44 +11155,30 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
               </div>
               <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>
-                  <div>{lbl("Taux d'intérêt (%/an)", "Taux annuel des intérêts (ex: 5,02 pour PGE). Hors commission de garantie.")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 0,73" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Taux différé (%/an)", "Si différent du taux principal pendant le différé. Laisser vide si identique.")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Taux capitalisation (%/an)", "PGE : taux auquel les intérêts sont capitalisés au capital (rang 1).")}<input type="text" inputMode="decimal" value={d.tauxCapita||""} onChange={e=>set("tauxCapita",e.target.value)} placeholder="Ex: 0,5 (PGE)" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
+                  <div>{lbl("Taux Prêt (%/an)", "Taux d'intérêt annuel du statut Prêt (ex: 2,76)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 2,76" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Taux Amort. (%/an)", "Taux du statut Option Amort. — phase Amortissement")}<input type="text" inputMode="decimal" value={d.tauxAmort||""} onChange={e=>set("tauxAmort",e.target.value)} placeholder="Ex: 2,70" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
+                  <div>{lbl("Taux Différé (%/an)", "Taux du statut Option Amort. — phase Différé (si différent du taux Amort.)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                   <div>{lbl("Commission garantie (%/an)", "Prélevée sur le capital restant dû en plus des intérêts (ex: 1,39 pour PGE).")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Commission garantie 2 (%/an)", "Si la commission change après une certaine durée. Laisser vide si pas de changement.")}<input type="text" inputMode="decimal" value={d.tauxGarantie2||""} onChange={e=>set("tauxGarantie2",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Durée com. garantie 1 (mois)", "Nb de mois pour la commission 1. Au-delà, commission 2 s'applique.")}<input type="text" inputMode="numeric" value={d.dureeGarantie1||""} onChange={e=>set("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
                 </div>
               </div>
               <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
                 <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
                 <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,alignItems:"start" }}>
                   <div>
-                    {lbl("Carence (mois)", "Aucun paiement : ni capital, ni intérêts.")}
-                    <input type="text" inputMode="numeric" value={d.carence||""} onChange={e=>set("carence",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Ni capital, ni intérêts</div>
-                  </div>
-                  <div>
-                    {lbl("Différé in fine (mois)", "Intérêts accumulés, payés en 1 seule échéance en fin de période. Ex: prêt in fine 1 an = 12.")}
+                    {lbl("Différé in fine (mois)", "Mois où les intérêts s'accumulent et sont payés en 1 seule échéance.")}
                     <input type="text" inputMode="numeric" value={d.differFin||""} onChange={e=>set("differFin",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#C2410C",background:"#FFF7ED",minHeight:28 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>1 seule échéance groupée</div>
                   </div>
                   <div>
-                    {lbl("Différé (mois)", "Intérêts payés chaque mois, pas de capital.")}
-                    <input type="text" inputMode="numeric" value={d.differe||""} onChange={e=>set("differe",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} />
+                    {lbl("Différé (mois)", "Calculé automatiquement depuis les lignes importées.")}
+                    <input type="text" inputMode="numeric"
+                      value={d.lignes&&d.lignes.length>0 ? (d.lignes.filter(r=>r.estDiffere).length||d.differe||"") : (d.differe||"")}
+                      onChange={e=>set("differe",e.target.value)}
+                      readOnly={!!(d.lignes&&d.lignes.length>0)}
+                      placeholder="Ex: 12"
+                      style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:d.lignes&&d.lignes.length>0?"#F9FAFB":"white",minHeight:28 }} />
                     <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
-                  </div>
-                  <div style={{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,padding:"2px 0"}}>
-                    <input type="checkbox" id="carCapId" checked={d.carenceCapitalisee||false}
-                      onChange={e=>set("carenceCapitalisee",e.target.checked)}
-                      style={{width:14,height:14,cursor:"pointer",accentColor:"#102A63",flexShrink:0}} />
-                    <label htmlFor="carCapId" style={{fontSize:11,fontFamily:"'Lora',serif",color:"#2C3E50",cursor:"pointer",userSelect:"none"}}>
-                      Intérêts de carence <strong>capitalisés</strong> au capital
-                      {(d.carenceCapitalisee && parseInt(d.carence)>0 && parseNum(d.montant)>0 && parseNum(d.tauxAnnuel)>0) &&
-                        <span style={{color:"#102A63",fontWeight:700,marginLeft:6}}>
-                          {"≈ +" + Math.round(parseNum(d.montant)*parseNum(d.tauxAnnuel)/100/12*parseInt(d.carence)).toLocaleString("fr-FR") + " €"}
-                        </span>}
-                    </label>
                   </div>
                 </div>
               </div>
@@ -11303,7 +11288,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                   <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'DM Mono',monospace" }}>
                     <thead style={{ position:"sticky",top:0,zIndex:2 }}>
                       <tr style={{ background:"#102A63" }}>
-                        {["N°","Date","Statut","Type","Échéance","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Échéance globale","Capital restant dû"].map(h=>(
+                        {["N°","Date","Statut","Type","Capital remboursé","Intérêts","Cumul intérêts","Com. garantie","Assurance","Éch. globale","Capital restant dû"].map(h=>(
                           <th key={h} style={{ padding:"7px 8px",color:"white",fontWeight:400,whiteSpace:"nowrap",textAlign:h==="N°"||h==="Payé"||h==="Type"?"center":"right",fontSize:10,fontFamily:"'Lora',serif" }}>{h}</th>
                         ))}
                       </tr>
@@ -11327,7 +11312,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                             </td>
                             <td style={{ padding:"3px 6px",textAlign:"center" }}>
                               {row.estCapita
-                                ? <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Capitalisation</span>
+                                ? <span style={{ fontSize:9,background:"#EDE9FE",color:"#6D28D9",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Intérêts capit.</span>
                                 : row.estCarence
                                   ? <span style={{ fontSize:9,background:"#FEE2E2",color:"#B91C1C",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Carence</span>
                                   : row.estDifferFin
@@ -11340,7 +11325,6 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                                           ? <span style={{ fontSize:9,background:"#F1F5F9",color:"#94A3B8",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:400 }}>—</span>
                                           : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
                             </td>
-                            <td style={{ ...numStyle,fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
                             <td style={{ ...numStyle,color:"#27AE60" }}>{fmtE(row.capital)}</td>
                             <td style={{ ...numStyle,color:"#C0392B" }}>{fmtE(row.interets)}</td>
                             <td style={{ ...numStyle,color:"#888",fontStyle:"italic" }}>{fmtE(row.cumulInterets)}</td>
@@ -11724,7 +11708,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <table style={{width:"100%",borderCollapse:"collapse",fontSize:10,fontFamily:"'Lora',serif",fontVariantNumeric:"tabular-nums"}}>
                 <thead style={{position:"sticky",top:0,zIndex:2}}>
                   <tr style={{background:"#102A63"}}>
-                    {["N°","Date","Statut","Type","Échéance","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
+                    {["N°","Date","Statut","Type","Capital","Intérêts","Cumul int.","Com. gar.","Assurance","Éch. globale","Cap. restant",...(editMode?[""]:[])].map(h=>(
                       <th key={h} style={{padding:"5px 5px",color:"white",fontWeight:400,textAlign:["N°","Type",""].includes(h)?"center":"right",fontSize:9,whiteSpace:"nowrap"}}>{h}</th>
                     ))}
                   </tr>
@@ -11762,7 +11746,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             ?<select value={typeVal} onChange={e=>setType(e.target.value)} style={{...inpS,textAlign:"center",width:90}}>
                               {typeOpts.map(o=><option key={o}>{o}</option>)}
                             </select>
-                            :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Capitalisation</span>
+                            :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Intérêts capit.</span>
                             :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
                             :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
                             :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Versement</span>
@@ -11770,8 +11754,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
                         </td>
 
-                        {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow("echeance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:82}}>{fmtE(row.echeance)}</td>}
+                        
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow("capital",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",color:"#27AE60",width:82}}>{fmtE(row.capital)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:68}}><input value={row.interets||""} onChange={e=>updRow("interets",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
@@ -12018,6 +12001,10 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
   var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
 
+  // Calculer durée différé depuis les lignes
+  var nbDiffere = lg.filter(function(r){ return r.estDiffere && !r.estSansFlux; }).length;
+  var nbSansFlux = lg.filter(function(r){ return r.estSansFlux; }).length;
+
   // RÈGLE : ne jamais écraser un champ déjà saisi par l'utilisateur
   var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
   var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
@@ -12029,6 +12016,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     duree:        dureeAuto,
     tauxAnnuel:   hasTauxSaisi ? dos.tauxAnnuel : (tauxAuto || ""),
     tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || dos.tauxDiffere || ""),
+    differe:      String(nbDiffere || dos.differe || ""),
     tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
     dateFin:      dateFin,
     capitalRestantActuel: capitalRestantActuel,
@@ -12241,15 +12229,17 @@ function EcheancierView({ tasks, settings }) {
                   const restantDu=lignes[paye]?.capitalRestant||0;
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
-                  // Calcul timeline
-                  const hasCap=parseNum(dos.tauxCapita)>0;
-                  const car=parseInt(dos.carence)||0;
-                  const dif=parseInt(dos.differe)||0;
-                  const durA=parseInt(dos.duree)||lignes.length;
-                  const totalT=(hasCap?1:0)+car+dif+durA;
-                  // Position actuelle dans la timeline
-                  const dateDebut=dos.dateDebut||lignes[0]?.date||"";
-                  const dateFin2=dos.dateFin||lignes[lignes.length-1]?.date||"";
+                  // Calcul timeline depuis les lignes réelles
+                  const nbVers  = lignes.filter(r=>r.estVersement).length;
+                  const nbCap   = lignes.filter(r=>r.estCapita).length;
+                  const nbCar   = lignes.filter(r=>r.estCarence).length;
+                  const nbDif   = lignes.filter(r=>r.estDiffere).length;
+                  const nbFine  = lignes.filter(r=>r.estDifferFin).length;
+                  const nbAmort = lignes.filter(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement)).length;
+                  const nbSans  = lignes.filter(r=>r.estSansFlux).length;
+                  const totalT  = lignes.length || 1;
+                  const dateDebut=lignes[0]?.date||dos.dateDebut||"";
+                  const dateFin2=lignes[lignes.length-1]?.date||dos.dateFin||"";
                   let pctTimeline=0;
                   if(dateDebut&&dateFin2){
                     const dD=new Date(dateDebut),dF=new Date(dateFin2),dN=new Date(nowT3);
@@ -12301,22 +12291,26 @@ function EcheancierView({ tasks, settings }) {
                       {totalT > 0 && (
                         <div style={{ marginBottom:10 }}>
                           <div style={{ position:"relative",height:14,borderRadius:7,overflow:"visible",display:"flex",gap:1,marginBottom:4 }}>
-                            {car>0&&<div style={{ width:`${car/totalT*100}%`,height:"100%",background:"#FCA5A5",borderRadius:"7px 0 0 7px",minWidth:4 }} title={`Carence ${car}m`}/>}
-                            {hasCap&&<div style={{ width:`${1/totalT*100}%`,height:"100%",background:"#6D28D9",minWidth:3 }} title="Capitalisation"/>}
-                            {dif>0&&<div style={{ width:`${dif/totalT*100}%`,height:"100%",background:"#FCD34D",minWidth:4 }} title={`Différé ${dif}m`}/>}
-                            <div style={{ flex:1,height:"100%",background:pct===100?"#27AE60":"#6EE7B7",borderRadius:car===0&&!hasCap&&dif===0?"7px":"0 7px 7px 0",minWidth:10 }} title={`Amortissement ${durA}m`}/>
-                            {/* Indicateur position actuelle */}
+                            {nbVers>0&&<div style={{ width:`${nbVers/totalT*100}%`,height:"100%",background:"#BFDBFE",borderRadius:"7px 0 0 7px",minWidth:3 }} title={`Versement ${nbVers}m`}/>}
+                            {nbCar>0&&<div style={{ width:`${nbCar/totalT*100}%`,height:"100%",background:"#FCA5A5",borderRadius:nbVers===0?"7px 0 0 7px":"0",minWidth:3 }} title={`Carence ${nbCar}m`}/>}
+                            {nbCap>0&&<div style={{ width:`${nbCap/totalT*100}%`,height:"100%",background:"#DDD6FE",minWidth:3 }} title={`Intérêts capit. ${nbCap}m`}/>}
+                            {nbFine>0&&<div style={{ width:`${nbFine/totalT*100}%`,height:"100%",background:"#FED7AA",minWidth:3 }} title={`In fine ${nbFine}m`}/>}
+                            {nbSans>0&&<div style={{ width:`${nbSans/totalT*100}%`,height:"100%",background:"#E5E7EB",minWidth:3 }} title={`Sans flux ${nbSans}m`}/>}
+                            {nbDif>0&&<div style={{ width:`${nbDif/totalT*100}%`,height:"100%",background:"#FCD34D",minWidth:3 }} title={`Différé ${nbDif}m`}/>}
+                            {nbAmort>0&&<div style={{ flex:1,height:"100%",background:pct===100?"#27AE60":"#6EE7B7",borderRadius:nbVers===0&&nbCar===0&&nbCap===0&&nbFine===0&&nbSans===0&&nbDif===0?"7px":"0 7px 7px 0",minWidth:6 }} title={`Amortissement ${nbAmort}m`}/>}
                             {pctTimeline>0&&pctTimeline<100&&(
                               <div style={{ position:"absolute",left:`${pctTimeline}%`,top:-3,transform:"translateX(-50%)",width:3,height:20,background:"#102A63",borderRadius:2,boxShadow:"0 0 0 2px white",zIndex:2 }} title={`Aujourd'hui (${pctTimeline}%)`}/>
                             )}
                           </div>
-                          {/* Légende + dates */}
                           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                             <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                              {car>0&&<span style={{ fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif" }}>● Carence {car}m</span>}
-                              {hasCap&&<span style={{ fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif" }}>● Cap.</span>}
-                              {dif>0&&<span style={{ fontSize:9,color:"#A16207",fontFamily:"'Lora',serif" }}>● Différé {dif}m</span>}
-                              <span style={{ fontSize:9,color:"#065F46",fontFamily:"'Lora',serif" }}>● Amort. {durA}m</span>
+                              {nbVers>0&&<span style={{ fontSize:9,color:"#1D4ED8",fontFamily:"'Lora',serif" }}>● Versement {nbVers}</span>}
+                              {nbCar>0&&<span style={{ fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif" }}>● Carence {nbCar}m</span>}
+                              {nbCap>0&&<span style={{ fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif" }}>● Int. capit. {nbCap}</span>}
+                              {nbFine>0&&<span style={{ fontSize:9,color:"#C2410C",fontFamily:"'Lora',serif" }}>● In fine {nbFine}m</span>}
+                              {nbSans>0&&<span style={{ fontSize:9,color:"#9CA3AF",fontFamily:"'Lora',serif" }}>● Sans flux {nbSans}m</span>}
+                              {nbDif>0&&<span style={{ fontSize:9,color:"#A16207",fontFamily:"'Lora',serif" }}>● Différé {nbDif}m</span>}
+                              {nbAmort>0&&<span style={{ fontSize:9,color:"#065F46",fontFamily:"'Lora',serif" }}>● Amort. {nbAmort}m</span>}
                             </div>
                             <div style={{ display:"flex",gap:12 }}>
                               {dateDebut&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{dateDebut.split("-").reverse().join("/")} →</span>}
@@ -14672,7 +14666,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.506<br />16/05/26 à 00:30
+          v.0.507<br />16/05/26 à 01:00
         </div>
       </div>
 
