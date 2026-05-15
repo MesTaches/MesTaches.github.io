@@ -11506,7 +11506,6 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
             <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux..." style={inpL}/></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            <div style={{gridColumn:"1/-1"}}/>
             {(!localDos.lignes||localDos.lignes.length===0) ? (<>
               <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="15 000 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lblL("Durée (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
@@ -11563,7 +11562,6 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               </div>
             );
           })()}
-          </div>
 
 
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
@@ -14812,7 +14810,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.524<br />16/05/26 à 10:00
+          v.0.525<br />16/05/26 à 10:00
         </div>
       </div>
 
