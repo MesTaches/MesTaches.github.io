@@ -303,8 +303,8 @@ async function fbLogout() {
   <div id="root" style="flex:1;overflow:auto;height:100%;width:100%;"></div>
   <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
     style="position:fixed;bottom:16px;right:152px;z-index:9999;background:#C0392B;color:white;border:1px solid #A93226;border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
-    onmouseover="this.style.background='#A93226';this.style.borderColor='#922B21'"
-    onmouseout="this.style.background='#C0392B';this.style.borderColor='#A93226'">
+    onmouseover="this.style.background='#A93226'"
+    onmouseout="this.style.background='#C0392B'">
     Corbeille
   </button>
 
@@ -11508,31 +11508,32 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
             {(()=>{
-              const lg2=localDos.lignes||[];
-              const stPret=lg2.filter(r=>{const s=(r.statut||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return s.includes("pret");});
-              const intPret=stPret.reduce((a,r)=>a+(r.interets||0),0);
-              const intAmort=lg2.filter(r=>r.estAmort).reduce((a,r)=>a+(r.interets||0),0);
-              const intDif=lg2.filter(r=>r.estDiffere).reduce((a,r)=>a+(r.interets||0),0);
-              const fmtM=v=>v>0?v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €":"—";
-              const row=(lbl1,val1,set1,ph1,lbl2,val2)=>(
+              const lg2 = localDos.lignes||[];
+              const normSt = s => (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+              const lgPret  = lg2.filter(r=>normSt(r.statut).includes("pret") && !r.estVersement);
+              const lgAmort = lg2.filter(r=>r.estAmort);
+              const lgDif   = lg2.filter(r=>r.estDiffere);
+              const intPret  = lgPret.reduce((a,r)=>a+(r.interets||0),0);
+              const intAmort = lgAmort.reduce((a,r)=>a+(r.interets||0),0);
+              const intDif   = lgDif.reduce((a,r)=>a+(r.interets||0),0);
+              const garPret  = lgPret.reduce((a,r)=>a+(r.commGarantie||0),0);
+              const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
+              const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
+              const Row = ({label,field,placeholder,montant,color,bg}) => (
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
-                  <div>
-                    {lblL(lbl1)}
-                    <input type="text" value={val1} onChange={e=>setL(set1,e.target.value)} placeholder={ph1} style={inpL}/>
-                  </div>
+                  <div>{lblL(label)}<input type="text" value={localDos[field]||""} onChange={e=>setL(field,e.target.value)} placeholder={placeholder} style={inpL}/></div>
                   <div>
                     <div style={{fontSize:9,fontWeight:700,color:"#666",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div>
-                    <div style={{fontSize:11,fontFamily:"'Lora',serif",color:"#C0392B",fontWeight:600,padding:"4px 8px",background:"#FFF5F5",borderRadius:6,minHeight:28,display:"flex",alignItems:"center"}}>{fmtM(val2)}</div>
+                    <div style={{fontSize:11,fontFamily:"'Lora',serif",color:color||"#C0392B",fontWeight:600,padding:"4px 8px",background:bg||"#FFF5F5",borderRadius:6,minHeight:28,display:"flex",alignItems:"center"}}>{fmtM(montant)}</div>
                   </div>
                 </div>
               );
               return (<>
-                {row("Taux Prêt (%/an)",localDos.tauxAnnuel||"","tauxAnnuel","Ex: 2,30",intPret)}
-                {row("Taux Amort. (%/an)",localDos.tauxAmort||"","tauxAmort","Ex: 2,70",intAmort)}
-                {row("Taux Différé (%/an)",localDos.tauxDiffere||"","tauxDiffere","Si différent",intDif)}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-                  <div>{lblL("Commission garantie (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inpL}/></div>
-                </div>
+                <Row label="Taux Prêt (%/an)" field="tauxAnnuel" placeholder="Ex: 2,30" montant={intPret}/>
+                <Row label="Taux Amort. (%/an)" field="tauxAmort" placeholder="Ex: 2,70" montant={intAmort}/>
+                {intDif>0&&<Row label="Taux Différé (%/an)" field="tauxDiffere" placeholder="Si différent" montant={intDif}/>}
+                <Row label="Com. garantie Prêt (%/an)" field="tauxGarantie" placeholder="Ex: 0,60" montant={garPret} color="#6D28D9" bg="#F5F3FF"/>
+                {garAmort>0&&<Row label="Com. garantie Amort. (%/an)" field="tauxGarantie2" placeholder="Ex: 0,83" montant={garAmort} color="#6D28D9" bg="#F5F3FF"/>}
               </>);
             })()}
           </div>
@@ -11894,12 +11895,20 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     if (hasDiffere && !hasAmort) statutDiffPur = st;
   });
 
-  // Pour le taux Prêt : total intérêts / montant initial / durée en années
+  // Taux Prêt = intérêts lignes Prêt non-Versement / montant versé / durée en années
   if (statutPret) {
-    var lgPret = statuts[statutPret] || [];
+    var lgPret = (statuts[statutPret] || []).filter(function(r){ return !r.estVersement; });
     var totalIntPret = lgPret.reduce(function(a,r){ return a+(r.interets||0);},0);
-    var montantPret = montantAuto || 1;
-    var dureeAnPret = lgPret.length / 12;
+    // Montant = premier capitalRestant non nul du statut Prêt (valeur initiale du prêt)
+    var montantPret = 0;
+    for (var pi=0; pi<lgPret.length; pi++) {
+      if ((lgPret[pi].capitalRestant||0) > 0) { montantPret = lgPret[pi].capitalRestant; break; }
+    }
+    if (!montantPret) montantPret = montantAuto || 1;
+    // Durée en années = nb de lignes avec intérêts / 12
+    var lgPretFlux = lgPret.filter(function(r){ return (r.interets||0)>0; });
+    var nbMoisPret = lgPretFlux.length || lgPret.length || 12;
+    var dureeAnPret = nbMoisPret / 12;
     if (totalIntPret > 0 && montantPret > 0 && dureeAnPret > 0) {
       tauxAuto = (totalIntPret / montantPret / dureeAnPret * 100).toFixed(4);
     } else if (tauxParStatut[statutPret]) {
@@ -12149,32 +12158,26 @@ function EcheancierView({ tasks, settings }) {
                   const enRetardDos=0;
                   // Calcul timeline depuis les lignes réelles
                   const statuts2 = [...new Set(lignes.map(r=>r.statut||"").filter(Boolean))];
-                  const nbVers  = lignes.filter(r=>r.estVersement).length;
-                  const nbCap   = lignes.filter(r=>r.estCapita).length;
-                  const nbCar   = lignes.filter(r=>r.estCarence).length;
-                  const nbDif   = lignes.filter(r=>r.estDiffere).length;
-                  const nbFine  = lignes.filter(r=>r.estDifferFin).length;
-                  const nbAmort = lignes.filter(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement&&!r.estDifferFin)).length;
-                  const nbSans  = lignes.filter(r=>r.estSansFlux).length;
+                  const countType = test => lignes.filter(test).length;
+                  const nbVers  = countType(r=>r.estVersement);
+                  const nbCap   = countType(r=>r.estCapita);
+                  const nbFine  = countType(r=>r.estDifferFin||(r.estSansFlux&&(r.type||"").toLowerCase().includes("fine")));
+                  const nbSansF = countType(r=>r.estSansFlux&&!(r.type||"").toLowerCase().includes("fine"));
+                  const nbDif   = countType(r=>r.estDiffere);
+                  const nbAmort = countType(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement&&!r.estDifferFin));
                   const totalT  = lignes.length || 1;
-                  // Palette de couleurs par statut
-                  const STATUT_COLORS = ["#93C5FD","#6EE7B7","#FCD34D","#FCA5A5","#DDD6FE","#FDBA74","#A7F3D0"];
+                  const STATUT_COLORS = ["#93C5FD","#6EE7B7","#FCD34D","#FCA5A5","#DDD6FE","#FDBA74"];
                   const statutColorMap = {};
                   statuts2.forEach((st,i)=>{ statutColorMap[st]=STATUT_COLORS[i%STATUT_COLORS.length]; });
-                  // Phases par statut OU par type si pas de statut
                   const phasesByStatut = statuts2.length > 0
-                    ? statuts2.map(st=>({
-                        statut: st,
-                        count: lignes.filter(r=>r.statut===st).length,
-                        color: statutColorMap[st]
-                      }))
+                    ? statuts2.map(st=>({statut:st, count:lignes.filter(r=>r.statut===st).length, color:statutColorMap[st]}))
                     : [
-                        ...(nbVers>0  ?[{statut:"Versement", count:nbVers,  color:"#BFDBFE"}]:[]),
-                        ...(nbFine>0  ?[{statut:"In fine",   count:nbFine,  color:"#FED7AA"}]:[]),
-                        ...(nbSans>0  ?[{statut:"Sans flux",  count:nbSans,  color:"#E5E7EB"}]:[]),
+                        ...(nbVers>0  ?[{statut:"Versement",  count:nbVers,  color:"#BFDBFE"}]:[]),
+                        ...(nbFine>0  ?[{statut:"In fine",    count:nbFine,  color:"#FED7AA"}]:[]),
                         ...(nbCap>0   ?[{statut:"Int. capit.",count:nbCap,   color:"#DDD6FE"}]:[]),
+                        ...(nbSansF>0 ?[{statut:"Sans flux",  count:nbSansF, color:"#E5E7EB"}]:[]),
                         ...(nbDif>0   ?[{statut:"Différé",    count:nbDif,   color:"#FCD34D"}]:[]),
-                        ...(nbAmort>0 ?[{statut:"Amort.",      count:nbAmort, color:"#6EE7B7"}]:[]),
+                        ...(nbAmort>0 ?[{statut:"Amort.",     count:nbAmort, color:"#6EE7B7"}]:[]),
                       ];
                   const dateDebut=lignes[0]?.date||dos.dateDebut||"";
                   const dateFin2=lignes[lignes.length-1]?.date||dos.dateFin||"";
@@ -14605,7 +14608,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.511<br />16/05/26 à 05:00
+          v.0.512<br />16/05/26 à 06:00
         </div>
       </div>
 
