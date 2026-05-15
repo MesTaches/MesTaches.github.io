@@ -625,17 +625,10 @@ function exportEchPDF(dos) {
   <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
   </body></html>`;
 
-  // Méthode robuste : iframe caché qui déclenche l'impression
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";
-  document.body.appendChild(iframe);
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open(); doc.write(htm); doc.close();
-  setTimeout(() => {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    setTimeout(() => document.body.removeChild(iframe), 2000);
-  }, 800);
+  // Méthode robuste : nouvelle fenêtre avec impression auto
+  const w = window.open("", "_blank");
+  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
+  w.document.open(); w.document.write(htm); w.document.close();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -11024,12 +11017,14 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
 
   const lignes = d.lignes||[];
   const totalEch  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0);
-  const totalInt  = lignes.reduce((a,r)=>a+(r.interets||0),0);
+  const totalInt  = lignes.reduce((a,r)=>a+(r.estCapita?0:(r.interets||0)),0);
+  const totalIntBrut = lignes.reduce((a,r)=>a+(r.interets||0),0);
   const totalCap  = lignes.reduce((a,r)=>a+(r.capital||0),0);
   const totalGar  = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
   const totalAss  = lignes.reduce((a,r)=>a+(r.assurance||0),0);
   const totalAss2 = totalAss;
   const totalGlob = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
+  const hasCapita = lignes.some(r=>r.estCapita);
   const nowPanel = new Date().toISOString().split("T")[0];
   const paye     = lignes.filter(r=>r.date<=nowPanel).length;
   const restant  = lignes.length - paye;
@@ -11322,7 +11317,10 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                         <td colSpan={4} style={{ padding:"3px 6px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap" }}>TOTAL</td>
                         <td style={{ padding:"7px 8px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
                         <td style={{ padding:"7px 8px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>{fmtE(totalCap)}</td>
-                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>{fmtE(totalInt)}</td>
+                        <td style={{ padding:"7px 8px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap" }}>
+                          {fmtE(totalInt)}
+                          {hasCapita && <div style={{fontSize:8,color:"#6D28D9",fontWeight:500,marginTop:1}} title={"Dont "+fmtE(totalIntBrut-totalInt)+" d'intérêts capitalisés (non décaissés)"}>+{fmtE(totalIntBrut-totalInt)} capit.</div>}
+                        </td>
                         <td style={{ padding:"7px 8px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:10 }}>—</td>
                         <td style={{ padding:"7px 8px",textAlign:"right",color:"#6D28D9",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(totalGar)}</td>
                         <td style={{ padding:"7px 8px",textAlign:"right",color:"#E67E22",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700 }}>{fmtE(totalAss2)}</td>
@@ -11525,23 +11523,32 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
-              const TauxRow = ({label,taux,montant,accentColor,accentBg,isGarantie}) => (
-                <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isGarantie?"#E9D5FF":"#DBEAFE")}}>
-                  <div style={{flex:"0 0 auto",background:isGarantie?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
+              const TauxRow = ({label,taux,montant,accentColor,accentBg,isGarantie,isTotal,isTEG}) => (
+                <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isTEG?"#FED7AA":isTotal?"#A7F3D0":isGarantie?"#E9D5FF":"#DBEAFE")}}>
+                  <div style={{flex:"0 0 auto",background:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
                     <span style={{fontSize:12,fontWeight:800,color:"white",fontFamily:"'Lora',serif",letterSpacing:"-0.02em"}}>{fmtT(taux)}</span>
                   </div>
-                  <div style={{flex:1,background:isGarantie?"#FAFAFF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <div style={{fontSize:9,color:isGarantie?"#7C3AED":"#1D4ED8",fontWeight:700,fontFamily:"'Lora',serif",letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:1}}>{label}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:isGarantie?"#6D28D9":"#C0392B",fontFamily:"'Lora',serif"}}>{fmtM(montant)}</div>
+                  <div style={{flex:1,background:isTEG?"#FFF7ED":isTotal?"#F0FDF4":isGarantie?"#FAFAFF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <div style={{fontSize:9,color:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":"#1D4ED8",fontWeight:700,fontFamily:"'Lora',serif",letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:1}}>{label}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:isTEG?"#C2410C":isTotal?"#065F46":isGarantie?"#6D28D9":"#C0392B",fontFamily:"'Lora',serif"}}>{fmtM(montant)}</div>
                   </div>
                 </div>
               );
+              const totalInterets = intPret + intAmort + intDif;
+              const totalGarantieAll = garPret + garAmort;
+              const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)) || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
+              const dureeAns = (lg2.filter(r=>!r.estVersement&&!r.estSansFlux).length||1) / 12;
+              const tegPct = montantVerse>0 && dureeAns>0 ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns*100).toFixed(2) : "—";
+              const totalInteretsPct = montantVerse>0 && dureeAns>0 ? (totalInterets/montantVerse/dureeAns*100).toFixed(2) : "—";
               return (<>
                 <TauxRow label="Intérêts — Prêt" taux={localDos.tauxAnnuel} montant={intPret}/>
-                <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
                 {intDif>0&&<TauxRow label="Intérêts — Différé" taux={localDos.tauxDiffere||localDos.tauxAmort} montant={intDif}/>}
+                <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
                 <TauxRow label="Com. garantie — Prêt" taux={localDos.tauxGarantie} montant={garPret} isGarantie/>
                 {garAmort>0&&<TauxRow label="Com. garantie — Amort." taux={localDos.tauxGarantie2||localDos.tauxGarantie} montant={garAmort} isGarantie/>}
+                <div style={{height:1,background:"#E2E8F0",margin:"4px 0"}}/>
+                <TauxRow label="Total intérêts" taux={totalInteretsPct!=="—"?totalInteretsPct:null} montant={totalInterets} isTotal/>
+                <TauxRow label="TEG total (intérêts + garanties)" taux={tegPct!=="—"?tegPct:null} montant={totalInterets+totalGarantieAll} isTEG/>
               </>);
             })()}
           </div>
@@ -11711,12 +11718,12 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         if(ext==='xlsx'||ext==='xls'){const r=new FileReader();r.onload=ev=>pr(window.parseXLSXEcheancier(ev.target.result));r.readAsArrayBuffer(file);}
                         else {const r=new FileReader();r.onload=ev=>pr(window.parseCSVEcheancier(ev.target.result));r.readAsText(file,"UTF-8");}
                       }}>
-                      📥 CSV/Excel
+                      📥 Import CSV/Excel
                     </span>
                   </label>
                   <button onClick={()=>exportEchPDF(localDos)}
                     style={{fontSize:10,fontFamily:"'Lora',serif",background:"#FFF7ED",color:"#C2410C",border:"1px solid #FED7AA",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
-                    📄 PDF
+                    📄 Export PDF
                   </button>
                   <button onClick={()=>setEditMode(m=>!m)}
                     style={{fontSize:10,fontFamily:"'Lora',serif",background:editMode?"#27AE60":"white",color:editMode?"white":"#102A63",border:"1px solid #102A63",borderRadius:6,padding:"4px 10px",cursor:"pointer"}}>
@@ -12055,6 +12062,22 @@ function EcheancierView({ tasks, settings }) {
     return a + (d.lignes||[]).filter(r=>r.date>=now && r.date<=d30s).length;
   },0);
 
+  // TEG moyen pondéré sur tous les dossiers
+  const tegGlobal = (() => {
+    let totalI=0, totalG=0, totalMV=0;
+    dossiers.forEach(d => {
+      const lg = d.lignes||[];
+      if (!lg.length) return;
+      const mv = lg.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)
+              || parseFloat(String(d.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
+      const dur = (lg.filter(r=>!r.estVersement&&!r.estSansFlux).length||1)/12;
+      totalI  += lg.reduce((a,r)=>a+(r.estCapita?0:(r.interets||0)),0);
+      totalG  += lg.reduce((a,r)=>a+(r.commGarantie||0),0);
+      totalMV += mv * dur;
+    });
+    return totalMV>0 ? ((totalI+totalG)/totalMV*100).toFixed(2)+"%" : "—";
+  })();
+
   const dossiersOrdres = (ordre && ordre.length===dossiers.length)
     ? ordre.map(id2=>dossiers.find(d=>d.id===id2)).filter(Boolean)
     : [...dossiers].sort((a,b)=>{const dA=a.dateFin||"",dB=b.dateFin||"";return dB>dA?1:dB<dA?-1:0;});
@@ -12123,12 +12146,13 @@ function EcheancierView({ tasks, settings }) {
       {activeTab==="dashboard" && (
         <div style={{ padding:"20px 24px",display:"flex",flexDirection:"column",gap:16 }}>
           {/* KPIs */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:16 }}>
             {[
               { label:"Capital restant dû",    val:fmtE(totalEncours),          color:"#C0392B", bg:"#FEE2E2", icon:"💶" },
               { label:"Échéances cette année",  val:fmtE(totalEcheancesAnnee),   color:"#1D4ED8", bg:"#DBEAFE", icon:"📅" },
               { label:"Prêts en cours",           val:String(pretsEnCours),        color:"#1D4ED8", bg:"#DBEAFE", icon:"🏦" },
               { label:"Dans les 30 prochains j",val:String(prochaines30),        color:"#A16207", bg:"#FEF9C3", icon:"🔔" },
+              { label:"TEG moyen pondéré",      val:tegGlobal,                   color:"#EA580C", bg:"#FFF7ED", icon:"📊" },
             ].map(k=>(
               <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 20px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
                 <div style={{ fontSize:20,marginBottom:8 }}>{k.icon}</div>
@@ -14403,6 +14427,8 @@ function App() {
         trashBtn.style.color = "white";
       }
     }
+    const logoutBtn = document.getElementById("fb-logout-btn");
+    if (logoutBtn) logoutBtn.style.display = view === "echeancier" ? "none" : "";
   }, [view]);
 
   useEffect(() => {
@@ -14664,7 +14690,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.518<br />16/05/26 à 10:00
+          v.0.519<br />16/05/26 à 10:00
         </div>
       </div>
 
