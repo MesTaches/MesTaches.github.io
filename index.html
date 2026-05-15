@@ -1027,14 +1027,19 @@ async function appDbGet(store) {
 // set(store, data)
 async function appDbSet(store, data) {
   try {
-    const db  = await openAppDB();
-    const tx  = db.transaction(store, "readwrite");
+    const db = await openAppDB();
+    const tx = db.transaction(store, "readwrite");
     tx.objectStore(store).put(data, "data");
     return new Promise((res, rej) => {
-      tx.oncomplete = () => res(true);
-      tx.onerror    = e => rej(e.target.error);
+      tx.oncomplete = () => {
+        if (store==="tasks" && Array.isArray(data) && data.length>0) {
+          try{localStorage.setItem("tasks_backup",JSON.stringify(data));}catch{}
+        }
+        res(true);
+      };
+      tx.onerror = e => rej(e.target.error);
     });
-  } catch(e) { console.error(`AppDB set(${store}):`, e); return false; }
+  } catch(e) { console.error("AppDB set:", e); return false; }
 }
 
 // getAll() → { store: data, ... } — pour l'export JSON
