@@ -625,16 +625,19 @@ function exportEchPDF(dos) {
   <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
   </body></html>`;
 
-  // Méthode blob : crée un lien temporaire, pas de popup bloquée
-  const blob = new Blob([htm], {type:"text/html;charset=utf-8"});
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement("a");
-  a.href     = url;
-  a.target   = "_blank";
-  a.rel      = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
+  // Export PDF via data URI + iframe caché → déclenche l'impression sans bloquer
+  const encoded = 'data:text/html;charset=utf-8,' + encodeURIComponent(htm);
+  const ifrm = document.createElement('iframe');
+  ifrm.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1280px;height:900px;border:none;';
+  ifrm.src = encoded;
+  document.body.appendChild(ifrm);
+  ifrm.onload = function() {
+    setTimeout(function() {
+      ifrm.contentWindow.focus();
+      ifrm.contentWindow.print();
+      setTimeout(function() { document.body.removeChild(ifrm); }, 3000);
+    }, 400);
+  };
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -11503,7 +11506,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
             <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux..." style={inpL}/></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
+            <div style={{gridColumn:"1/-1"}}/>
             {(!localDos.lignes||localDos.lignes.length===0) ? (<>
               <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="15 000 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lblL("Durée (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
@@ -11517,6 +11520,49 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 ✓ {localDos.lignes.length} lignes importées · Durée : {localDos.duree||"calculée"}
               </div>
             )}
+          </div>
+
+          {/* ── Bloc dates / durée / périodicité ── */}
+          {(()=>{
+            const lgAll = localDos.lignes||[];
+            const lgNum = lgAll.filter(r=>r.n && !r.estVersement && !r.estSansFlux && r.date);
+            const autoDateDebut = lgNum.length ? lgNum[0].date : "";
+            const autoDateFin   = lgNum.length ? lgNum[lgNum.length-1].date : "";
+            const autoDuree     = String(lgNum.length||"");
+            const inpRO = {...inpL, background:"#F9FAFB", color:"#6B7280"};
+            return (
+              <div style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px",border:"1px solid #E2E8F0"}}>
+                <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8}}>DATES &amp; DURÉE</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  <div>{lblL("Date du contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
+                  <div>{lblL("Périodicité")}<select value={localDos.periodicite||"Mensuelle"} onChange={e=>setL("periodicite",e.target.value)} style={inpL}>
+                    <option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option>
+                  </select></div>
+                  <div>{lblL("Date début","Rempli auto depuis la 1ère ligne numérotée")}
+                    <input type="date"
+                      value={autoDateDebut || localDos.dateDebut||""}
+                      onChange={e=>setL("dateDebut",e.target.value)}
+                      style={autoDateDebut ? inpRO : inpL}
+                      readOnly={!!autoDateDebut}/>
+                  </div>
+                  <div>{lblL("Date de fin","Rempli auto depuis la dernière ligne numérotée")}
+                    <input type="date"
+                      value={autoDateFin || localDos.dateFin||""}
+                      onChange={e=>setL("dateFin",e.target.value)}
+                      style={autoDateFin ? inpRO : inpL}
+                      readOnly={!!autoDateFin}/>
+                  </div>
+                  <div style={{gridColumn:"1/-1"}}>{lblL("Durée totale (mois)","Nombre de lignes numérotées hors versements et sans-flux")}
+                    <input type="text"
+                      value={autoDuree || localDos.duree||""}
+                      onChange={e=>setL("duree",e.target.value)}
+                      style={autoDuree ? inpRO : inpL}
+                      readOnly={!!autoDuree}/>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           </div>
 
 
@@ -11552,7 +11598,13 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const totalInterets = intPret + intAmort + intDif;
               const totalGarantieAll = garPret + garAmort;
               const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)) || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
-              const dureeAns = (lg2.filter(r=>!r.estVersement&&!r.estSansFlux).length||1) / 12;
+              // Durée réelle : date dernière ligne - date première ligne (hors versements et sans-flux)
+              const lgAvecDate = lg2.filter(r=>r.date && r.n && !r.estVersement && !r.estSansFlux);
+              const dateMin = lgAvecDate.length ? lgAvecDate[0].date : null;
+              const dateMax = lgAvecDate.length ? lgAvecDate[lgAvecDate.length-1].date : null;
+              const dureeAns = dateMin && dateMax
+                ? Math.max((new Date(dateMax) - new Date(dateMin)) / (1000*60*60*24*365.25), 0.01)
+                : (lgAvecDate.length||1) / 12;
               const tegPct = montantVerse>0 && dureeAns>0 ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns*100).toFixed(2) : "—";
               const totalInteretsPct = montantVerse>0 && dureeAns>0 ? (totalInterets/montantVerse/dureeAns*100).toFixed(2) : "—";
               return (<>
@@ -14760,7 +14812,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.523<br />16/05/26 à 10:00
+          v.0.524<br />16/05/26 à 10:00
         </div>
       </div>
 
