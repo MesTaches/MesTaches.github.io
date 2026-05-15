@@ -10870,10 +10870,14 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
         const estVersement = tL.includes('versement');
         const estSansFlux = !estInFine&&!estDiffere&&!estCapita&&!estVersement&&capital===0&&inter===0&&comm===0&&ech===0;
         const estAmort    = !estInFine&&!estDiffere&&!estCapita&&!estSansFlux&&!estVersement&&capital>0;
+        // Pour un versement : l'échéance globale est négative (entrée d'argent)
+        // Le capital restant après versement = capital restant + montant versé
+        const echFinal = estVersement ? 0 : ech; // versement n'est pas une échéance sortante
         rows.push({
           n:rows.length+1, date, statut, type,
-          echeance:ech, capital, interets:inter, cumulInterets:cumulCalc,
-          commGarantie:comm, assurance:0, echeanceGlobale:ech, capitalRestant:capR,
+          echeance:echFinal, capital:(estVersement?0:capital), interets:inter, cumulInterets:cumulCalc,
+          commGarantie:comm, assurance:0, echeanceGlobale:echFinal, capitalRestant:capR,
+          versement: estVersement ? capital : 0, // montant reçu
           estCapita, estCarence:false, estDiffere, estDifferFin:estInFine,
           estSansFlux, estAmort, estVersement,
           paye:false, datePaiement:'', commentaire:''
@@ -11481,17 +11485,22 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
             <div>{lblL("Intitulé")}<input value={localDos.intitule||""} onChange={e=>setL("intitule",e.target.value)} style={inpL}/></div>
             <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
-            <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux…" style={inpL}/></div>
-            <div>{lblL("Type amortissement")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités constantes</option><option value="capital">Capital constant</option></select></div>
-              <div>{lblL("Fréquence flux", "Mois entre chaque flux réel (1=mensuel, 3=trimestriel avec 0€ les autres mois)")}<select value={localDos.fluxPeriode||"1"} onChange={e=>setL("fluxPeriode",e.target.value)} style={inpL}><option value="1">1 — Mensuel</option><option value="3">3 — Trimestriel</option><option value="6">6 — Semestriel</option><option value="12">12 — Annuel</option></select></div>
+            <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux..." style={inpL}/></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Montant (€)")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))setL("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-            <div>{lblL("Durée totale contrat (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
-
             <div>{lblL("Date contrat")}<input type="date" value={localDos.dateContrat||""} onChange={e=>setL("dateContrat",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Date début éch.")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
-            <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
+            {(!localDos.lignes||localDos.lignes.length===0) ? (<>
+              <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="15 000 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
+              <div>{lblL("Durée (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Date début")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Type amort.")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités ctes</option><option value="capital">Capital cte</option></select></div>
+              <div>{lblL("Fréquence flux")}<select value={localDos.fluxPeriode||"1"} onChange={e=>setL("fluxPeriode",e.target.value)} style={inpL}><option value="1">Mensuel</option><option value="3">Trimestriel</option><option value="6">Semestriel</option><option value="12">Annuel</option></select></div>
+              <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
+            </>) : (
+              <div style={{gridColumn:"1/-1",background:"#F0FDF4",borderRadius:6,padding:"8px 10px",border:"1px solid #BBF7D0",fontSize:10,fontFamily:"'Lora',serif",color:"#065F46"}}>
+                ✓ {localDos.lignes.length} lignes importées · Durée : {localDos.duree||"calculée"}
+              </div>
+            )}
           </div>
 
           {/* Section Versements */}
@@ -11796,8 +11805,11 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var totalVers = (dos.versements||[]).reduce(function(a,v){
     return a + (parseFloat(String(v.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
   }, 0);
-  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.capital||0); }, 0);
-  var montantAuto = totalVers > 0 ? totalVers : totalCapRbt;
+  // Versements : augmentent le capital, ne sont pas des remboursements
+  var totalVersAmt = lg.reduce(function(a,r){ return a + (r.estVersement ? (r.versement||r.capital||0) : 0); }, 0);
+  var totalCapRbt = lg.reduce(function(a,r){ return a + (r.estVersement ? 0 : (r.capital||0)); }, 0);
+  // Montant = versements si présents, sinon total capital remboursé
+  var montantAuto = totalVersAmt > 0 ? totalVersAmt : (totalVers > 0 ? totalVers : totalCapRbt);
 
   // ── Durée totale ──
   var dureeAuto = String(lg.length);
@@ -14634,7 +14646,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.499<br />15/05/26 à 21:30
+          v.0.500<br />15/05/26 à 22:00
         </div>
       </div>
 
