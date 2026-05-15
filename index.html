@@ -625,19 +625,12 @@ function exportEchPDF(dos) {
   <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
   </body></html>`;
 
-  // Export PDF via data URI + iframe caché → déclenche l'impression sans bloquer
-  const encoded = 'data:text/html;charset=utf-8,' + encodeURIComponent(htm);
-  const ifrm = document.createElement('iframe');
-  ifrm.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1280px;height:900px;border:none;';
-  ifrm.src = encoded;
-  document.body.appendChild(ifrm);
-  ifrm.onload = function() {
-    setTimeout(function() {
-      ifrm.contentWindow.focus();
-      ifrm.contentWindow.print();
-      setTimeout(function() { document.body.removeChild(ifrm); }, 3000);
-    }, 400);
-  };
+  // window.open + document.write : méthode universelle
+  var w = window.open('', '_blank', 'width=1200,height=900');
+  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
+  w.document.open();
+  w.document.write(htm);
+  w.document.close();
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -11586,15 +11579,13 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 else if(hasInFine||(allSansFlux&&!hasAmort&&!hasDiff)) statutPret2=st;
                 if(hasAmort) statutAmort2=st;
               });
-              const lgPret2  = (statutsMap2[statutPret2]||[]).filter(r=>!r.estVersement&&!r.estCapita);
+              const lgPret2  = (statutsMap2[statutPret2]||[]).filter(r=>!r.estVersement);
               const lgAmort  = lg2.filter(r=>r.estAmort);
               const lgDif    = lg2.filter(r=>r.estDiffere);
-              const lgCap2   = lg2.filter(r=>r.estCapita);
-              const intPret  = lgPret2.reduce((a,r)=>a+(r.interets||0),0);
+              const intPret  = lgPret2.reduce((a,r)=>a+(r.interets||0),0);  // inclut capitalisés
               const intAmort = lgAmort.reduce((a,r)=>a+(r.interets||0),0);
               const intDif   = lgDif.reduce((a,r)=>a+(r.interets||0),0);
-              const intCapita= lgCap2.reduce((a,r)=>a+(r.interets||0),0);
-              const garPret  = lgPret2.reduce((a,r)=>a+(r.commGarantie||0),0);
+              const garPret  = lgPret2.filter(r=>!r.estCapita).reduce((a,r)=>a+(r.commGarantie||0),0);
               const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
@@ -11609,23 +11600,30 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                   </div>
                 </div>
               );
-              const totalInterets    = intPret + intAmort + intDif + intCapita;
+              const totalInterets    = intPret + intAmort + intDif;
               const totalGarantieAll = garPret + garAmort;
               const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)) || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
-              // Durée réelle depuis les dates
-              const lgNum2 = lg2.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
-              const dateMin = lgNum2.length ? lgNum2[0].date : null;
-              const dateMax = lgNum2.length ? lgNum2[lgNum2.length-1].date : null;
-              const dureeAns = dateMin&&dateMax
-                ? Math.max((new Date(dateMax)-new Date(dateMin))/(1000*60*60*24*365.25),0.01)
-                : (lgNum2.length||1)/12;
-              const totalInteretsPct = montantVerse>0&&dureeAns>0 ? (totalInterets/montantVerse/dureeAns*100).toFixed(2) : "—";
-              const tegPct           = montantVerse>0&&dureeAns>0 ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns*100).toFixed(2) : "—";
+
+              // Taux moyen pondéré par les montants d'intérêts de chaque phase
+              const tP = parseFloat(localDos.tauxAnnuel)||0;
+              const tA = parseFloat(String(localDos.tauxAmort||"").replace(",","."))||0;
+              const tD = parseFloat(String(localDos.tauxDiffere||localDos.tauxAmort||"").replace(",","."))||0;
+              const tG = parseFloat(String(localDos.tauxGarantie||"").replace(",","."))||0;
+              const tG2= parseFloat(String(localDos.tauxGarantie2||localDos.tauxGarantie||"").replace(",","."))||0;
+              const totalInteretsPct = totalInterets>0 && (tP||tA)
+                ? ((intPret*tP + intDif*tD + intAmort*tA) / totalInterets).toFixed(2)
+                : "—";
+              const garMoyPct = totalGarantieAll>0 && (tG||tG2)
+                ? ((garPret*tG + garAmort*tG2) / totalGarantieAll).toFixed(2)
+                : null;
+              const tegPct = totalInteretsPct!=="—"
+                ? ((parseFloat(totalInteretsPct)*totalInterets + (garMoyPct?parseFloat(garMoyPct)*totalGarantieAll:0)) / (totalInterets+totalGarantieAll)).toFixed(2)
+                : "—";
+
               return (<>
-                <TauxRow label="Intérêts — Prêt" taux={localDos.tauxAnnuel} montant={intPret}/>
+                <TauxRow label="Intérêts — Prêt (dont capitalisés)" taux={localDos.tauxAnnuel} montant={intPret}/>
                 {intDif>0&&<TauxRow label="Intérêts — Différé" taux={localDos.tauxDiffere||localDos.tauxAmort} montant={intDif}/>}
                 <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
-                {intCapita>0&&<TauxRow label="Intérêts capitalisés" taux={null} montant={intCapita} isCapita/>}
                 <TauxRow label="Com. garantie — Prêt" taux={localDos.tauxGarantie} montant={garPret} isGarantie/>
                 {garAmort>0&&<TauxRow label="Com. garantie — Amort." taux={localDos.tauxGarantie2||localDos.tauxGarantie} montant={garAmort} isGarantie/>}
                 <div style={{height:1,background:"#E2E8F0",margin:"4px 0"}}/>
@@ -14827,7 +14825,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.526<br />16/05/26 à 10:00
+          v.0.527<br />16/05/26 à 10:00
         </div>
       </div>
 
