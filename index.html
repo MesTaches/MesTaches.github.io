@@ -7644,6 +7644,9 @@ function CBDocRow({ dt, files, onAdd, onDelete, onNote, onDownload, onRename }) 
   );
 }
 
+</script>
+
+<script type="text/babel" data-presets="react">
 /* ══════════════════════════════════════════════════
    CB DOSSIER MODAL
    ══════════════════════════════════════════════════ */
@@ -11031,16 +11034,16 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   const totalAss2 = totalAss;
   const totalGlob = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
   const hasCapita = lignes.some(r=>r.estCapita);
+  const nowPanel = new Date().toISOString().split("T")[0];
+  const paye     = lignes.filter(r=>r.date<=nowPanel).length;
+  const restant  = lignes.length - paye;
+  const prochaine = lignes.find(r=>r.date>nowPanel);
   const tegDossier = (() => {
     const mv = lignes.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)
             || parseFloat(String(d.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
     const dur = (lignes.filter(r=>!r.estVersement&&!r.estSansFlux).length||1)/12;
     return mv>0 && dur>0 ? ((totalInt+totalGar)/mv/dur*100).toFixed(2)+"%" : "—";
   })();
-  const nowPanel = new Date().toISOString().split("T")[0];
-  const paye     = lignes.filter(r=>r.date<=nowPanel).length;
-  const restant  = lignes.length - paye;
-  const prochaine = lignes.find(r=>r.date>nowPanel);
 
   return (
     <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
@@ -12050,7 +12053,32 @@ function EcheancierView({ tasks, settings }) {
   React.useEffect(()=>{ if(echReady) saveEchDossiers(dossiers); },[dossiers, echReady]);
 
   const saveDossier = raw => { const d=calcDossierAuto(raw); setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]); };
-  const deleteDossier = id => { if(window.confirm("Supprimer cet échéancier ?")) setDossiers(p=>p.filter(x=>x.id!==id)); };
+
+  // Suppression avec annulation 10s
+  const [undoEch, setUndoEch] = React.useState(null);
+  const [undoCountdown, setUndoCountdown] = React.useState(10);
+  const undoTimerRef  = React.useRef(null);
+  const undoTickRef   = React.useRef(null);
+  const deleteDossier = id => {
+    const found = dossiers.find(x=>x.id===id);
+    if (!found) return;
+    setDossiers(p=>p.filter(x=>x.id!==id));
+    if (activeTab===id) setActiveTab("dashboard");
+    clearTimeout(undoTimerRef.current);
+    clearInterval(undoTickRef.current);
+    setUndoEch(found);
+    setUndoCountdown(10);
+    undoTickRef.current = setInterval(()=>setUndoCountdown(c=>{ if(c<=1){ clearInterval(undoTickRef.current); return 0; } return c-1; }),1000);
+    undoTimerRef.current = setTimeout(()=>{ setUndoEch(null); clearInterval(undoTickRef.current); },10000);
+  };
+  const undoDeleteEch = () => {
+    if (!undoEch) return;
+    clearTimeout(undoTimerRef.current);
+    clearInterval(undoTickRef.current);
+    setDossiers(p=>[undoEch,...p]);
+    setUndoEch(null);
+  };
+
   const openNew = () => setModal({ id:uid(), reference:"ECH_"+String(dossiers.length+1).padStart(5,"0"), intitule:"", banque:"", nature:"", numContrat:"", montant:"", tauxAnnuel:"", duree:"", periodicite:"Mensuelle", dateContrat:"", dateDebut:"", assuranceMensuelle:"", garantie:"", objet:"", notes:"", attachments:[], lignes:[] });
 
   const fmtE = (v,dec=0) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
@@ -12369,6 +12397,37 @@ function EcheancierView({ tasks, settings }) {
 
       {/* Modal */}
       {modal && <EchDossierPanel dossier={modal} onSave={d=>{saveDossier(d);setActiveTab(d.id);}} onClose={()=>setModal(null)} settings={settings} />}
+
+      {/* Toast annulation suppression */}
+      {undoEch && (
+        <div style={{ position:"fixed",bottom:28,left:"50%",transform:"translateX(-50%)",zIndex:9999,
+          background:"#1E293B",color:"white",borderRadius:14,padding:"14px 20px",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.3)",display:"flex",alignItems:"center",gap:14,
+          fontFamily:"'Lora',serif",fontSize:12,whiteSpace:"nowrap",
+          border:"1px solid rgba(255,255,255,0.08)" }}>
+          <span style={{fontSize:16}}>🗑</span>
+          <span><strong>"{(undoEch.intitule||undoEch.reference||"Échéancier").slice(0,35)}"</strong> supprimé</span>
+          <button onClick={undoDeleteEch}
+            style={{ background:"#27AE60",border:"none",borderRadius:7,color:"white",padding:"5px 14px",
+              fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700,
+              display:"flex",alignItems:"center",gap:6 }}>
+            ↩ Annuler
+          </button>
+          <div style={{ display:"flex",alignItems:"center",gap:6 }}>
+            <svg width="22" height="22" viewBox="0 0 22 22">
+              <circle cx="11" cy="11" r="9" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5"/>
+              <circle cx="11" cy="11" r="9" fill="none" stroke="#E67E22" strokeWidth="2.5"
+                strokeDasharray={`${(undoCountdown/10)*56.5} 56.5`}
+                strokeLinecap="round"
+                transform="rotate(-90 11 11)"
+                style={{transition:"stroke-dasharray 0.9s linear"}}/>
+            </svg>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.55)",fontFamily:"'DM Mono',monospace",minWidth:12,textAlign:"center"}}>{undoCountdown}</span>
+          </div>
+          <button onClick={()=>{ setUndoEch(null); clearTimeout(undoTimerRef.current); clearInterval(undoTickRef.current); }}
+            style={{ background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:18,padding:0,lineHeight:1 }}>×</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -14701,7 +14760,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.520<br />16/05/26 à 10:00
+          v.0.521<br />16/05/26 à 10:00
         </div>
       </div>
 
