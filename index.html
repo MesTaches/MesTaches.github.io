@@ -10905,7 +10905,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
           echeance:echFinal, capital:(estVersement?0:capital), interets:inter, cumulInterets:cumulCalc,
           commGarantie:comm, assurance:0, echeanceGlobale:echFinal, capitalRestant:capR,
           versement: estVersement ? capital : 0, // montant reçu
-          estCapita, estCarence:false, estDiffere, estDifferFin:estInFine,
+          estCapita, estCarence:false, estDiffere, estDifferFin,
           estSansFlux, estAmort, estVersement,
           paye:false, datePaiement:'', commentaire:''
         });
@@ -12170,28 +12170,24 @@ function EcheancierView({ tasks, settings }) {
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
                   // Calcul timeline depuis les lignes réelles
-                  const statuts2 = [...new Set(lignes.map(r=>r.statut||"").filter(Boolean))];
+                  // Graphique par TYPE (depuis le champ type du fichier)
                   const countType = test => lignes.filter(test).length;
                   const nbVers  = countType(r=>r.estVersement);
+                  const nbFine  = countType(r=>r.estDifferFin);
                   const nbCap   = countType(r=>r.estCapita);
-                  const nbFine  = countType(r=>r.estDifferFin||(r.estSansFlux&&(r.type||"").toLowerCase().includes("fine")));
-                  const nbSansF = countType(r=>r.estSansFlux&&!(r.type||"").toLowerCase().includes("fine"));
                   const nbDif   = countType(r=>r.estDiffere);
-                  const nbAmort = countType(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement&&!r.estDifferFin));
+                  const nbAmort = countType(r=>r.estAmort);
+                  const nbSansF = countType(r=>r.estSansFlux);
                   const totalT  = lignes.length || 1;
-                  const STATUT_COLORS = ["#93C5FD","#6EE7B7","#FCD34D","#FCA5A5","#DDD6FE","#FDBA74"];
-                  const statutColorMap = {};
-                  statuts2.forEach((st,i)=>{ statutColorMap[st]=STATUT_COLORS[i%STATUT_COLORS.length]; });
-                  const phasesByStatut = statuts2.length > 0
-                    ? statuts2.map(st=>({statut:st, count:lignes.filter(r=>r.statut===st).length, color:statutColorMap[st]}))
-                    : [
-                        ...(nbVers>0  ?[{statut:"Versement",  count:nbVers,  color:"#BFDBFE"}]:[]),
-                        ...(nbFine>0  ?[{statut:"In fine",    count:nbFine,  color:"#FED7AA"}]:[]),
-                        ...(nbCap>0   ?[{statut:"Int. capit.",count:nbCap,   color:"#DDD6FE"}]:[]),
-                        ...(nbSansF>0 ?[{statut:"Sans flux",  count:nbSansF, color:"#E5E7EB"}]:[]),
-                        ...(nbDif>0   ?[{statut:"Différé",    count:nbDif,   color:"#FCD34D"}]:[]),
-                        ...(nbAmort>0 ?[{statut:"Amort.",     count:nbAmort, color:"#6EE7B7"}]:[]),
-                      ];
+                  // Phases dans l'ordre chronologique du fichier
+                  const phasesByStatut = [
+                    ...(nbVers>0  ?[{statut:"Versement",      count:nbVers,  color:"#BFDBFE"}]:[]),
+                    ...(nbFine>0  ?[{statut:"In fine",         count:nbFine,  color:"#FED7AA"}]:[]),
+                    ...(nbCap>0   ?[{statut:"Intérêts capit.", count:nbCap,   color:"#DDD6FE"}]:[]),
+                    ...(nbSansF>0 ?[{statut:"Sans flux",       count:nbSansF, color:"#E5E7EB"}]:[]),
+                    ...(nbDif>0   ?[{statut:"Différé",         count:nbDif,   color:"#FCD34D"}]:[]),
+                    ...(nbAmort>0 ?[{statut:"Amortissement",   count:nbAmort, color:"#6EE7B7"}]:[]),
+                  ];
                   const dateDebut=lignes[0]?.date||dos.dateDebut||"";
                   const dateFin2=lignes[lignes.length-1]?.date||dos.dateFin||"";
                   let pctTimeline=0;
@@ -14621,7 +14617,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.513<br />16/05/26 à 07:00
+          v.0.514<br />16/05/26 à 08:00
         </div>
       </div>
 
