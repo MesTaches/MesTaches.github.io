@@ -1081,7 +1081,26 @@ function useAppStore(store, defaultValue) {
   useEffect(() => {
     (async () => {
       const v = await appDbGet(store);
-      if (v !== null) _setData(v);
+      if (v !== null && (Array.isArray(v) ? v.length > 0 : true)) {
+        _setData(v);
+      } else if (store === "tasks") {
+        // Chercher dans les backups localStorage
+        const keys = ["taskmanager_v4", "tasks_backup", "taskmanager_v4_backup"];
+        for (const k of keys) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                console.info("Tasks restored from", k, ":", parsed.length, "tasks");
+                _setData(parsed);
+                await appDbSet(store, parsed);
+                break;
+              }
+            }
+          } catch {}
+        }
+      }
       setReady(true);
     })();
   }, [store]);
@@ -14651,7 +14670,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.500<br />15/05/26 à 22:00
+          v.0.503<br />15/05/26 à 23:30
         </div>
       </div>
 
