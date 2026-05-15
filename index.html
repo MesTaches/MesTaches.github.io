@@ -11693,12 +11693,15 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                     return(
                       <tr key={i} style={{background:isPast?"#F0FDF4":isNext?"#FFFBEB":i%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F0F0F0"}}>
                         <td style={{...TD,textAlign:"center",color:"#888",fontWeight:600,width:26}}>{row.n}</td>
-                        <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:70}}>
+                        <td style={{...TD,textAlign:"center",color:isPast?"#888":"#2C3E50",width:72}}>
                           {editMode
                             ?<input type="date" value={row.date||""} onChange={e=>updRow("date",e.target.value)} style={{...inpS,textAlign:"center",width:100}}/>
                             :row.date?row.date.split("-").reverse().join("/"):"—"}
                         </td>
-                        <td style={{...TD,textAlign:"center",width:80}}>
+                        <td style={{...TD,textAlign:"center",color:"#6B7280",width:68,maxWidth:80,overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {row.statut||""}
+                        </td>
+                        <td style={{...TD,textAlign:"center",width:82}}>
                           {editMode
                             ?<select value={typeVal} onChange={e=>setType(e.target.value)} style={{...inpS,textAlign:"center",width:90}}>
                               {typeOpts.map(o=><option key={o}>{o}</option>)}
@@ -11712,18 +11715,18 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         </td>
 
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeance||""} onChange={e=>updRow("echeance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:72}}>{fmtE(row.echeance)}</td>}
+                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#102A63",width:82}}>{fmtE(row.echeance)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.capital||""} onChange={e=>updRow("capital",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#27AE60",width:72}}>{fmtE(row.capital)}</td>}
+                          :<td style={{...TD,textAlign:"right",color:"#27AE60",width:82}}>{fmtE(row.capital)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:68}}><input value={row.interets||""} onChange={e=>updRow("interets",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#C0392B",width:68}}>{fmtE(row.interets)}</td>}
-                        <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:68}}>{fmtE(row.cumulInterets)}</td>
+                          :<td style={{...TD,textAlign:"right",color:"#C0392B",width:82}}>{fmtE(row.interets)}</td>}
+                        <td style={{...TD,textAlign:"right",color:"#888",fontStyle:"italic",width:82}}>{fmtE(row.cumulInterets)}</td>
                         {editMode?<td style={{...TD,textAlign:"right",width:65}}><input value={row.commGarantie||""} onChange={e=>updRow("commGarantie",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#6D28D9",width:65}}>{fmtE(row.commGarantie)}</td>}
+                          :<td style={{...TD,textAlign:"right",color:"#6D28D9",width:75}}>{fmtE(row.commGarantie)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:60}}><input value={row.assurance||""} onChange={e=>updRow("assurance",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",color:"#E67E22",width:60}}>{fmtE(row.assurance)}</td>}
+                          :<td style={{...TD,textAlign:"right",color:"#E67E22",width:70}}>{fmtE(row.assurance)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow("echeanceGlobale",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:72}}>{fmtE(row.echeanceGlobale)}</td>}
+                          :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:82}}>{fmtE(row.echeanceGlobale)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:92}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:92,whiteSpace:"nowrap"}}>{fmtE(row.capitalRestant)}</td>}
                         {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
@@ -14610,7 +14613,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.495<br />15/05/26 à 19:30
+          v.0.496<br />15/05/26 à 20:00
         </div>
       </div>
 
