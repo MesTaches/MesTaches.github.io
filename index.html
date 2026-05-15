@@ -1077,7 +1077,7 @@ function useAppStore(store, defaultValue) {
   const [data, _setData] = useState(defaultValue);
   const [ready, setReady] = useState(false);
   const pendingRef = useRef(null);
-  const loadedRef = useRef(false);
+  const loadedRef = useRef(false); // bloque les écritures IDB tant que non chargé
 
   useEffect(() => {
     (async () => {
@@ -1086,7 +1086,6 @@ function useAppStore(store, defaultValue) {
         if (v !== null && (Array.isArray(v) ? v.length > 0 : true)) {
           _setData(v);
         } else if (store === "tasks") {
-          // IDB vide : chercher dans localStorage avant d'utiliser les exemples
           for (const k of ["taskmanager_v4", "tasks_backup", "taskmanager_v4_backup"]) {
             try {
               const raw = localStorage.getItem(k);
@@ -1094,8 +1093,7 @@ function useAppStore(store, defaultValue) {
                 const parsed = JSON.parse(raw);
                 if (Array.isArray(parsed) && parsed.length > 0) {
                   _setData(parsed);
-                  appDbSet(store, parsed);
-                  loadedRef.current = true;
+                  await appDbSet(store, parsed);
                   break;
                 }
               }
@@ -1111,9 +1109,10 @@ function useAppStore(store, defaultValue) {
   const setData = React.useCallback((valOrFn) => {
     _setData(prev => {
       const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
-      // Écriture asynchrone sans bloquer le rendu
-      clearTimeout(pendingRef.current);
-      pendingRef.current = setTimeout(() => appDbSet(store, next), 200);
+      if (loadedRef.current) {
+        clearTimeout(pendingRef.current);
+        pendingRef.current = setTimeout(() => appDbSet(store, next), 300);
+      }
       return next;
     });
   }, [store]);
@@ -14673,7 +14672,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.505<br />16/05/26 à 00:00
+          v.0.506<br />16/05/26 à 00:30
         </div>
       </div>
 
