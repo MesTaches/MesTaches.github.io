@@ -11571,48 +11571,65 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             </div>
             {(()=>{
               const lg2 = localDos.lignes||[];
-              const normSt = s => (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
-              const lgPret  = lg2.filter(r=>normSt(r.statut).includes("pret") && !r.estVersement && !r.estCapita);
-              const lgAmort = lg2.filter(r=>r.estAmort);
-              const lgDif   = lg2.filter(r=>r.estDiffere);
-              const intPret  = lgPret.reduce((a,r)=>a+(r.interets||0),0);
+              const normSt2 = s => (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+              // Identifier statut Prêt (même logique que calcDossierAuto)
+              const statutsMap2 = {};
+              lg2.forEach(r=>{ const s=r.statut||"defaut"; if(!statutsMap2[s]) statutsMap2[s]=[]; statutsMap2[s].push(r); });
+              let statutPret2=null, statutAmort2=null;
+              Object.keys(statutsMap2).forEach(st=>{
+                const lines=statutsMap2[st]; const stL=normSt2(st);
+                const hasAmort=lines.some(r=>r.estAmort||(r.capital||0)>0);
+                const hasDiff=lines.some(r=>r.estDiffere);
+                const hasInFine=lines.some(r=>r.estDifferFin);
+                const allSansFlux=lines.every(r=>r.estSansFlux||r.estVersement||r.estCapita||r.estDifferFin);
+                if(stL.includes("pret")||stL.includes("pret")||st==="defaut"||st==="default") statutPret2=st;
+                else if(hasInFine||(allSansFlux&&!hasAmort&&!hasDiff)) statutPret2=st;
+                if(hasAmort) statutAmort2=st;
+              });
+              const lgPret2  = (statutsMap2[statutPret2]||[]).filter(r=>!r.estVersement&&!r.estCapita);
+              const lgAmort  = lg2.filter(r=>r.estAmort);
+              const lgDif    = lg2.filter(r=>r.estDiffere);
+              const lgCap2   = lg2.filter(r=>r.estCapita);
+              const intPret  = lgPret2.reduce((a,r)=>a+(r.interets||0),0);
               const intAmort = lgAmort.reduce((a,r)=>a+(r.interets||0),0);
               const intDif   = lgDif.reduce((a,r)=>a+(r.interets||0),0);
-              const garPret  = lgPret.reduce((a,r)=>a+(r.commGarantie||0),0);
+              const intCapita= lgCap2.reduce((a,r)=>a+(r.interets||0),0);
+              const garPret  = lgPret2.reduce((a,r)=>a+(r.commGarantie||0),0);
               const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
-              const TauxRow = ({label,taux,montant,accentColor,accentBg,isGarantie,isTotal,isTEG}) => (
-                <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isTEG?"#FED7AA":isTotal?"#A7F3D0":isGarantie?"#E9D5FF":"#DBEAFE")}}>
-                  <div style={{flex:"0 0 auto",background:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
-                    <span style={{fontSize:12,fontWeight:800,color:"white",fontFamily:"'Lora',serif",letterSpacing:"-0.02em"}}>{fmtT(taux)}</span>
+              const TauxRow = ({label,taux,montant,isGarantie,isTotal,isTEG,isCapita}) => (
+                <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isTEG?"#FED7AA":isTotal?"#A7F3D0":isGarantie?"#E9D5FF":isCapita?"#EDE9FE":"#DBEAFE")}}>
+                  <div style={{flex:"0 0 auto",background:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":isCapita?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
+                    <span style={{fontSize:taux?12:10,fontWeight:800,color:"white",fontFamily:"'Lora',serif",letterSpacing:"-0.02em"}}>{taux?fmtT(taux):"capit."}</span>
                   </div>
-                  <div style={{flex:1,background:isTEG?"#FFF7ED":isTotal?"#F0FDF4":isGarantie?"#FAFAFF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
-                    <div style={{fontSize:9,color:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":"#1D4ED8",fontWeight:700,fontFamily:"'Lora',serif",letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:1}}>{label}</div>
-                    <div style={{fontSize:11,fontWeight:700,color:isTEG?"#C2410C":isTotal?"#065F46":isGarantie?"#6D28D9":"#C0392B",fontFamily:"'Lora',serif"}}>{fmtM(montant)}</div>
+                  <div style={{flex:1,background:isTEG?"#FFF7ED":isTotal?"#F0FDF4":isGarantie?"#FAFAFF":isCapita?"#F5F3FF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <div style={{fontSize:9,color:isTEG?"#EA580C":isTotal?"#059669":isGarantie?"#7C3AED":isCapita?"#6D28D9":"#1D4ED8",fontWeight:700,fontFamily:"'Lora',serif",letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:1}}>{label}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:isTEG?"#C2410C":isTotal?"#065F46":isGarantie?"#6D28D9":isCapita?"#6D28D9":"#C0392B",fontFamily:"'Lora',serif"}}>{fmtM(montant)}</div>
                   </div>
                 </div>
               );
-              const totalInterets = intPret + intAmort + intDif;
+              const totalInterets    = intPret + intAmort + intDif + intCapita;
               const totalGarantieAll = garPret + garAmort;
               const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)) || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
-              // Durée réelle : date dernière ligne - date première ligne (hors versements et sans-flux)
-              const lgAvecDate = lg2.filter(r=>r.date && r.n && !r.estVersement && !r.estSansFlux);
-              const dateMin = lgAvecDate.length ? lgAvecDate[0].date : null;
-              const dateMax = lgAvecDate.length ? lgAvecDate[lgAvecDate.length-1].date : null;
-              const dureeAns = dateMin && dateMax
-                ? Math.max((new Date(dateMax) - new Date(dateMin)) / (1000*60*60*24*365.25), 0.01)
-                : (lgAvecDate.length||1) / 12;
-              const tegPct = montantVerse>0 && dureeAns>0 ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns*100).toFixed(2) : "—";
-              const totalInteretsPct = montantVerse>0 && dureeAns>0 ? (totalInterets/montantVerse/dureeAns*100).toFixed(2) : "—";
+              // Durée réelle depuis les dates
+              const lgNum2 = lg2.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
+              const dateMin = lgNum2.length ? lgNum2[0].date : null;
+              const dateMax = lgNum2.length ? lgNum2[lgNum2.length-1].date : null;
+              const dureeAns = dateMin&&dateMax
+                ? Math.max((new Date(dateMax)-new Date(dateMin))/(1000*60*60*24*365.25),0.01)
+                : (lgNum2.length||1)/12;
+              const totalInteretsPct = montantVerse>0&&dureeAns>0 ? (totalInterets/montantVerse/dureeAns*100).toFixed(2) : "—";
+              const tegPct           = montantVerse>0&&dureeAns>0 ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns*100).toFixed(2) : "—";
               return (<>
                 <TauxRow label="Intérêts — Prêt" taux={localDos.tauxAnnuel} montant={intPret}/>
                 {intDif>0&&<TauxRow label="Intérêts — Différé" taux={localDos.tauxDiffere||localDos.tauxAmort} montant={intDif}/>}
                 <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
+                {intCapita>0&&<TauxRow label="Intérêts capitalisés" taux={null} montant={intCapita} isCapita/>}
                 <TauxRow label="Com. garantie — Prêt" taux={localDos.tauxGarantie} montant={garPret} isGarantie/>
                 {garAmort>0&&<TauxRow label="Com. garantie — Amort." taux={localDos.tauxGarantie2||localDos.tauxGarantie} montant={garAmort} isGarantie/>}
                 <div style={{height:1,background:"#E2E8F0",margin:"4px 0"}}/>
-                <TauxRow label="Total intérêts" taux={totalInteretsPct!=="—"?totalInteretsPct:null} montant={totalInterets} isTotal/>
+                <TauxRow label="Total intérêts (dont capitalisés)" taux={totalInteretsPct!=="—"?totalInteretsPct:null} montant={totalInterets} isTotal/>
                 <TauxRow label="TEG total (intérêts + garanties)" taux={tegPct!=="—"?tegPct:null} montant={totalInterets+totalGarantieAll} isTEG/>
               </>);
             })()}
@@ -14810,7 +14827,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.525<br />16/05/26 à 10:00
+          v.0.526<br />16/05/26 à 10:00
         </div>
       </div>
 
