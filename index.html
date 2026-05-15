@@ -10787,24 +10787,48 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   
   const importEchRef = React.useRef(null);
   const handleImportEch = (file) => {
-    if (!file) return;
+    if (!file) { alert("Aucun fichier reçu."); return; }
     const ext = file.name.split('.').pop().toLowerCase();
+    
     if (ext === 'xlsx' || ext === 'xls') {
+      // Vérifier que SheetJS est chargé
+      if (typeof XLSX === 'undefined') {
+        alert("Erreur : SheetJS non chargé. Vérifiez votre connexion internet.");
+        return;
+      }
       const r = new FileReader();
+      r.onerror = () => alert("Erreur lecture fichier : " + r.error);
       r.onload = ev => {
-        const rows = window.parseXLSXEcheancier(ev.target.result);
-        if (!rows.length) { alert("Aucune ligne trouvée dans le fichier."); return; }
-        setD(p => ({...p, lignes: rows}));
-        alert("✓ " + rows.length + " lignes importées depuis " + file.name);
+        try {
+          const wb = XLSX.read(ev.target.result, { type:'array', cellDates:true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          // Lire directement en JSON
+          const json = XLSX.utils.sheet_to_json(ws, { header:1, defval:'', raw:false });
+          if (!json || json.length < 2) { alert("Fichier vide ou format non reconnu."); return; }
+          // Parser les lignes
+          const rows = window.parseCSVEcheancier(
+            XLSX.utils.sheet_to_csv(ws, { FS:';', dateNF:'DD/MM/YYYY' })
+          );
+          if (!rows.length) { alert("Aucune ligne d'échéancier trouvée.\n\nVérifiez que votre fichier contient les colonnes : Date, Capital remboursé, Intérêts, Statut, Type."); return; }
+          setD(p => ({...p, lignes: rows}));
+          alert("✓ " + rows.length + " lignes importées depuis " + file.name);
+        } catch(err) {
+          alert("Erreur lors de la lecture : " + err.message);
+        }
       };
       r.readAsArrayBuffer(file);
     } else {
       const r = new FileReader();
+      r.onerror = () => alert("Erreur lecture fichier : " + r.error);
       r.onload = ev => {
-        const rows = window.parseCSVEcheancier(ev.target.result);
-        if (!rows.length) { alert("Aucune ligne trouvée dans le CSV."); return; }
-        setD(p => ({...p, lignes: rows}));
-        alert("✓ " + rows.length + " lignes importées depuis " + file.name);
+        try {
+          const rows = window.parseCSVEcheancier(ev.target.result);
+          if (!rows.length) { alert("Aucune ligne trouvée dans le CSV.\n\nVérifiez le format du fichier."); return; }
+          setD(p => ({...p, lignes: rows}));
+          alert("✓ " + rows.length + " lignes importées depuis " + file.name);
+        } catch(err) {
+          alert("Erreur : " + err.message);
+        }
       };
       r.readAsText(file, "UTF-8");
     }
@@ -11512,7 +11536,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         if(ext==='xlsx'||ext==='xls'){
                           const reader=new FileReader();
                           reader.onload=ev=>{
-                            const rows=parseXLSXEcheancier(ev.target.result);
+                            const rows=window.parseXLSXEcheancier(ev.target.result);
                             if(rows.length===0){alert("Aucune ligne trouvée dans le fichier.");return;}
                             const updated={...localDos,lignes:rows};
                             const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
@@ -11523,7 +11547,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         } else {
                           const reader=new FileReader();
                           reader.onload=ev=>{
-                            const rows=parseCSVEcheancier(ev.target.result);
+                            const rows=window.parseCSVEcheancier(ev.target.result);
                             if(rows.length===0){alert("Aucune ligne trouvée dans le CSV.");return;}
                             const updated={...localDos,lignes:rows};
                             const calc=window.calcDossierAuto?window.calcDossierAuto(updated):updated;
@@ -11543,8 +11567,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         const file=e.dataTransfer.files[0]; if(!file) return;
                         const ext=file.name.split('.').pop().toLowerCase();
                         const pr=(rows)=>{ if(!rows.length){alert("Aucune ligne.");return;} const u={...localDos,lignes:rows}; const calc=window.calcDossierAuto?window.calcDossierAuto(u):u; setLocalDos(calc); saveDossier(calc); };
-                        if(ext==='xlsx'||ext==='xls'){const r=new FileReader();r.onload=ev=>pr(parseXLSXEcheancier(ev.target.result));r.readAsArrayBuffer(file);}
-                        else {const r=new FileReader();r.onload=ev=>pr(parseCSVEcheancier(ev.target.result));r.readAsText(file,"UTF-8");}
+                        if(ext==='xlsx'||ext==='xls'){const r=new FileReader();r.onload=ev=>pr(window.parseXLSXEcheancier(ev.target.result));r.readAsArrayBuffer(file);}
+                        else {const r=new FileReader();r.onload=ev=>pr(window.parseCSVEcheancier(ev.target.result));r.readAsText(file,"UTF-8");}
                       }}>
                       📥 CSV/Excel
                     </span>
@@ -14505,7 +14529,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.491<br />15/05/26 à 17:45
+          v.0.492<br />15/05/26 à 18:00
         </div>
       </div>
 
