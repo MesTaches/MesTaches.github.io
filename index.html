@@ -302,7 +302,7 @@ async function fbLogout() {
 <div id="fb-app" class="fb-screen" style="display:none;height:100vh;width:100%;flex-direction:column;">
   <div id="root" style="flex:1;overflow:auto;height:100%;width:100%;"></div>
   <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
-    style="position:fixed;bottom:16px;right:152px;z-index:9999;background:rgba(255,255,255,0.12);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
+    style="position:fixed;bottom:16px;right:152px;z-index:9999;background:#C0392B;color:white;border:1px solid #A93226;border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
     onmouseover="this.style.background='#C00000';this.style.borderColor='#C00000'"
     onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
     Corbeille
@@ -11459,6 +11459,18 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
     setLocalDos(updated); saveDossier(updated);
   };
   const setL = (k,v) => setLocalDos(p=>({...p,[k]:v}));
+
+  // Auto-save : sauvegarde 800ms après chaque modification
+  const autoSaveRef = React.useRef(null);
+  React.useEffect(() => {
+    if (!localDos || !localDos.id) return;
+    clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      const calc = window.calcDossierAuto ? window.calcDossierAuto(localDos) : localDos;
+      saveDossier(calc);
+    }, 800);
+    return () => clearTimeout(autoSaveRef.current);
+  }, [localDos]);
   const lignes=dos.lignes||[];
   const payeAuto=lignes.filter(r=>r.date<=now).length;
   const pct=lignes.length>0?Math.round(payeAuto/lignes.length*100):0;
@@ -11534,9 +11546,10 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-              <div>{lblL("Taux d'intérêt (%/an)", "Taux annuel des intérêts (ex: 5,02 pour PGE). Hors commission de garantie.")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="0,73" style={inpL}/></div>
-              <div>{lblL("Taux différé (%/an)", "Si le taux d'intérêt pendant le différé est différent du taux principal. Laisser vide si identique.")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
-              <div>{lblL("Taux capitalisation (%/an)", "PGE uniquement : taux auquel les intérêts sont capitalisés au capital lors du rang 1.")}<input type="text" value={localDos.tauxCapita||""} onChange={e=>setL("tauxCapita",e.target.value)} placeholder="0,5" style={inpL}/></div>
+              <div>{lblL("Taux Prêt (%/an)", "Taux d'intérêt annuel du statut Prêt")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="Ex: 2,76" style={inpL}/></div>
+              <div>{lblL("Taux Amort. (%/an)", "Taux Option Amort. — phase Amortissement")}<input type="text" value={localDos.tauxAmort||""} onChange={e=>setL("tauxAmort",e.target.value)} placeholder="Ex: 2,70" style={inpL}/></div>
+              <div>{lblL("Taux Différé (%/an)", "Taux Option Amort. — phase Différé (si différent)")}<input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/></div>
+              <div>{lblL("Commission garantie (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inpL}/></div>
               <div>{lblL("Com. garantie (%/an)", "Commission prélevée sur le capital restant dû en plus des intérêts (ex: 1,39 pour PGE).")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="1,00" style={inpL}/></div>
               <div>{lblL("Com. garantie 2 (%/an)", "Commission alternative si elle change après un certain nombre de mois.")}<input type="text" value={localDos.tauxGarantie2||""} onChange={e=>setL("tauxGarantie2",e.target.value)} placeholder="2,00" style={inpL}/></div>
               <div>{lblL("Durée com. gar. 1 (mois)", "Nombre de mois pendant lesquels la commission 1 s'applique. Laisser vide si pas de changement.")}<input type="text" value={localDos.dureeGarantie1||""} onChange={e=>setL("dureeGarantie1",e.target.value)} placeholder="Ex: 24" style={inpL}/></div>
@@ -11545,8 +11558,12 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PÉRIODES</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-              <div>{lblL("Carence (mois)", "Période sans aucun paiement : ni capital, ni intérêts.")}<input type="text" value={localDos.carence||""} onChange={e=>setL("carence",e.target.value)} placeholder="0" style={inpL}/></div>
-              <div>{lblL("Différé (mois)", "Période où seuls les intérêts sont payés, sans remboursement du capital (ex: 12 pour PGE).")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="12" style={inpL}/></div>
+              <div>{lblL("Différé in fine (mois)", "Mois où intérêts accumulés, payés en 1 seule échéance")}<input type="text" value={localDos.differFin||""} onChange={e=>setL("differFin",e.target.value)} placeholder="Ex: 12" style={inpL}/></div>
+              <div>{lblL("Différé (mois)", "Calculé auto depuis l'échéancier importé")}<input type="text"
+                value={localDos.lignes&&localDos.lignes.length>0?(localDos.lignes.filter(r=>r.estDiffere).length||localDos.differe||""):(localDos.differe||"")}
+                onChange={e=>setL("differe",e.target.value)}
+                readOnly={!!(localDos.lignes&&localDos.lignes.length>0)}
+                placeholder="Ex: 12" style={{...inpL,background:localDos.lignes&&localDos.lignes.length>0?"#F9FAFB":"white"}}/></div>
             </div>
           </div>
           {total>0 && (
@@ -11565,9 +11582,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               </div>
             </div>
           )}
-          <button onClick={regenererLocal} style={{background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>🔄 Recalculer l'échéancier</button>
 
-          <button onClick={()=>{const c=window.calcDossierAuto?window.calcDossierAuto(localDos):localDos;setLocalDos(c);saveDossier(c);}} style={{background:"#27AE60",color:"white",border:"none",borderRadius:8,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>✓ Enregistrer les modifications</button>
+
+
           <div style={{borderTop:"1px solid #F0F0F0",paddingTop:10}}>
             <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>NOTES</div>
             <RichTextArea value={localDos.notes||""} onChange={v=>{const u={...localDos,notes:v};setLocalDos(u);saveDossier(u);}} placeholder="Observations…" rows={4}/>
@@ -11767,7 +11784,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                         {editMode?<td style={{...TD,textAlign:"right",width:72}}><input value={row.echeanceGlobale||""} onChange={e=>updRow("echeanceGlobale",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
                           :<td style={{...TD,textAlign:"right",fontWeight:700,color:"#0E7490",width:82}}>{fmtE(row.echeanceGlobale)}</td>}
                         {editMode?<td style={{...TD,textAlign:"right",width:92}}><input value={row.capitalRestant||""} onChange={e=>updRow("capitalRestant",parseNum(e.target.value))} style={inpS} placeholder="0"/></td>
-                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:"#2C3E50",width:92,whiteSpace:"nowrap"}}>{fmtE(row.capitalRestant)}</td>}
+                          :<td style={{...TD,textAlign:"right",fontWeight:600,color:row.estVersement?"#1D4ED8":"#2C3E50",width:92,whiteSpace:"nowrap"}}>{fmtE(row.capitalRestant)}{row.estVersement&&<span style={{fontSize:8,color:"#1D4ED8",marginLeft:3}}>▲</span>}</td>}
                         {editMode&&<td style={{...TD,textAlign:"center",width:48}}>
                           <div style={{display:"flex",gap:2,justifyContent:"center"}}>
                             <button title="Insérer une ligne après" onClick={()=>insertRow(i)} style={{border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#1D4ED8",cursor:"pointer",fontSize:11,borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:0,fontWeight:700}}>+</button>
@@ -12230,6 +12247,8 @@ function EcheancierView({ tasks, settings }) {
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
                   // Calcul timeline depuis les lignes réelles
+                  // Grouper par statut pour la timeline
+                  const statuts2 = [...new Set(lignes.map(r=>r.statut||"").filter(Boolean))];
                   const nbVers  = lignes.filter(r=>r.estVersement).length;
                   const nbCap   = lignes.filter(r=>r.estCapita).length;
                   const nbCar   = lignes.filter(r=>r.estCarence).length;
@@ -12238,6 +12257,13 @@ function EcheancierView({ tasks, settings }) {
                   const nbAmort = lignes.filter(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement)).length;
                   const nbSans  = lignes.filter(r=>r.estSansFlux).length;
                   const totalT  = lignes.length || 1;
+                  // Phases par statut (pour affichage groupé)
+                  const phasesByStatut = statuts2.map(st=>({
+                    statut: st,
+                    count: lignes.filter(r=>r.statut===st).length,
+                    color: st.toLowerCase().includes("pret")||st.toLowerCase().includes("prêt")?"#93C5FD":
+                           st.toLowerCase().includes("amort")?"#6EE7B7":"#FCD34D"
+                  }));
                   const dateDebut=lignes[0]?.date||dos.dateDebut||"";
                   const dateFin2=lignes[lignes.length-1]?.date||dos.dateFin||"";
                   let pctTimeline=0;
@@ -12291,26 +12317,20 @@ function EcheancierView({ tasks, settings }) {
                       {totalT > 0 && (
                         <div style={{ marginBottom:10 }}>
                           <div style={{ position:"relative",height:14,borderRadius:7,overflow:"visible",display:"flex",gap:1,marginBottom:4 }}>
-                            {nbVers>0&&<div style={{ width:`${nbVers/totalT*100}%`,height:"100%",background:"#BFDBFE",borderRadius:"7px 0 0 7px",minWidth:3 }} title={`Versement ${nbVers}m`}/>}
-                            {nbCar>0&&<div style={{ width:`${nbCar/totalT*100}%`,height:"100%",background:"#FCA5A5",borderRadius:nbVers===0?"7px 0 0 7px":"0",minWidth:3 }} title={`Carence ${nbCar}m`}/>}
-                            {nbCap>0&&<div style={{ width:`${nbCap/totalT*100}%`,height:"100%",background:"#DDD6FE",minWidth:3 }} title={`Intérêts capit. ${nbCap}m`}/>}
-                            {nbFine>0&&<div style={{ width:`${nbFine/totalT*100}%`,height:"100%",background:"#FED7AA",minWidth:3 }} title={`In fine ${nbFine}m`}/>}
-                            {nbSans>0&&<div style={{ width:`${nbSans/totalT*100}%`,height:"100%",background:"#E5E7EB",minWidth:3 }} title={`Sans flux ${nbSans}m`}/>}
-                            {nbDif>0&&<div style={{ width:`${nbDif/totalT*100}%`,height:"100%",background:"#FCD34D",minWidth:3 }} title={`Différé ${nbDif}m`}/>}
-                            {nbAmort>0&&<div style={{ flex:1,height:"100%",background:pct===100?"#27AE60":"#6EE7B7",borderRadius:nbVers===0&&nbCar===0&&nbCap===0&&nbFine===0&&nbSans===0&&nbDif===0?"7px":"0 7px 7px 0",minWidth:6 }} title={`Amortissement ${nbAmort}m`}/>}
+                            {phasesByStatut.map((ph,pi)=>(
+                              <div key={ph.statut} style={{ width:`${ph.count/totalT*100}%`,height:"100%",background:ph.color,borderRadius:pi===0?"7px 0 0 7px":pi===phasesByStatut.length-1?"0 7px 7px 0":"0",minWidth:4,transition:"width 0.3s" }} title={`${ph.statut} — ${ph.count} mois`}/>
+                            ))}
                             {pctTimeline>0&&pctTimeline<100&&(
                               <div style={{ position:"absolute",left:`${pctTimeline}%`,top:-3,transform:"translateX(-50%)",width:3,height:20,background:"#102A63",borderRadius:2,boxShadow:"0 0 0 2px white",zIndex:2 }} title={`Aujourd'hui (${pctTimeline}%)`}/>
                             )}
                           </div>
                           <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center" }}>
                             <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
-                              {nbVers>0&&<span style={{ fontSize:9,color:"#1D4ED8",fontFamily:"'Lora',serif" }}>● Versement {nbVers}</span>}
-                              {nbCar>0&&<span style={{ fontSize:9,color:"#B91C1C",fontFamily:"'Lora',serif" }}>● Carence {nbCar}m</span>}
-                              {nbCap>0&&<span style={{ fontSize:9,color:"#6D28D9",fontFamily:"'Lora',serif" }}>● Int. capit. {nbCap}</span>}
-                              {nbFine>0&&<span style={{ fontSize:9,color:"#C2410C",fontFamily:"'Lora',serif" }}>● In fine {nbFine}m</span>}
-                              {nbSans>0&&<span style={{ fontSize:9,color:"#9CA3AF",fontFamily:"'Lora',serif" }}>● Sans flux {nbSans}m</span>}
-                              {nbDif>0&&<span style={{ fontSize:9,color:"#A16207",fontFamily:"'Lora',serif" }}>● Différé {nbDif}m</span>}
-                              {nbAmort>0&&<span style={{ fontSize:9,color:"#065F46",fontFamily:"'Lora',serif" }}>● Amort. {nbAmort}m</span>}
+                              {phasesByStatut.map(ph=>(
+                                <span key={ph.statut} style={{ fontSize:9,fontFamily:"'Lora',serif",color:"#555" }}>
+                                  <span style={{color:ph.color,marginRight:2}}>●</span>{ph.statut} {ph.count}m
+                                </span>
+                              ))}
                             </div>
                             <div style={{ display:"flex",gap:12 }}>
                               {dateDebut&&<span style={{ fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace" }}>{dateDebut.split("-").reverse().join("/")} →</span>}
@@ -14666,7 +14686,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.507<br />16/05/26 à 01:00
+          v.0.508<br />16/05/26 à 02:00
         </div>
       </div>
 
