@@ -923,7 +923,8 @@ function exportSingleRCFPDF(ligne, now) {
 }
 </script>
 
-<script type="text/babel" data-presets="react">
+<script id="jsx-source" type="text/plain">
+
     const { useState, useEffect, useRef } = React;
 
 
@@ -7644,9 +7645,8 @@ function CBDocRow({ dt, files, onAdd, onDelete, onNote, onDownload, onRename }) 
   );
 }
 
-</script>
 
-<script type="text/babel" data-presets="react">
+
 /* ══════════════════════════════════════════════════
    CB DOSSIER MODAL
    ══════════════════════════════════════════════════ */
@@ -14760,7 +14760,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.521<br />16/05/26 à 10:00
+          v.0.522<br />16/05/26 à 10:00
         </div>
       </div>
 
@@ -14932,7 +14932,17 @@ function App() {
     }
     window._doMount = doMount;
     if (window._pendingMount) doMount();
-  </script>
+  
+</script>
+<script>
+(function(){
+  var src = document.getElementById("jsx-source").textContent;
+  var result = Babel.transform(src, { presets: ["react"], compact: false });
+  var script = document.createElement("script");
+  script.textContent = result.code;
+  document.head.appendChild(script);
+})();
+</script>
 
 <script>
 window.exportPaymentsCSV = function(payments) {
