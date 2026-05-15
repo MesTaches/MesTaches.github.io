@@ -10888,10 +10888,29 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
       r.onerror = () => alert("Erreur lecture : " + r.error);
       r.onload = ev => {
         try {
-          const wb = XLSX.read(ev.target.result, { type:'array', cellDates:true });
+          const wb = XLSX.read(ev.target.result, { type:'array', cellDates:true, raw:true });
           const ws = wb.Sheets[wb.SheetNames[0]];
-          const csv = XLSX.utils.sheet_to_csv(ws, { FS:';', dateNF:'DD/MM/YYYY' });
-          const rows = parseCsv(csv);
+          // Utiliser sheet_to_json avec raw:true pour obtenir valeurs brutes (pas formatées)
+          const json = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+          if (!json || json.length < 2) { alert("Fichier vide ou format non reconnu."); return; }
+          // Reconstruire CSV avec valeurs brutes
+          const csvLines = json.map((row, ri) => {
+            if (ri === 0) return row.map(String).join(';'); // en-têtes
+            return row.map((cell, ci) => {
+              if (cell === null || cell === undefined || cell === '') return '';
+              // Date Excel = nombre de jours depuis 1900-01-01
+              if (typeof cell === 'number' && ci === json[0].indexOf('Date') || (ri > 0 && ci === 3 && typeof cell === 'number' && cell > 40000)) {
+                // Convertir date Excel en JJ/MM/AAAA
+                const d = XLSX.SSF.parse_date_code(cell);
+                if (d) return String(d.d).padStart(2,'0')+'/'+String(d.m).padStart(2,'0')+'/'+d.y;
+              }
+              if (cell instanceof Date) {
+                return String(cell.getDate()).padStart(2,'0')+'/'+String(cell.getMonth()+1).padStart(2,'0')+'/'+cell.getFullYear();
+              }
+              return String(cell);
+            }).join(';');
+          }).join('\n');
+          const rows = parseCsv(csvLines);
           if (!rows.length) { alert("Aucune ligne trouvée.\n\nVérifiez que votre fichier contient les colonnes : Date, Statut, Type, Capital remboursé, Intérêts, Commission garantie."); return; }
           setD(p => ({...p, lignes:rows}));
           alert("✓ " + rows.length + " lignes importées depuis " + file.name);
@@ -14616,7 +14635,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.497<br />15/05/26 à 20:30
+          v.0.498<br />15/05/26 à 21:00
         </div>
       </div>
 
