@@ -8655,7 +8655,7 @@ function CBComparateur({ dossiers, fmtE, onOpen }) {
 
   const COLS = [
     {key:"financeur",    label:"Financeur",      fmt:(v,c)=>v||"—"},
-    {key:"coeff",        label:"Coeff %",         fmt:(v,c)=>v?Number(v).toFixed(4):"—"},
+    {key:"coeff",        label:"Coeff %",         fmt:(v,c)=>v?Number(v).toFixed(2):"—"},
     {key:"loyerHT",      label:"Loyer HT",        fmt:(v,c)=>fmtE(c.loyerHT)},
     {key:"loyerTTC",     label:"Loyer TTC",       fmt:(v,c)=>fmtE(c.loyerTTC)},
     {key:"assuranceMens",label:"Assurance/mois",  fmt:(v,c)=>parseFloat(v)>0?fmtE(parseFloat(v)):"—"},
@@ -10889,17 +10889,19 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
         const type    = I.type>=0?(cols[I.type]||'').trim():'';
         cumulCalc += inter;
         const tL = type.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-        const estInFine   = tL.includes('fine');
-        const estDiffere  = tL.includes('differe');
-        const estCapita   = capOui;
+        const estInFine    = tL.includes('fine');
+        const estDiffere   = tL.includes('differe');
+        const estCapita    = capOui;
         const estVersement = tL.includes('versement');
-        const estSansFlux = !estInFine&&!estDiffere&&!estCapita&&!estVersement&&capital===0&&inter===0&&comm===0&&ech===0;
-        const estAmort    = !estInFine&&!estDiffere&&!estCapita&&!estSansFlux&&!estVersement&&capital>0;
+        // Ligne In fine sans flux = période in fine (pas de paiement ce mois)
+        const estDifferFin = estInFine && !estCapita && capital===0 && inter===0 && comm===0;
+        const estSansFlux  = !estInFine&&!estDiffere&&!estCapita&&!estVersement&&capital===0&&inter===0&&comm===0&&ech===0;
+        const estAmort     = !estInFine&&!estDiffere&&!estCapita&&!estSansFlux&&!estVersement&&capital>0;
         // Pour un versement : l'échéance globale est négative (entrée d'argent)
         // Le capital restant après versement = capital restant + montant versé
         const echFinal = estVersement ? 0 : ech; // versement n'est pas une échéance sortante
         rows.push({
-          n:rows.length+1, date, statut, type,
+          n: estVersement ? 0 : rows.filter(r=>!r.estVersement).length+1, date, statut, type,
           echeance:echFinal, capital:(estVersement?0:capital), interets:inter, cumulInterets:cumulCalc,
           commGarantie:comm, assurance:0, echeanceGlobale:echFinal, capitalRestant:capR,
           versement: estVersement ? capital : 0, // montant reçu
@@ -11018,7 +11020,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   };
 
   const fmtE = (v,dec=2) => isNaN(Number(v))?"—":Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
-  const fmtP = (v) => isNaN(Number(v))?"—":Number(v).toFixed(4)+" %";
+  const fmtP = (v) => isNaN(Number(v))?"—":Number(v).toFixed(2)+" %";
 
   const lignes = d.lignes||[];
   const totalEch  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||r.echeance||0),0);
@@ -11848,7 +11850,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
       if (tauxMens.length > 0) {
         tauxMens.sort(function(a,b){return a-b;});
         var med = tauxMens[Math.floor(tauxMens.length/2)];
-        tauxParStatut[st] = (med * 12 * 100).toFixed(4);
+        tauxParStatut[st] = (med * 12 * 100).toFixed(2);
       }
       var commMens = [];
       lignesFlux.forEach(function(r) {
@@ -11859,7 +11861,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
       if (commMens.length > 0) {
         commMens.sort(function(a,b){return a-b;});
         var medC = commMens[Math.floor(commMens.length/2)];
-        commParStatut[st] = (medC * 12 * 100).toFixed(4);
+        commParStatut[st] = (medC * 12 * 100).toFixed(2);
       }
     }
   });
@@ -11906,11 +11908,19 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     }
     if (!montantPret) montantPret = montantAuto || 1;
     // Durée en années = nb de lignes avec intérêts / 12
-    var lgPretFlux = lgPret.filter(function(r){ return (r.interets||0)>0; });
-    var nbMoisPret = lgPretFlux.length || lgPret.length || 12;
-    var dureeAnPret = nbMoisPret / 12;
+    // Pour In fine : les intérêts sont payés en une fois pour toute la période
+    // Durée = nombre de lignes de la phase in fine / 12
+    var lgPretInFine = lgPret.filter(function(r){ return (r.estDifferFin||false) || (r.type||"").toLowerCase().includes("fine"); });
+    var dureeAnPret;
+    if (lgPretInFine.length > 0) {
+      // Durée de la phase in fine en années
+      dureeAnPret = lgPretInFine.length / 12;
+    } else {
+      var lgPretFlux = lgPret.filter(function(r){ return (r.interets||0)>0; });
+      dureeAnPret = (lgPretFlux.length || lgPret.length || 12) / 12;
+    }
     if (totalIntPret > 0 && montantPret > 0 && dureeAnPret > 0) {
-      tauxAuto = (totalIntPret / montantPret / dureeAnPret * 100).toFixed(4);
+      tauxAuto = (totalIntPret / montantPret / dureeAnPret * 100).toFixed(2);
     } else if (tauxParStatut[statutPret]) {
       tauxAuto = tauxParStatut[statutPret];
     }
@@ -11922,8 +11932,10 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   if (statutDiffPur && tauxParStatut[statutDiffPur]) tauxDiffereAuto = tauxParStatut[statutDiffPur];
   else if (statutAmort && tauxParStatut[statutAmort]) tauxDiffereAuto = tauxParStatut[statutAmort]; // même taux si pas de différé pur
 
-  if (statutAmort && commParStatut[statutAmort]) commAuto = commParStatut[statutAmort];
-  else if (statutPret && commParStatut[statutPret]) commAuto = commParStatut[statutPret];
+  var commAmortAuto = "";
+  if (statutAmort && commParStatut[statutAmort]) { commAmortAuto = commParStatut[statutAmort]; }
+  if (statutPret && commParStatut[statutPret]) commAuto = commParStatut[statutPret];
+  else if (statutAmort && commParStatut[statutAmort]) commAuto = commParStatut[statutAmort];
 
   // ── Capital restant actuel ──
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
@@ -11943,6 +11955,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     tauxAmort:    hasTauxAmortSaisi ? dos.tauxAmort : (tauxAmortAuto || ""),
     tauxDiffere:  hasTauxDifSaisi ? dos.tauxDiffere : (tauxDiffereAuto || ""),
     tauxGarantie: hasGarantieSaisie ? dos.tauxGarantie : (commAuto || ""),
+    tauxGarantie2: (dos.tauxGarantie2 && String(dos.tauxGarantie2).trim()) ? dos.tauxGarantie2 : (commAmortAuto || ""),
     differe:      String(nbDiffere || dos.differe || ""),
     dateFin:      dateFin,
     capitalRestantActuel: capitalRestantActuel,
@@ -14608,7 +14621,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.512<br />16/05/26 à 06:00
+          v.0.513<br />16/05/26 à 07:00
         </div>
       </div>
 
