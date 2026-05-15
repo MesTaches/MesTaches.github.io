@@ -10790,101 +10790,93 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
     if (!file) { alert("Aucun fichier reçu."); return; }
     const ext = file.name.split('.').pop().toLowerCase();
 
-    // Fonction de parsing CSV inline - basée sur les en-têtes exacts du format
+    // Parsing CSV inline robuste
     const parseCsv = (text) => {
+      const abs = (v) => v < 0 ? -v : v;
       const pN = (s) => {
-        if (!s || String(s).trim() === '' || String(s).trim() === '0') return 0;
-        // Gérer nombres négatifs, espaces insécables, virgules décimales
-        const clean = String(s).replace(/\s/g,'').replace(/\u00a0/g,'')
-          .replace(/\u202f/g,'').replace(/[€$]/g,'')
-          .replace(/\s/g,'').trim();
-        if (!clean || clean === '-') return 0;
-        // Format français: 1 234 567,89 ou -1 234 567,89
-        const cleaned = clean.replace(/\s/g,'').replace(/,(\d{2})$/, '.$1').replace(/,/g,'');
-        return parseFloat(cleaned) || 0;
+        if (s === null || s === undefined) return 0;
+        s = String(s).trim().replace(/\u00a0/g,'').replace(/\u202f/g,'').replace(/[€$\s]/g,'');
+        if (!s || s==='-') return 0;
+        // Séparer signe
+        const neg = s.startsWith('-'); if (neg) s = s.substring(1);
+        // Détecter format : 1 234 567,89 (FR) ou 1234567.89 (EN)
+        let n;
+        if (s.includes(',') && !s.includes('.')) {
+          n = parseFloat(s.replace(/\s/g,'').replace(',','.'));
+        } else if (s.includes('.') && s.includes(',')) {
+          // 1.234,56 → supprimer point, remplacer virgule
+          n = parseFloat(s.replace(/\./g,'').replace(',','.'));
+        } else {
+          n = parseFloat(s.replace(/,/g,''));
+        }
+        return isNaN(n) ? 0 : (neg ? -n : n);
       };
       const pD = (s) => {
         if (!s) return '';
         s = String(s).trim();
         // JJ/MM/AAAA
         const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (m1) {
-          const d = m1[1].padStart(2,'0'), mo = m1[2].padStart(2,'0');
-          return m1[3]+'-'+mo+'-'+d;
-        }
-        // MM/DD/YY ou MM/DD/YYYY (format US de SheetJS sans dateNF)
-        const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-        if (m2) {
-          const yr = m2[3].length===2 ? '20'+m2[3] : m2[3];
-          // Heuristique: si mois > 12, c'est jour/mois
-          const a = parseInt(m2[1]), b = parseInt(m2[2]);
-          if (a > 12) return yr+'-'+String(m2[2]).padStart(2,'0')+'-'+String(a).padStart(2,'0');
-          return yr+'-'+String(a).padStart(2,'0')+'-'+String(b).padStart(2,'0');
-        }
+        if (m1) return m1[3]+'-'+m1[2].padStart(2,'0')+'-'+m1[1].padStart(2,'0');
+        // MM/DD/YY (SheetJS sans dateNF)
+        const m2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+        if (m2) { const yr='20'+m2[3]; const a=+m2[1],b=+m2[2]; return a>12?yr+'-'+String(m2[2]).padStart(2,'0')+'-'+String(a).padStart(2,'0'):yr+'-'+String(a).padStart(2,'0')+'-'+String(b).padStart(2,'0'); }
         // AAAA-MM-JJ
-        const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-        if (m3) return s.substring(0,10);
+        const m3 = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if (m3) return s.substring(0,10);
         return s;
       };
+      const norm = (h) => h.replace(/^\uFEFF/,'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,' ').replace(/\s+/g,' ').trim();
 
       const lines = text.replace(/\r/g,'').split('\n').filter(l=>l.trim());
       if (lines.length < 2) return [];
       const sep = lines[0].includes(';') ? ';' : ',';
-      
-      // Normaliser les en-têtes
-      const norm = h => h.replace(/^\uFEFF/,'').trim().toLowerCase()
-        .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-        .replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
       const H = lines[0].split(sep).map(norm);
-      
-      // Mapping précis par mots-clés
-      const col = (keys) => H.findIndex(h => keys.some(k => h.includes(k)));
+
+      // Index fixes basés sur position ordinale connue OU recherche
+      const fi = (tests) => H.findIndex(h=>tests.some(t=>h.includes(t)));
       const I = {
-        statut:   col(['statut']),
-        type:     col(['type']),
-        date:     col(['date']),
-        capRbt:   col(['capital rembours']),
-        inter:    H.findIndex(h => (h==='interets'||h==='interets') || (h.includes('interet')&&!h.includes('cumul')&&!h.includes('capitalise'))),
-        cumul:    col(['cumul']),
-        comm:     col(['commission','garantie']),
-        ech:      H.findIndex(h => h.includes('echeance')&&(h.includes('global')||h.includes('total'))),
-        capApres: H.findIndex(h => h.includes('capital')&&h.includes('restant')&&(h.includes('apres')||h.includes('rbt'))),
-        capOui:   col(['capitalise','capitalis']),
+        rang:     fi(['rang']),
+        statut:   fi(['statut']),
+        type:     fi(['type']),
+        date:     fi(['date']),
+        capAvant: H.findIndex(h=>h.includes('capital')&&h.includes('restant')&&!h.includes('apres')&&!h.includes('rbt')&&!h.includes('rembours')),
+        capRbt:   H.findIndex(h=>h.includes('capital')&&h.includes('rembours')),
+        inter:    H.findIndex(h=>h.includes('interet')&&!h.includes('cumul')&&!h.includes('capitalise')),
+        cumul:    H.findIndex(h=>h.includes('cumul')),
+        comm:     H.findIndex(h=>h.includes('commission')||h.includes('garantie')),
+        ech:      H.findIndex(h=>h.includes('echeance')&&(h.includes('global')||h.includes('total'))),
+        capApres: H.findIndex(h=>h.includes('capital')&&h.includes('restant')&&(h.includes('apres')||h.includes('rbt'))),
+        capOui:   H.findIndex(h=>h.includes('capitalise')),
       };
 
-      console.log('Colonnes détectées:', I);
-
-      const rows = [];
-      let cumulCalc = 0;
-      for (let i = 1; i < lines.length; i++) {
-        const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g,''));
+      const rows = []; let cumulCalc = 0;
+      for (let i=1; i<lines.length; i++) {
+        const cols = lines[i].split(sep).map(col=>col.trim().replace(/^"|"$/g,''));
         if (cols.length < 3) continue;
-        const date = pD(I.date >= 0 ? cols[I.date] : '');
+        const date = pD(I.date>=0?cols[I.date]:'');
         if (!date) continue;
-        const capital = Math.abs(pN(I.capRbt  >= 0 ? cols[I.capRbt]  : '0'));
-        const inter   = Math.abs(pN(I.inter   >= 0 ? cols[I.inter]   : '0'));
-        const comm    = Math.abs(pN(I.comm    >= 0 ? cols[I.comm]    : '0'));
-        const ech     = Math.abs(pN(I.ech     >= 0 ? cols[I.ech]     : '0'));
-        const capR    = Math.abs(pN(I.capApres >= 0 ? cols[I.capApres] : '0'));
-        const capOui  = I.capOui >= 0 ? (cols[I.capOui]||'').toLowerCase().trim() === 'oui' : false;
-        const statut  = I.statut >= 0 ? (cols[I.statut]||'').trim() : '';
-        const type    = I.type   >= 0 ? (cols[I.type]  ||'').trim() : '';
+        const capital = abs(pN(I.capRbt>=0?cols[I.capRbt]:'0'));
+        const inter   = abs(pN(I.inter>=0?cols[I.inter]:'0'));
+        const comm    = abs(pN(I.comm>=0?cols[I.comm]:'0'));
+        const ech     = abs(pN(I.ech>=0?cols[I.ech]:'0'));
+        const capR    = abs(pN(I.capApres>=0?cols[I.capApres]:(I.capAvant>=0?cols[I.capAvant]:'0')));
+        const capOui  = I.capOui>=0?(cols[I.capOui]||'').toLowerCase().trim()==='oui':false;
+        const statut  = I.statut>=0?(cols[I.statut]||'').trim():'';
+        const type    = I.type>=0?(cols[I.type]||'').trim():'';
         cumulCalc += inter;
-        const typeL = type.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-        const estInFine   = typeL.includes('fine');
-        const estDiffere  = typeL.includes('differe');
+        const tL = type.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+        const estInFine   = tL.includes('fine');
+        const estDiffere  = tL.includes('differe');
         const estCapita   = capOui;
-        const estSansFlux = !estInFine && !estDiffere && !estCapita && capital===0 && inter===0 && comm===0;
+        const estVersement = tL.includes('versement');
+        const estSansFlux = !estInFine&&!estDiffere&&!estCapita&&!estVersement&&capital===0&&inter===0&&comm===0&&ech===0;
+        const estAmort    = !estInFine&&!estDiffere&&!estCapita&&!estSansFlux&&!estVersement&&capital>0;
         rows.push({
-          n: rows.length+1, date, statut, type,
-          echeance: ech, capital, interets: inter,
-          cumulInterets: cumulCalc,
-          commGarantie: comm, assurance: 0,
-          echeanceGlobale: ech, capitalRestant: capR,
-          estCapita, estCarence: false,
-          estDiffere, estDifferFin: estInFine,
-          estSansFlux, estAmort: !estInFine&&!estDiffere&&!estCapita&&!estSansFlux&&capital>0,
-          paye: false, datePaiement: '', commentaire: ''
+          n:rows.length+1, date, statut, type,
+          echeance:ech, capital, interets:inter, cumulInterets:cumulCalc,
+          commGarantie:comm, assurance:0, echeanceGlobale:ech, capitalRestant:capR,
+          estCapita, estCarence:false, estDiffere, estDifferFin:estInFine,
+          estSansFlux, estAmort, estVersement,
+          paye:false, datePaiement:'', commentaire:''
         });
       }
       return rows;
@@ -11291,9 +11283,11 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                                     ? <span style={{ fontSize:9,background:"#FFF7ED",color:"#C2410C",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>In fine</span>
                                     : row.estDiffere
                                       ? <span style={{ fontSize:9,background:"#FEF9C3",color:"#A16207",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Différé</span>
-                                      : row.estSansFlux
-                                        ? <span style={{ fontSize:9,background:"#F1F5F9",color:"#94A3B8",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:400 }}>—</span>
-                                        : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
+                                      : row.estVersement
+                                        ? <span style={{ fontSize:9,background:"#EFF6FF",color:"#1D4ED8",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Versement</span>
+                                        : row.estSansFlux
+                                          ? <span style={{ fontSize:9,background:"#F1F5F9",color:"#94A3B8",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:400 }}>—</span>
+                                          : <span style={{ fontSize:9,background:"#D1FAE5",color:"#065F46",borderRadius:4,padding:"1px 6px",fontFamily:"'Lora',serif",fontWeight:700 }}>Amortissement</span>}
                             </td>
                             <td style={{ ...numStyle,fontWeight:700,color:"#102A63" }}>{fmtE(row.echeance)}</td>
                             <td style={{ ...numStyle,color:"#27AE60" }}>{fmtE(row.capital)}</td>
@@ -11683,7 +11677,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                   {lignes.map((row,i)=>{
                     const isPast=row.date<=now;
                     const isNext=row.date>now&&i===payeAuto;
-                    const TD={padding:"2px 4px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle"};
+                    const TD={padding:"2px 6px",fontFamily:"'Lora',serif",fontSize:10,verticalAlign:"middle",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"};
                     const updRow=(k,v)=>{
                       const l=[...lignes]; l[i]={...l[i],[k]:v};
                       const updated={...localDos,lignes:l}; setLocalDos(updated); saveDossier(updated);
@@ -14616,7 +14610,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.494<br />15/05/26 à 19:00
+          v.0.495<br />15/05/26 à 19:30
         </div>
       </div>
 
