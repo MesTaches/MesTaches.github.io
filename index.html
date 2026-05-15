@@ -625,10 +625,16 @@ function exportEchPDF(dos) {
   <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
   </body></html>`;
 
-  // Méthode robuste : nouvelle fenêtre avec impression auto
-  const w = window.open("", "_blank");
-  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
-  w.document.open(); w.document.write(htm); w.document.close();
+  // Méthode blob : crée un lien temporaire, pas de popup bloquée
+  const blob = new Blob([htm], {type:"text/html;charset=utf-8"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href     = url;
+  a.target   = "_blank";
+  a.rel      = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 2000);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -11025,6 +11031,12 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   const totalAss2 = totalAss;
   const totalGlob = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
   const hasCapita = lignes.some(r=>r.estCapita);
+  const tegDossier = (() => {
+    const mv = lignes.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)
+            || parseFloat(String(d.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
+    const dur = (lignes.filter(r=>!r.estVersement&&!r.estSansFlux).length||1)/12;
+    return mv>0 && dur>0 ? ((totalInt+totalGar)/mv/dur*100).toFixed(2)+"%" : "—";
+  })();
   const nowPanel = new Date().toISOString().split("T")[0];
   const paye     = lignes.filter(r=>r.date<=nowPanel).length;
   const restant  = lignes.length - paye;
@@ -11475,8 +11487,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   };
   return (
     <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-      <div style={{background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,flexShrink:0}}>
-        {[{label:"Capital restant dû",val:fmtE(restantDu),color:"#C0392B"},{label:"Avancement",val:`${pct}% (${payeAuto}/${lignes.length})`,color:"#1D4ED8"},{label:"Prochaine échéance",val:prochaine?`${fmtE(prochaine.echeanceGlobale||prochaine.echeance)} (${prochaine.date.split("-").reverse().join("/")})`:"Terminé",color:"#A16207"},{label:"Total intérêts",val:fmtE(totalInt),color:"#C0392B"}].map(k=>(
+      <div style={{background:"#F8F9FB",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:12,flexShrink:0}}>
+        {[{label:"Capital restant dû",val:fmtE(restantDu),color:"#C0392B"},{label:"Avancement",val:`${pct}% (${payeAuto}/${lignes.length})`,color:"#1D4ED8"},{label:"Prochaine échéance",val:prochaine?`${fmtE(prochaine.echeanceGlobale||prochaine.echeance)} (${prochaine.date.split("-").reverse().join("/")})`:("Terminé"),color:"#A16207"},{label:"Total intérêts",val:fmtE(totalInt),color:"#C0392B"},{label:"TEG",val:tegDossier,color:"#EA580C"}].map(k=>(
           <div key={k.label} style={{textAlign:"center"}}><div style={{fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:2}}>{k.label}</div><div style={{fontSize:12,fontWeight:700,color:k.color,fontFamily:"'Lora',serif"}}>{k.val}</div></div>
         ))}
       </div>
@@ -11513,7 +11525,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             {(()=>{
               const lg2 = localDos.lignes||[];
               const normSt = s => (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
-              const lgPret  = lg2.filter(r=>normSt(r.statut).includes("pret") && !r.estVersement);
+              const lgPret  = lg2.filter(r=>normSt(r.statut).includes("pret") && !r.estVersement && !r.estCapita);
               const lgAmort = lg2.filter(r=>r.estAmort);
               const lgDif   = lg2.filter(r=>r.estDiffere);
               const intPret  = lgPret.reduce((a,r)=>a+(r.interets||0),0);
@@ -12146,13 +12158,12 @@ function EcheancierView({ tasks, settings }) {
       {activeTab==="dashboard" && (
         <div style={{ padding:"20px 24px",display:"flex",flexDirection:"column",gap:16 }}>
           {/* KPIs */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:16 }}>
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16 }}>
             {[
               { label:"Capital restant dû",    val:fmtE(totalEncours),          color:"#C0392B", bg:"#FEE2E2", icon:"💶" },
               { label:"Échéances cette année",  val:fmtE(totalEcheancesAnnee),   color:"#1D4ED8", bg:"#DBEAFE", icon:"📅" },
               { label:"Prêts en cours",           val:String(pretsEnCours),        color:"#1D4ED8", bg:"#DBEAFE", icon:"🏦" },
               { label:"Dans les 30 prochains j",val:String(prochaines30),        color:"#A16207", bg:"#FEF9C3", icon:"🔔" },
-              { label:"TEG moyen pondéré",      val:tegGlobal,                   color:"#EA580C", bg:"#FFF7ED", icon:"📊" },
             ].map(k=>(
               <div key={k.label} style={{ background:"white",borderRadius:12,padding:"16px 20px",border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
                 <div style={{ fontSize:20,marginBottom:8 }}>{k.icon}</div>
@@ -14690,7 +14701,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.519<br />16/05/26 à 10:00
+          v.0.520<br />16/05/26 à 10:00
         </div>
       </div>
 
