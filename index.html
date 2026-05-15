@@ -11057,57 +11057,39 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                 <div style={{ fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em",fontWeight:700 }}>
                   IMPORTER UN ÉCHÉANCIER
                 </div>
-                {(() => {
-                  const processFile = (file) => {
+                <div
+                  onDragOver={e => { e.preventDefault(); e.currentTarget.style.background="#E0F2FE"; e.currentTarget.style.borderColor="#0284C7"; }}
+                  onDragLeave={e => { e.currentTarget.style.background="#F0FDF4"; e.currentTarget.style.borderColor="#BBF7D0"; }}
+                  onDrop={e => {
+                    e.preventDefault();
+                    e.currentTarget.style.background="#F0FDF4";
+                    e.currentTarget.style.borderColor="#BBF7D0";
+                    const file = e.dataTransfer.files[0];
                     if (!file) return;
                     const ext = file.name.split('.').pop().toLowerCase();
-                    if (ext === 'xlsx' || ext === 'xls') {
-                      const reader = new FileReader();
-                      reader.onload = ev => {
-                        const rows = parseXLSXEcheancier(ev.target.result);
-                        if (rows.length === 0) { alert("Aucune ligne trouvée dans le fichier."); return; }
-                        set("lignes", rows);
-                        alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                      };
-                      reader.readAsArrayBuffer(file);
+                    if (ext==='xlsx'||ext==='xls') {
+                      const r=new FileReader(); r.onload=ev=>{ const rows=parseXLSXEcheancier(ev.target.result); if(!rows.length){alert("Aucune ligne.");return;} setD(p=>({...p,lignes:rows})); }; r.readAsArrayBuffer(file);
                     } else {
-                      const reader = new FileReader();
-                      reader.onload = ev => {
-                        const rows = parseCSVEcheancier(ev.target.result);
-                        if (rows.length === 0) { alert("Aucune ligne trouvée dans le CSV."); return; }
-                        set("lignes", rows);
-                        alert(`✓ ${rows.length} lignes importées depuis ${file.name}`);
-                      };
-                      reader.readAsText(file, "UTF-8");
+                      const r=new FileReader(); r.onload=ev=>{ const rows=parseCSVEcheancier(ev.target.result); if(!rows.length){alert("Aucune ligne.");return;} setD(p=>({...p,lignes:rows})); }; r.readAsText(file,"UTF-8");
                     }
-                  };
-                  return (
-                    <label
-                      onDragOver={e => { e.preventDefault(); e.currentTarget.style.background="#E0F2FE"; e.currentTarget.style.borderColor="#0284C7"; }}
-                      onDragLeave={e => { e.currentTarget.style.background="#F0FDF4"; e.currentTarget.style.borderColor="#BBF7D0"; }}
-                      onDrop={e => {
-                        e.preventDefault();
-                        e.currentTarget.style.background="#F0FDF4";
-                        e.currentTarget.style.borderColor="#BBF7D0";
-                        const file = e.dataTransfer.files[0];
-                        processFile(file);
-                      }}
-                      style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"12px 8px",background:"#F0FDF4",border:"2px dashed #BBF7D0",borderRadius:8,cursor:"pointer",transition:"all 0.15s" }}>
-                      <input type="file" accept=".csv,.xlsx,.xls" style={{ display:"none" }}
-                        onChange={e => { processFile(e.target.files[0]); e.target.value=""; }} />
-                      <span style={{ fontSize:20 }}>📥</span>
-                      <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:700,textAlign:"center" }}>
-                        Glisser un fichier ici
-                      </span>
-                      <span style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",textAlign:"center" }}>
-                        ou cliquer pour sélectionner
-                      </span>
-                      <span style={{ fontSize:9,color:"#6EE7B7",fontFamily:"'DM Mono',monospace" }}>
-                        .xlsx · .xls · .csv
-                      </span>
-                    </label>
-                  );
-                })()}
+                  }}
+                  onClick={() => { const inp=document.getElementById("ech_panel_import"); if(inp) inp.click(); }}
+                  style={{ display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4,padding:"12px 8px",background:"#F0FDF4",border:"2px dashed #BBF7D0",borderRadius:8,cursor:"pointer",transition:"all 0.15s" }}>
+                  <input id="ech_panel_import" type="file" accept=".csv,.xlsx,.xls" style={{ display:"none" }}
+                    onChange={e => {
+                      const file = e.target.files[0]; if (!file) return; e.target.value="";
+                      const ext = file.name.split('.').pop().toLowerCase();
+                      if (ext==='xlsx'||ext==='xls') {
+                        const r=new FileReader(); r.onload=ev=>{ const rows=parseXLSXEcheancier(ev.target.result); if(!rows.length){alert("Aucune ligne.");return;} setD(p=>({...p,lignes:rows})); }; r.readAsArrayBuffer(file);
+                      } else {
+                        const r=new FileReader(); r.onload=ev=>{ const rows=parseCSVEcheancier(ev.target.result); if(!rows.length){alert("Aucune ligne.");return;} setD(p=>({...p,lignes:rows})); }; r.readAsText(file,"UTF-8");
+                      }
+                    }} />
+                  <span style={{ fontSize:20 }}>📥</span>
+                  <span style={{ fontSize:10,fontFamily:"'Lora',serif",color:"#065F46",fontWeight:700,textAlign:"center" }}>Glisser un fichier ici</span>
+                  <span style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",textAlign:"center" }}>ou cliquer pour sélectionner</span>
+                  <span style={{ fontSize:9,color:"#6EE7B7",fontFamily:"'DM Mono',monospace" }}>.xlsx · .xls · .csv</span>
+                </div>
               </div>
               <button onClick={regenerer}
                 style={{ width:"100%",background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>
@@ -14511,7 +14493,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.485<br />15/05/26 à 15:00
+          v.0.486<br />15/05/26 à 15:30
         </div>
       </div>
 
