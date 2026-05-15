@@ -1077,11 +1077,33 @@ function useAppStore(store, defaultValue) {
   const [data, _setData] = useState(defaultValue);
   const [ready, setReady] = useState(false);
   const pendingRef = useRef(null);
+  const loadedRef = useRef(false);
 
   useEffect(() => {
     (async () => {
-      const v = await appDbGet(store);
-      if (v !== null) _setData(v);
+      try {
+        const v = await appDbGet(store);
+        if (v !== null && (Array.isArray(v) ? v.length > 0 : true)) {
+          _setData(v);
+        } else if (store === "tasks") {
+          // IDB vide : chercher dans localStorage avant d'utiliser les exemples
+          for (const k of ["taskmanager_v4", "tasks_backup", "taskmanager_v4_backup"]) {
+            try {
+              const raw = localStorage.getItem(k);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  _setData(parsed);
+                  appDbSet(store, parsed);
+                  loadedRef.current = true;
+                  break;
+                }
+              }
+            } catch {}
+          }
+        }
+      } catch(e) { console.error("useAppStore:", e); }
+      loadedRef.current = true;
       setReady(true);
     })();
   }, [store]);
@@ -14651,7 +14673,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.504<br />15/05/26 à 23:45
+          v.0.505<br />16/05/26 à 00:00
         </div>
       </div>
 
