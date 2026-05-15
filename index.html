@@ -11748,9 +11748,10 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             </select>
                             :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Intérêts capit.</span>
                             :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
+                            :row.estDifferFin?<span style={{fontSize:8,background:"#FFF7ED",color:"#C2410C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>In fine</span>
                             :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
                             :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Versement</span>
-                            :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
+                            :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement&&!row.estDifferFin))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
                             :<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>}
                         </td>
 
@@ -14643,7 +14644,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.515<br />16/05/26 à 09:00
+          v.0.516<br />16/05/26 à 09:30
         </div>
       </div>
 
