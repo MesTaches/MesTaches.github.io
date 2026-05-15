@@ -10807,6 +10807,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
     }
   };
   const [dragOver, setDragOver] = React.useState(false);
+  const lbl = (t, tip) => <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",
     marginBottom:3,letterSpacing:"0.06em",display:"flex",alignItems:"center",gap:4 }}>
     {t}
     {tip && <span title={tip} style={{ cursor:"help",color:"#AAA",fontSize:11,lineHeight:1 }}>ⓘ</span>}
@@ -14500,7 +14501,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.487<br />15/05/26 à 16:00
+          v.0.488<br />15/05/26 à 16:30
         </div>
       </div>
 
