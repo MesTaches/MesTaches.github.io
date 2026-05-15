@@ -303,8 +303,8 @@ async function fbLogout() {
   <div id="root" style="flex:1;overflow:auto;height:100%;width:100%;"></div>
   <button id="fb-trash-btn" onclick="window.dispatchEvent(new CustomEvent('openTrash'))"
     style="position:fixed;bottom:16px;right:152px;z-index:9999;background:#C0392B;color:white;border:1px solid #A93226;border-radius:20px;padding:7px 12px;font-size:11px;font-family:'Lora',serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.15);display:none"
-    onmouseover="this.style.background='#C00000';this.style.borderColor='#C00000'"
-    onmouseout="this.style.background=this._baseBg||'rgba(255,255,255,0.12)';this.style.borderColor='rgba(255,255,255,0.2)'">
+    onmouseover="this.style.background='#A93226';this.style.borderColor='#922B21'"
+    onmouseout="this.style.background='#C0392B';this.style.borderColor='#A93226'">
     Corbeille
   </button>
 
@@ -11509,36 +11509,31 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
             {(()=>{
               const lg2=localDos.lignes||[];
-              // Calcul montant intérêts par statut
-              const statuts2=[...new Set(lg2.map(r=>r.statut||"").filter(Boolean))];
-              const intParStatut={};
-              statuts2.forEach(st=>{intParStatut[st]=lg2.filter(r=>r.statut===st).reduce((a,r)=>a+(r.interets||0),0);});
-              const intPret=lg2.filter(r=>{const s=(r.statut||"").toLowerCase();return s.includes("pret")||s.includes("prêt");}).reduce((a,r)=>a+(r.interets||0),0);
+              const stPret=lg2.filter(r=>{const s=(r.statut||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");return s.includes("pret");});
+              const intPret=stPret.reduce((a,r)=>a+(r.interets||0),0);
               const intAmort=lg2.filter(r=>r.estAmort).reduce((a,r)=>a+(r.interets||0),0);
               const intDif=lg2.filter(r=>r.estDiffere).reduce((a,r)=>a+(r.interets||0),0);
-              return (
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              const fmtM=v=>v>0?v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €":"—";
+              const row=(lbl1,val1,set1,ph1,lbl2,val2)=>(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                   <div>
-                    {lblL("Taux Prêt (%/an)", "Taux annuel du statut Prêt (hors amortissement)")}
-                    <input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="Ex: 2,30" style={inpL}/>
-                    {intPret>0&&<div style={{fontSize:9,color:"#C0392B",fontFamily:"'Lora',serif",marginTop:2}}>Intérêts : {intPret.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>}
+                    {lblL(lbl1)}
+                    <input type="text" value={val1} onChange={e=>setL(set1,e.target.value)} placeholder={ph1} style={inpL}/>
                   </div>
                   <div>
-                    {lblL("Taux Amort. (%/an)", "Taux en phase Amortissement")}
-                    <input type="text" value={localDos.tauxAmort||""} onChange={e=>setL("tauxAmort",e.target.value)} placeholder="Ex: 2,70" style={inpL}/>
-                    {intAmort>0&&<div style={{fontSize:9,color:"#C0392B",fontFamily:"'Lora',serif",marginTop:2}}>Intérêts : {intAmort.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>}
-                  </div>
-                  <div>
-                    {lblL("Taux Différé (%/an)", "Taux en phase Différé (si différent du taux Amort.)")}
-                    <input type="text" value={localDos.tauxDiffere||""} onChange={e=>setL("tauxDiffere",e.target.value)} placeholder="Si différent" style={inpL}/>
-                    {intDif>0&&<div style={{fontSize:9,color:"#C0392B",fontFamily:"'Lora',serif",marginTop:2}}>Intérêts : {intDif.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} €</div>}
-                  </div>
-                  <div>
-                    {lblL("Commission garantie (%/an)", "Prélevée sur le capital restant dû")}
-                    <input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inpL}/>
+                    <div style={{fontSize:9,fontWeight:700,color:"#666",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div>
+                    <div style={{fontSize:11,fontFamily:"'Lora',serif",color:"#C0392B",fontWeight:600,padding:"4px 8px",background:"#FFF5F5",borderRadius:6,minHeight:28,display:"flex",alignItems:"center"}}>{fmtM(val2)}</div>
                   </div>
                 </div>
               );
+              return (<>
+                {row("Taux Prêt (%/an)",localDos.tauxAnnuel||"","tauxAnnuel","Ex: 2,30",intPret)}
+                {row("Taux Amort. (%/an)",localDos.tauxAmort||"","tauxAmort","Ex: 2,70",intAmort)}
+                {row("Taux Différé (%/an)",localDos.tauxDiffere||"","tauxDiffere","Si différent",intDif)}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+                  <div>{lblL("Commission garantie (%/an)")}<input type="text" value={localDos.tauxGarantie||""} onChange={e=>setL("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={inpL}/></div>
+                </div>
+              </>);
             })()}
           </div>
           <div style={{background:"#FFFBEB",borderRadius:8,padding:"8px 10px",border:"1px solid #FDE68A"}}>
@@ -11786,7 +11781,6 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 <tfoot>
                   <tr style={{background:"#F0F4FF",borderTop:"2px solid #102A63",fontWeight:700}}>
                     <td colSpan={4} style={{padding:"2px 4px",fontSize:10,fontFamily:"'Lora',serif",color:"#102A63",letterSpacing:"0.06em",whiteSpace:"nowrap",fontWeight:700}}>TOTAL</td>
-                    <td style={{padding:"2px 4px",textAlign:"right",color:"#102A63",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#27AE60",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalCap)}</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#C0392B",fontVariantNumeric:"tabular-nums",fontFamily:"'Lora',serif",fontSize:10,fontWeight:700,whiteSpace:"nowrap"}}>{fmtE(totalInt)}</td>
                     <td style={{padding:"2px 4px",textAlign:"right",color:"#888",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap"}}>—</td>
@@ -12154,23 +12148,34 @@ function EcheancierView({ tasks, settings }) {
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
                   // Calcul timeline depuis les lignes réelles
-                  // Grouper par statut pour la timeline
                   const statuts2 = [...new Set(lignes.map(r=>r.statut||"").filter(Boolean))];
                   const nbVers  = lignes.filter(r=>r.estVersement).length;
                   const nbCap   = lignes.filter(r=>r.estCapita).length;
                   const nbCar   = lignes.filter(r=>r.estCarence).length;
                   const nbDif   = lignes.filter(r=>r.estDiffere).length;
                   const nbFine  = lignes.filter(r=>r.estDifferFin).length;
-                  const nbAmort = lignes.filter(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement)).length;
+                  const nbAmort = lignes.filter(r=>r.estAmort||(r.capital>0&&!r.estDiffere&&!r.estCapita&&!r.estVersement&&!r.estDifferFin)).length;
                   const nbSans  = lignes.filter(r=>r.estSansFlux).length;
                   const totalT  = lignes.length || 1;
-                  // Phases par statut (pour affichage groupé)
-                  const phasesByStatut = statuts2.map(st=>({
-                    statut: st,
-                    count: lignes.filter(r=>r.statut===st).length,
-                    color: st.toLowerCase().includes("pret")||st.toLowerCase().includes("prêt")?"#93C5FD":
-                           st.toLowerCase().includes("amort")?"#6EE7B7":"#FCD34D"
-                  }));
+                  // Palette de couleurs par statut
+                  const STATUT_COLORS = ["#93C5FD","#6EE7B7","#FCD34D","#FCA5A5","#DDD6FE","#FDBA74","#A7F3D0"];
+                  const statutColorMap = {};
+                  statuts2.forEach((st,i)=>{ statutColorMap[st]=STATUT_COLORS[i%STATUT_COLORS.length]; });
+                  // Phases par statut OU par type si pas de statut
+                  const phasesByStatut = statuts2.length > 0
+                    ? statuts2.map(st=>({
+                        statut: st,
+                        count: lignes.filter(r=>r.statut===st).length,
+                        color: statutColorMap[st]
+                      }))
+                    : [
+                        ...(nbVers>0  ?[{statut:"Versement", count:nbVers,  color:"#BFDBFE"}]:[]),
+                        ...(nbFine>0  ?[{statut:"In fine",   count:nbFine,  color:"#FED7AA"}]:[]),
+                        ...(nbSans>0  ?[{statut:"Sans flux",  count:nbSans,  color:"#E5E7EB"}]:[]),
+                        ...(nbCap>0   ?[{statut:"Int. capit.",count:nbCap,   color:"#DDD6FE"}]:[]),
+                        ...(nbDif>0   ?[{statut:"Différé",    count:nbDif,   color:"#FCD34D"}]:[]),
+                        ...(nbAmort>0 ?[{statut:"Amort.",      count:nbAmort, color:"#6EE7B7"}]:[]),
+                      ];
                   const dateDebut=lignes[0]?.date||dos.dateDebut||"";
                   const dateFin2=lignes[lignes.length-1]?.date||dos.dateFin||"";
                   let pctTimeline=0;
@@ -14600,7 +14605,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.510<br />16/05/26 à 04:00
+          v.0.511<br />16/05/26 à 05:00
         </div>
       </div>
 
