@@ -11289,11 +11289,10 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
                             outline: isNext ? "1px solid #FDE68A" : "none",
                             opacity: row.estSansFlux ? 0.55 : 1 }}>
                             <td style={{ padding:"3px 6px",textAlign:"center",color:"#888",fontWeight:600,fontSize:10,fontFamily:"'Lora',serif" }}>{row.n}</td>
-                            <td style={{ padding:"5px 8px",fontSize:9,color:"#6B7280",fontFamily:"'Lora',serif",whiteSpace:"nowrap",maxWidth:80,overflow:"hidden",textOverflow:"ellipsis" }}>{row.statut||""}</td>
-                            <td style={{ padding:"3px 6px",textAlign:"right",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap" }}>
-                              {row.date.split("-").reverse().join("/")}
+                            <td style={{ padding:"3px 6px",textAlign:"center",color: isPast&&!row.paye?"#C0392B":"#2C3E50",fontWeight:isNext?700:400,fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap" }}>
+                              {row.date ? row.date.split("-").reverse().join("/") : "—"}
                             </td>
-                            <td style={{ padding:"3px 6px",textAlign:"center",color:"#6B7280",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis" }}>
+                            <td style={{ padding:"3px 6px",textAlign:"center",color:"#6B7280",fontFamily:"'Lora',serif",fontSize:10,whiteSpace:"nowrap",maxWidth:72,overflow:"hidden",textOverflow:"ellipsis" }}>
                               {row.statut||""}
                             </td>
                             <td style={{ padding:"3px 6px",textAlign:"center" }}>
@@ -14635,7 +14634,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.498<br />15/05/26 à 21:00
+          v.0.499<br />15/05/26 à 21:30
         </div>
       </div>
 
