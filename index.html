@@ -622,7 +622,8 @@ function exportEchPDF(dos) {
     <span>${new Date().toLocaleDateString("fr-FR")} · ${lignes.length} échéances</span>
   </div>
 
-  <script>setTimeout(()=>window.print(),600);</scr"+"ipt>
+  <button onclick="window.print()" style="position:fixed;bottom:30px;right:30px;background:#102A63;color:white;border:none;border-radius:28px;padding:14px 32px;font-size:15px;font-family:Georgia,serif;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,0.25);z-index:999">\u{1F5A8} Imprimer / PDF</button>
+  <button onclick="window.close()" style="position:fixed;bottom:30px;right:260px;background:#F0F0F0;color:#555;border:none;border-radius:28px;padding:14px 20px;font-size:15px;cursor:pointer;z-index:999">\u2715 Fermer</button>
   </body></html>`;
 
   // window.open + document.write : méthode universelle
@@ -11585,7 +11586,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const intPret  = lgPret2.reduce((a,r)=>a+(r.interets||0),0);  // inclut capitalisés
               const intAmort = lgAmort.reduce((a,r)=>a+(r.interets||0),0);
               const intDif   = lgDif.reduce((a,r)=>a+(r.interets||0),0);
-              const garPret  = lgPret2.filter(r=>!r.estCapita).reduce((a,r)=>a+(r.commGarantie||0),0);
+              const garPret  = lgPret2.reduce((a,r)=>a+(r.commGarantie||0),0);  // inclut capitalisés
               const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
@@ -11602,23 +11603,22 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               );
               const totalInterets    = intPret + intAmort + intDif;
               const totalGarantieAll = garPret + garAmort;
-              const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)) || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
+              const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0))
+                || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
 
-              // Taux moyen pondéré par les montants d'intérêts de chaque phase
-              const tP = parseFloat(localDos.tauxAnnuel)||0;
-              const tA = parseFloat(String(localDos.tauxAmort||"").replace(",","."))||0;
-              const tD = parseFloat(String(localDos.tauxDiffere||localDos.tauxAmort||"").replace(",","."))||0;
-              const tG = parseFloat(String(localDos.tauxGarantie||"").replace(",","."))||0;
-              const tG2= parseFloat(String(localDos.tauxGarantie2||localDos.tauxGarantie||"").replace(",","."))||0;
-              const totalInteretsPct = totalInterets>0 && (tP||tA)
-                ? ((intPret*tP + intDif*tD + intAmort*tA) / totalInterets).toFixed(2)
-                : "—";
-              const garMoyPct = totalGarantieAll>0 && (tG||tG2)
-                ? ((garPret*tG + garAmort*tG2) / totalGarantieAll).toFixed(2)
-                : null;
-              const tegPct = totalInteretsPct!=="—"
-                ? ((parseFloat(totalInteretsPct)*totalInterets + (garMoyPct?parseFloat(garMoyPct)*totalGarantieAll:0)) / (totalInterets+totalGarantieAll)).toFixed(2)
-                : "—";
+              // Durée réelle depuis les dates des lignes numérotées
+              const lgNum2 = lg2.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
+              const dateMin2 = lgNum2.length ? lgNum2[0].date : null;
+              const dateMax2 = lgNum2.length ? lgNum2[lgNum2.length-1].date : null;
+              const dureeAns2 = dateMin2&&dateMax2
+                ? Math.max((new Date(dateMax2)-new Date(dateMin2))/(1000*60*60*24*365.25), 0.08)
+                : (lgNum2.length||12)/12;
+
+              // Taux = coût total / montant versé / durée × 100  (toujours cohérent)
+              const totalInteretsPct = montantVerse>0
+                ? (totalInterets/montantVerse/dureeAns2*100).toFixed(2) : "—";
+              const tegPct = montantVerse>0
+                ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns2*100).toFixed(2) : "—";
 
               return (<>
                 <TauxRow label="Intérêts — Prêt (dont capitalisés)" taux={localDos.tauxAnnuel} montant={intPret}/>
@@ -14825,7 +14825,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.527<br />16/05/26 à 10:00
+          v.0.528<br />16/05/26 à 10:00
         </div>
       </div>
 
