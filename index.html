@@ -11508,7 +11508,10 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
 
 
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
-            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>TAUX</div>
+            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+              TAUX &amp; COÛT
+              <span style={{fontSize:8,fontWeight:500,color:"#6B7280",background:"#E0E7FF",borderRadius:4,padding:"1px 5px",letterSpacing:"0.02em"}}>calculé auto</span>
+            </div>
             {(()=>{
               const lg2 = localDos.lignes||[];
               const normSt = s => (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
@@ -11521,21 +11524,24 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const garPret  = lgPret.reduce((a,r)=>a+(r.commGarantie||0),0);
               const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
-              const Row = ({label,field,placeholder,montant,color,bg}) => (
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
-                  <div>{lblL(label)}<input type="text" value={localDos[field]||""} onChange={e=>setL(field,e.target.value)} placeholder={placeholder} style={inpL}/></div>
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:"#666",fontFamily:"'Lora',serif",marginBottom:2}}>Montant (€)</div>
-                    <div style={{fontSize:11,fontFamily:"'Lora',serif",color:color||"#C0392B",fontWeight:600,padding:"4px 8px",background:bg||"#FFF5F5",borderRadius:6,minHeight:28,display:"flex",alignItems:"center"}}>{fmtM(montant)}</div>
+              const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
+              const TauxRow = ({label,taux,montant,accentColor,accentBg,isGarantie}) => (
+                <div style={{display:"flex",alignItems:"stretch",gap:0,marginBottom:5,borderRadius:8,overflow:"hidden",border:"1px solid "+(isGarantie?"#E9D5FF":"#DBEAFE")}}>
+                  <div style={{flex:"0 0 auto",background:isGarantie?"#7C3AED":"#1D4ED8",padding:"6px 8px",display:"flex",alignItems:"center",justifyContent:"center",minWidth:40}}>
+                    <span style={{fontSize:12,fontWeight:800,color:"white",fontFamily:"'Lora',serif",letterSpacing:"-0.02em"}}>{fmtT(taux)}</span>
+                  </div>
+                  <div style={{flex:1,background:isGarantie?"#FAFAFF":"#F8FBFF",padding:"5px 8px",display:"flex",flexDirection:"column",justifyContent:"center"}}>
+                    <div style={{fontSize:9,color:isGarantie?"#7C3AED":"#1D4ED8",fontWeight:700,fontFamily:"'Lora',serif",letterSpacing:"0.04em",textTransform:"uppercase",marginBottom:1}}>{label}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:isGarantie?"#6D28D9":"#C0392B",fontFamily:"'Lora',serif"}}>{fmtM(montant)}</div>
                   </div>
                 </div>
               );
               return (<>
-                <Row label="Taux Prêt (%/an)" field="tauxAnnuel" placeholder="Ex: 2,30" montant={intPret}/>
-                <Row label="Taux Amort. (%/an)" field="tauxAmort" placeholder="Ex: 2,70" montant={intAmort}/>
-                {intDif>0&&<Row label="Taux Différé (%/an)" field="tauxDiffere" placeholder="Si différent" montant={intDif}/>}
-                <Row label="Com. garantie Prêt (%/an)" field="tauxGarantie" placeholder="Ex: 0,60" montant={garPret} color="#6D28D9" bg="#F5F3FF"/>
-                {garAmort>0&&<Row label="Com. garantie Amort. (%/an)" field="tauxGarantie2" placeholder="Ex: 0,83" montant={garAmort} color="#6D28D9" bg="#F5F3FF"/>}
+                <TauxRow label="Intérêts — Prêt" taux={localDos.tauxAnnuel} montant={intPret}/>
+                <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
+                {intDif>0&&<TauxRow label="Intérêts — Différé" taux={localDos.tauxDiffere||localDos.tauxAmort} montant={intDif}/>}
+                <TauxRow label="Com. garantie — Prêt" taux={localDos.tauxGarantie} montant={garPret} isGarantie/>
+                {garAmort>0&&<TauxRow label="Com. garantie — Amort." taux={localDos.tauxGarantie2||localDos.tauxGarantie} montant={garAmort} isGarantie/>}
               </>);
             })()}
           </div>
@@ -14658,7 +14664,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.517<br />16/05/26 à 10:00
+          v.0.518<br />16/05/26 à 10:00
         </div>
       </div>
 
