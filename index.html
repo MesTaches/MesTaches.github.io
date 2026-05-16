@@ -11439,18 +11439,18 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const totalGlob  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
   const prochaine=lignes.find(r=>r.date>now);
   const tegDossier = (() => {
-    const mv = lignes.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0)
-            || parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
     const lgN = lignes.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
     const dMin = lgN.length ? lgN[0].date : null;
     const dMax = lgN.length ? lgN[lgN.length-1].date : null;
     const dur = dMin&&dMax
       ? Math.max((new Date(dMax)-new Date(dMin))/(1000*60*60*24*365.25), 0.08)
       : (lgN.length||12)/12;
-    // Tous les intérêts (incluant estCapita) + toutes garanties = cohérent avec TAUX & COÛT
     const tI = lignes.reduce((a,r)=>a+(r.interets||0),0);
     const tG = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
-    return mv>0 && dur>0 ? ((tI+tG)/mv/dur*100).toFixed(2)+"%" : "—";
+    // Capital moyen pondéré (cohérent avec TAUX & COÛT)
+    const lgAct = lignes.filter(r=>!r.estVersement&&(r.capitalRestant||0)>0);
+    const capMoy = lgAct.length>0 ? lgAct.reduce((a,r)=>a+(r.capitalRestant||0),0)/lgAct.length : 0;
+    return capMoy>0 && dur>0 ? ((tI+tG)/capMoy/dur*100).toFixed(2)+"%" : "—";
   })();
   const hasCap=parseNum(localDos.tauxCapita)>0;
   const car=parseInt(localDos.carence)||0;
@@ -11594,11 +11594,18 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 ? Math.max((new Date(dateMax2)-new Date(dateMin2))/(1000*60*60*24*365.25), 0.08)
                 : (lgNum2.length||12)/12;
 
-              // Taux = coût total / montant versé / durée × 100  (toujours cohérent)
-              const totalInteretsPct = montantVerse>0
-                ? (totalInterets/montantVerse/dureeAns2*100).toFixed(2) : "—";
-              const tegPct = montantVerse>0
-                ? ((totalInterets+totalGarantieAll)/montantVerse/dureeAns2*100).toFixed(2) : "—";
+              // Capital moyen pondéré = moyenne des capitalRestant sur les lignes actives (hors versements)
+              // Formule correcte : taux annuel = totalIntérêts / (capitalMoyen × duréeAns)
+              // Cohérent avec les taux contractuels car le capital décroît progressivement
+              const lgActives2 = lg2.filter(r=>!r.estVersement && r.capitalRestant!=null && r.capitalRestant>0);
+              const capitalMoyen = lgActives2.length > 0
+                ? lgActives2.reduce((a,r)=>a+(r.capitalRestant||0),0) / lgActives2.length
+                : montantVerse;
+
+              const totalInteretsPct = capitalMoyen>0 && dureeAns2>0
+                ? (totalInterets / capitalMoyen / dureeAns2 * 100).toFixed(2) : "—";
+              const tegPct = capitalMoyen>0 && dureeAns2>0
+                ? ((totalInterets + totalGarantieAll) / capitalMoyen / dureeAns2 * 100).toFixed(2) : "—";
 
               return (<>
                 <TauxRow label="Intérêts — Prêt (dont capitalisés)" taux={localDos.tauxAnnuel} montant={intPret}/>
@@ -14830,7 +14837,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.534<br />16/05/26 à 10:00
+          v.0.535<br />16/05/26 à 10:00
         </div>
       </div>
 
