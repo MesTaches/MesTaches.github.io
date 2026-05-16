@@ -4419,13 +4419,13 @@ const ALL_TABS = [
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "◔" },
   { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
-  { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
+  { id: "echeancier",    label: "Emprunts",            icon: "▦" },
   { id: "rcf",           label: "RCF",               icon: "↺" },
-  { id: "echeancier",    label: "Dettes",            icon: "▦" },
+  { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
+  { id: "payments",      label: "Paiements",        icon: "⬡" },
   { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
   { id: "cotation",      label: "Cotation",         icon: "◎" },
   { id: "reporting",     label: "Reporting",        icon: "▤" },
-  { id: "payments",      label: "Paiements",        icon: "⬡" },
   { id: "dev",           label: "Dev",              icon: "⌥" },
 ];
 
@@ -12291,8 +12291,8 @@ function EcheancierView({ tasks, settings }) {
               : <table style={{ width:"100%",borderCollapse:"collapse",fontSize:11,fontFamily:"'Lora',serif" }}>
                   <thead>
                     <tr style={{ background:"#102A63" }}>
-                      {["","Référence","Intitulé","Banque","Montant","Taux","Durée","Date fin","Capital restant","Avancement",""].map(h=>(
-                        <th key={h} style={{ padding:"7px 12px",color:"white",fontWeight:400,textAlign:h==="Avancement"||h===""?"center":"left",fontSize:10 }}>{h}</th>
+                      {["","Référence","Intitulé","Banque","Montant","TEG","Durée","Date fin","Capital restant","Avancement",""].map(h=>(
+                        <th key={h} style={{ padding:"7px 12px",color:"white",fontWeight:400,textAlign:h==="Capital restant"?"right":h==="Avancement"||h===""?"center":"left",fontSize:10 }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -12317,10 +12317,30 @@ function EcheancierView({ tasks, settings }) {
                           <td style={{padding:"6px 10px",fontWeight:600,color:"#102A63"}}>{dos.intitule||"—"}</td>
                           <td style={{padding:"6px 10px",color:"#555"}}>{dos.banque||"—"}</td>
                           <td style={{padding:"6px 10px",fontWeight:600}}>{fmtE(parseNum(dos.montant))}</td>
-                          <td style={{padding:"6px 10px",color:"#065F46"}}>{dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—"}</td>
-                          <td style={{padding:"6px 10px",color:"#555"}}>{dos.duree?dos.duree+" mois":"—"}</td>
+                          <td style={{padding:"6px 10px",color:"#065F46"}}>
+                            {(()=>{
+                              const lg=dos.lignes||[];
+                              const lgAct=lg.filter(r=>!r.estVersement&&(r.capitalRestant||0)>0);
+                              const lgN=lg.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
+                              const dMin=lgN.length?lgN[0].date:null;
+                              const dMax=lgN.length?lgN[lgN.length-1].date:null;
+                              const dur=dMin&&dMax?Math.max((new Date(dMax)-new Date(dMin))/(1000*60*60*24*365.25),0.08):(lgN.length||12)/12;
+                              const tI=lg.reduce((a,r)=>a+(r.interets||0),0);
+                              const tG=lg.reduce((a,r)=>a+(r.commGarantie||0),0);
+                              const capMoy=lgAct.length>0?lgAct.reduce((a,r)=>a+(r.capitalRestant||0),0)/lgAct.length:0;
+                              const teg=capMoy>0&&dur>0?((tI+tG)/capMoy/dur*100).toFixed(2):null;
+                              return teg ? teg+" %" : (dos.tauxAnnuel?Number(dos.tauxAnnuel).toFixed(2)+" %":"—");
+                            })()}
+                          </td>
+                          <td style={{padding:"6px 10px",color:"#555"}}>
+                            {(()=>{
+                              const lg=dos.lignes||[];
+                              const maxN=lg.filter(r=>!r.estVersement&&r.n).reduce((a,r)=>Math.max(a,r.n||0),0);
+                              return maxN>0?maxN+" mois":(dos.duree?dos.duree+" mois":"—");
+                            })()}
+                          </td>
                           <td style={{padding:"6px 10px",color:"#888",fontSize:10}}>{dos.dateFin?dos.dateFin.split("-").reverse().join("/"):"—"}</td>
-                          <td style={{padding:"6px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60"}}>{fmtE(restantDu)}</td>
+                          <td style={{padding:"6px 10px",fontWeight:700,color:restantDu>0?"#C0392B":"#27AE60",textAlign:"right"}}>{fmtE(restantDu)}</td>
                           <td style={{padding:"6px 10px"}}>
                             <div style={{display:"flex",alignItems:"center",gap:6}}>
                               <div style={{flex:1,height:6,background:"#F0F0F0",borderRadius:3,overflow:"hidden",minWidth:50}}>
@@ -14733,7 +14753,7 @@ function App() {
     { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
     { id: "capex",         label: "Capex consolidé",  icon: "📊" },
   { id: "rcf",           label: "RCF",               icon: "↺" },
-  { id: "echeancier",    label: "Dettes",            icon: "▦" },
+  { id: "echeancier",    label: "Emprunts",            icon: "▦" },
   { id: "payments",      label: "Paiements",        icon: "⬡" },
     { id: "dev",           label: "Dev",              icon: "⌥" },
     { id: "settings",      label: "Paramètres",       icon: "⚙" },
@@ -14837,7 +14857,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.535<br />16/05/26 à 10:00
+          v.0.536<br />16/05/26 à 10:00
         </div>
       </div>
 
