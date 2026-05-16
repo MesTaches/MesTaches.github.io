@@ -475,291 +475,7 @@ window.parseCSVEcheancier  = parseCSVEcheancier;
 }
 
 /* exportEchPDF → déplacée dans jsx-source */
-/* ═══════════════════════════════════════════════════════════
-   EXPORT PDF RCF — utilitaires partagés
-═══════════════════════════════════════════════════════════ */
-function _rcfPrintIframe(htm) {
-  var iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;";
-  document.body.appendChild(iframe);
-  var doc = iframe.contentDocument || iframe.contentWindow.document;
-  doc.open(); doc.write(htm); doc.close();
-  setTimeout(function() {
-    iframe.contentWindow.focus();
-    iframe.contentWindow.print();
-    setTimeout(function() { document.body.removeChild(iframe); }, 2000);
-  }, 800);
-}
-
-function _rcfStyles() {
-  return `
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Georgia,serif;color:#1E293B;background:white;font-size:10px}
-    .page-header{background:#102A63;color:white;padding:26px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .page-header h1{font-size:20px;font-weight:700;color:white;font-family:Georgia,serif;margin-bottom:3px}
-    .page-header .sub{font-size:11px;color:rgba(255,255,255,0.7);font-family:Georgia,serif}
-    .page-header .surtitle{font-size:9px;color:rgba(255,255,255,0.55);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;font-family:Georgia,serif}
-    .page-header .date{font-size:9px;color:rgba(255,255,255,0.45);font-family:Georgia,serif;margin-top:4px}
-    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:2px solid #E2E8F0}
-    .kpi{padding:12px 18px;border-right:1px solid #E2E8F0}
-    .kpi:last-child{border-right:none}
-    .kpi label{display:block;font-size:8px;font-family:Georgia,serif;color:#94A3B8;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
-    .kpi .val{font-size:14px;font-weight:700;color:#102A63}
-    .kpi .val.red{color:#DC2626} .kpi .val.teal{color:#0E7490} .kpi .val.green{color:#065F46}
-    .section-title{font-size:9px;font-weight:700;color:#102A63;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;background:#F0F5FF;border-bottom:1px solid #BFDBFE;border-top:1px solid #BFDBFE;margin-top:16px}
-    .card{margin:12px 16px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;page-break-inside:avoid}
-    .card-header{background:#102A63;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .card-header .title{font-size:13px;font-weight:700;color:white;font-family:Georgia,serif}
-    .card-header .sub{font-size:10px;color:rgba(255,255,255,0.6);font-family:Georgia,serif;margin-top:2px}
-    .card-header .montant{font-size:14px;font-weight:700;color:white;font-family:Georgia,serif}
-    .card-header .autorise{font-size:9px;color:rgba(255,255,255,0.55);text-align:right}
-    .card-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;background:white}
-    .card-col{padding:12px 16px;border-right:1px solid #F1F5F9}
-    .card-col:last-child{border-right:none}
-    .col-title{font-size:8px;font-weight:700;color:#102A63;letter-spacing:.07em;text-transform:uppercase;margin-bottom:7px;font-family:Georgia,serif}
-    .row{display:flex;justify-content:space-between;margin-bottom:4px}
-    .row span{font-size:10px;font-family:Georgia,serif}
-    .row .lbl{color:#888} .row .val{font-weight:600;color:#1E293B}
-    .usage-bar-bg{background:#F1F5F9;border-radius:4px;height:7px;margin:6px 0;overflow:hidden}
-    .usage-bar{height:100%;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .tirage-row{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:5px;border:1px solid #E2E8F0;margin-bottom:3px;background:#F8FAFC}
-    .tirage-row.past{background:#F0FDF4}
-    .tirage-row .t-amount{font-size:10px;font-weight:700;color:#102A63;font-family:Georgia,serif}
-    .tirage-row .t-date{font-size:9px;color:#888;font-family:Georgia,serif}
-    .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:8px;font-weight:700;font-family:Georgia,serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .badge.alert-warn{background:#FEF3C7;color:#D97706} .badge.alert-urg{background:#FEE2E2;color:#DC2626}
-    .badge.renouv{background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7}
-    .notes-block{padding:8px 16px;background:#F8FAFC;border-top:1px solid #F1F5F9;font-size:10px;color:#555;font-style:italic;font-family:Georgia,serif}
-    .pj-section{padding:8px 16px;border-top:1px solid #F1F5F9}
-    .pj-title{font-size:8px;font-weight:700;color:#102A63;letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px;font-family:Georgia,serif}
-    .pj-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #F1F5F9;font-size:9px;font-family:Georgia,serif;color:#334155}
-    .pj-item:last-child{border-bottom:none}
-    .pj-img{width:100%;max-height:180px;object-fit:contain;margin:6px 0;border-radius:4px;border:1px solid #E2E8F0;display:block}
-    .pj-pdf-preview{width:100%;height:220px;border:1px solid #E2E8F0;border-radius:4px;display:block;margin:6px 0}
-    .footer{padding:10px 32px;display:flex;justify-content:space-between;font-size:8px;color:#94A3B8;font-family:Georgia,serif;border-top:1px solid #E2E8F0;margin-top:16px}
-    @media print{@page{margin:8mm;size:A4 portrait}.no-print{display:none}}
-  `;
-}
-
-function _rcfCardHTML(l, now, opts) {
-  opts = opts || {};
-  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
-  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
-  var fmtD = function(s) { return s?s.split("-").reverse().join("/"):"—"; };
-  var today = new Date(now);
-  var alertColor = function(dateStr, urgent) {
-    if (!dateStr) return null;
-    var d = new Date(dateStr);
-    var diff = Math.round((d - today) / 86400000);
-    if (diff < 0) return { cls:"badge alert-urg", txt:"Échu" };
-    if (diff <= 30) return { cls:"badge alert-urg", txt:"< 30j (J-"+diff+")" };
-    if (diff <= 60) return { cls:"badge alert-warn", txt:"< 60j (J-"+diff+")" };
-    return null;
-  };
-  var autoriseN = parseMoney(l.montantAutorise);
-  var tireN = parseMoney(l.montantTire);
-  var dispo = Math.max(0, autoriseN - tireN);
-  var pct = autoriseN > 0 ? Math.min(100, Math.round(tireN / autoriseN * 100)) : 0;
-  var barColor = pct > 90 ? "#DC2626" : pct > 70 ? "#EA580C" : "#0E7490";
-  var alerteC = alertColor(l.dateFinContrat);
-
-  var tiragesHTML = "";
-  var tirages = (l.tirages || []).sort(function(a,b){ return (a.dateEcheance||"") > (b.dateEcheance||"") ? 1 : -1; });
-  if (tirages.length === 0) {
-    tiragesHTML = '<div style="font-size:10px;color:#CCC;font-family:Georgia,serif">Aucun tirage</div>';
-  } else {
-    tirages.forEach(function(t) {
-      var isPast = t.dateEcheance && t.dateEcheance < now;
-      var aT = alertColor(t.dateEcheance);
-      tiragesHTML += '<div class="tirage-row'+(isPast?" past":"")+'">'
-        + '<div><div class="t-amount">'+fmtE(t.montant)+'</div>'
-        + '<div class="t-date">Éch. '+fmtD(t.dateEcheance)+(t.note?" · "+t.note:"")+'</div></div>'
-        + (t.renouvAuto && !isPast ? '<span class="badge renouv">↺ Auto</span>' : "")
-        + (aT ? '<span class="'+aT.cls+'">'+aT.txt+'</span>' : "")
-        + (isPast ? '<span class="badge" style="background:#D1FAE5;color:#065F46">Remboursé</span>' : "")
-        + '</div>';
-    });
-  }
-
-  var notesHTML = l.notes ? '<div class="notes-block">📝 '+String(l.notes).replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()+'</div>' : "";
-
-  var pjHTML = "";
-  var atts = (l.attachments || []).filter(function(a){ return a.dataUrl; });
-  if (atts.length > 0) {
-    var pjItems = atts.map(function(a) {
-      var preview = "";
-      if (a.type && a.type.startsWith("image/")) {
-        preview = '<img src="'+a.dataUrl+'" class="pj-img" alt="'+a.name+'" />';
-      } else if (a.type === "application/pdf") {
-        preview = '<object data="'+a.dataUrl+'#view=FitH" type="application/pdf" class="pj-pdf-preview"><p style="font-size:9px;color:#888">'+a.name+'</p></object>';
-      }
-      var kb = a.size ? (a.size < 1048576 ? Math.round(a.size/1024)+" Ko" : (a.size/1048576).toFixed(1)+" Mo") : "";
-      return '<div class="pj-item">📎 <b>'+a.name+'</b> <span style="color:#AAA">'+kb+'</span></div>'+preview;
-    }).join("");
-    pjHTML = '<div class="pj-section"><div class="pj-title">Pièces jointes ('+atts.length+')</div>'+pjItems+'</div>';
-  }
-
-  return '<div class="card">'
-    + '<div class="card-header">'
-    +   '<div><div class="title">'+(l.intitule||"Sans titre")+'</div>'
-    +   '<div class="sub">'+(l.banque||"")+(l.reference?" · "+l.reference:"")+'</div></div>'
-    +   '<div style="text-align:right">'
-    +     '<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">'
-    +       (alerteC ? '<span class="'+alerteC.cls+'" style="-webkit-print-color-adjust:exact;print-color-adjust:exact">'+alerteC.txt+'</span>' : "")
-    +       '<span class="montant">'+fmtE(autoriseN)+'</span>'
-    +     '</div>'
-    +     '<div class="autorise">autorisé</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="card-body">'
-    +   '<div class="card-col"><div class="col-title">Contrat</div>'
-    +     '<div class="row"><span class="lbl">Date début</span><span class="val">'+fmtD(l.dateDebutContrat)+'</span></div>'
-    +     '<div class="row"><span class="lbl">Échéance</span><span class="val">'+fmtD(l.dateFinContrat)+'</span></div>'
-    +     '<div class="row"><span class="lbl">Taux</span><span class="val">'+(l.taux?l.taux+" %":"—")+'</span></div>'
-    +     '<div class="row"><span class="lbl">Conditions</span><span class="val">'+(l.conditions||"—")+'</span></div>'
-    +   '</div>'
-    +   '<div class="card-col"><div class="col-title">Utilisation</div>'
-    +     '<div class="row"><span class="lbl">Tiré</span><span class="val teal">'+fmtE(tireN)+'</span></div>'
-    +     '<div class="row"><span class="lbl">Disponible</span><span class="val green">'+fmtE(dispo)+'</span></div>'
-    +     '<div class="usage-bar-bg"><div class="usage-bar" style="width:'+pct+'%;background:'+barColor+'"></div></div>'
-    +     '<div style="font-size:9px;color:#888;text-align:right;font-family:Georgia,serif">'+pct+'% utilisé</div>'
-    +   '</div>'
-    +   '<div class="card-col"><div class="col-title">Tirages en cours ('+tirages.filter(function(t){return t.dateEcheance>=now;}).length+')</div>'
-    +   tiragesHTML
-    +   '</div>'
-    + '</div>'
-    + notesHTML
-    + pjHTML
-    + '</div>';
-}
-
-/* Exporte tous les RCF (ou ceux de selectedIds si non vide) */
-function exportRCFPDF(lignes, selectedIds, now) {
-  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
-  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
-
-  var subset = (selectedIds && selectedIds.length > 0)
-    ? lignes.filter(function(l){ return selectedIds.includes(l.id); })
-    : lignes;
-
-  var totalAutorise = subset.reduce(function(a,l){ return a+parseMoney(l.montantAutorise); }, 0);
-  var totalTire     = subset.reduce(function(a,l){ return a+parseMoney(l.montantTire); }, 0);
-  var totalDispo    = totalAutorise - totalTire;
-  var pctGlobal     = totalAutorise > 0 ? Math.round(totalTire/totalAutorise*100) : 0;
-  var barColorG     = pctGlobal > 90 ? "#DC2626" : pctGlobal > 70 ? "#EA580C" : "#0E7490";
-
-  var synthRows = subset.map(function(l) {
-    var auto = parseMoney(l.montantAutorise);
-    var tire = parseMoney(l.montantTire);
-    var pct = auto > 0 ? Math.min(100, Math.round(tire/auto*100)) : 0;
-    var today = new Date(now);
-    var alertTxt = "";
-    if (l.dateFinContrat) {
-      var diff = Math.round((new Date(l.dateFinContrat)-today)/86400000);
-      if (diff < 0) alertTxt = '<span style="background:#FEE2E2;color:#DC2626;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">Échu</span>';
-      else if (diff <= 30) alertTxt = '<span style="background:#FEE2E2;color:#DC2626;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">J-'+diff+'</span>';
-      else if (diff <= 60) alertTxt = '<span style="background:#FEF3C7;color:#D97706;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">J-'+diff+'</span>';
-    }
-    var fmtD = function(s){ return s?s.split("-").reverse().join("/"):"—"; };
-    return '<tr><td style="text-align:left;font-weight:600">'+( l.intitule||"—")+'</td>'
-      +'<td style="text-align:left;color:#888">'+( l.banque||"—")+'</td>'
-      +'<td>'+fmtE(auto)+'</td>'
-      +'<td style="color:#0E7490;font-weight:700">'+fmtE(tire)+'</td>'
-      +'<td style="color:#065F46">'+fmtE(Math.max(0,auto-tire))+'</td>'
-      +'<td>'+pct+'%</td>'
-      +'<td>'+fmtD(l.dateDebutContrat)+'</td>'
-      +'<td>'+fmtD(l.dateFinContrat)+' '+alertTxt+'</td>'
-      +'<td>'+(l.taux?l.taux+' %':"—")+'</td>'
-      +'</tr>';
-  }).join("");
-
-  var cardsHTML = subset.map(function(l){ return _rcfCardHTML(l, now); }).join("");
-
-  var htm = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>RCF — Synthèse</title><style>'
-    + _rcfStyles()
-    + `table{width:100%;border-collapse:collapse;font-size:9px;font-family:Georgia,serif}
-       thead tr{background:#102A63;color:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-       thead th{padding:6px 8px;font-weight:400;text-align:right;white-space:nowrap}
-       thead th:nth-child(1),thead th:nth-child(2){text-align:left}
-       tbody tr td{padding:4px 8px;text-align:right;border-bottom:1px solid #F1F5F9;color:#334155}
-       tbody tr td:nth-child(1),tbody tr td:nth-child(2){text-align:left}
-       tbody tr:nth-child(even){background:#FAFAFA}
-       tfoot tr{background:#F0F5FF;border-top:2px solid #BFDBFE}
-       tfoot td{padding:5px 8px;text-align:right;font-weight:700;color:#102A63}
-       tfoot td:nth-child(1){text-align:left}
-    `
-    + '</style></head><body>'
-    + '<div class="page-header">'
-    +   '<div><div class="surtitle">Revolving Credit Facilities</div><h1>Synthèse RCF</h1>'
-    +   '<div class="sub">'+(subset.length)+' facilité'+(subset.length>1?"s":"")+(selectedIds&&selectedIds.length>0?" (sélection)":"")+' · Généré le '+new Date().toLocaleDateString("fr-FR")+'</div></div>'
-    +   '<div style="text-align:right">'
-    +     '<div style="font-size:12px;font-weight:700;color:white;font-family:Georgia,serif">'+fmtE(totalAutorise)+'</div>'
-    +     '<div style="font-size:9px;color:rgba(255,255,255,0.55);font-family:Georgia,serif">total autorisé</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="kpis">'
-    +   '<div class="kpi"><label>Total autorisé</label><div class="val">'+fmtE(totalAutorise)+'</div></div>'
-    +   '<div class="kpi"><label>Total tiré</label><div class="val teal">'+fmtE(totalTire)+'</div></div>'
-    +   '<div class="kpi"><label>Total disponible</label><div class="val green">'+fmtE(totalDispo)+'</div></div>'
-    +   '<div class="kpi"><label>Utilisation globale</label><div class="val" style="color:'+barColorG+'">'+pctGlobal+'%</div></div>'
-    + '</div>'
-    + '<div class="section-title">Tableau de synthèse</div>'
-    + '<div style="padding:0 16px 8px">'
-    + '<table><thead><tr>'
-    +   '<th style="text-align:left">Intitulé</th><th style="text-align:left">Banque</th>'
-    +   '<th>Autorisé</th><th>Tiré</th><th>Disponible</th><th>Util.</th>'
-    +   '<th>Début</th><th>Échéance</th><th>Taux</th>'
-    + '</tr></thead><tbody>'+synthRows+'</tbody>'
-    + '<tfoot><tr><td colspan="2">TOTAL</td><td>'+fmtE(totalAutorise)+'</td><td>'+fmtE(totalTire)+'</td><td>'+fmtE(totalDispo)+'</td><td colspan="4">'+pctGlobal+'% utilisé</td></tr></tfoot>'
-    + '</table></div>'
-    + '<div class="section-title">Détail des facilités</div>'
-    + cardsHTML
-    + '<div class="footer"><span>Synthèse RCF · '+subset.length+' facilité'+(subset.length>1?"s":"")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
-    + '</body></html>';
-
-  _rcfPrintIframe(htm);
-}
-
-/* Exporte un seul RCF avec ses PJ */
-function exportSingleRCFPDF(ligne, now) {
-  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
-  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
-
-  var auto = parseMoney(ligne.montantAutorise);
-  var tire = parseMoney(ligne.montantTire);
-  var dispo = Math.max(0, auto - tire);
-  var pct = auto > 0 ? Math.round(tire/auto*100) : 0;
-  var barColor = pct > 90 ? "#DC2626" : pct > 70 ? "#EA580C" : "#0E7490";
-
-  var cardHTML = _rcfCardHTML(ligne, now);
-
-  var htm = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>RCF — '+(ligne.intitule||"Fiche")+'</title><style>'
-    + _rcfStyles()
-    + '</style></head><body>'
-    + '<div class="page-header">'
-    +   '<div><div class="surtitle">Revolving Credit Facility</div>'
-    +   '<h1>'+(ligne.intitule||"Sans titre")+'</h1>'
-    +   '<div class="sub">'+(ligne.banque||"")+(ligne.reference?" · "+ligne.reference:"")+'</div></div>'
-    +   '<div style="text-align:right">'
-    +     '<div style="font-size:14px;font-weight:700;color:white;font-family:Georgia,serif">'+fmtE(auto)+'</div>'
-    +     '<div style="font-size:9px;color:rgba(255,255,255,0.55);font-family:Georgia,serif">autorisé · Tiré : '+fmtE(tire)+' · Dispo : '+fmtE(dispo)+'</div>'
-    +     '<div class="date">Généré le '+new Date().toLocaleDateString("fr-FR")+'</div>'
-    +   '</div>'
-    + '</div>'
-    + '<div class="kpis">'
-    +   '<div class="kpi"><label>Autorisé</label><div class="val">'+fmtE(auto)+'</div></div>'
-    +   '<div class="kpi"><label>Tiré</label><div class="val teal">'+fmtE(tire)+'</div></div>'
-    +   '<div class="kpi"><label>Disponible</label><div class="val green">'+fmtE(dispo)+'</div></div>'
-    +   '<div class="kpi"><label>Utilisation</label><div class="val" style="color:'+barColor+'">'+pct+'%</div></div>'
-    + '</div>'
-    + '<div class="section-title">Détail de la facilité</div>'
-    + cardHTML
-    + '<div class="footer"><span>'+(ligne.reference||ligne.intitule||"RCF")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
-    + '</body></html>';
-
-  _rcfPrintIframe(htm);
-}
-</script>
+/* exportRCFPDF, exportSingleRCFPDF, _rcfPrintIframe → déplacées dans jsx-source */</script>
 
 <script id="jsx-source" type="text/plain">
 
@@ -12536,6 +12252,290 @@ function EcheancierView({ tasks, settings }) {
    ══════════════════════════════════════════════ */
 const RCF_KEY = "taskmanager_rcf_v1";
 
+/* ═══════════════════════════════════════════════════════════
+   EXPORT PDF RCF — utilitaires partagés
+═══════════════════════════════════════════════════════════ */
+function _rcfPrintIframe(htm) {
+  // Injecter un bouton Imprimer dans le HTML avant ouverture
+  var htmWithBtn = htm.replace('</body>', '<button onclick="window.print()" style="position:fixed;bottom:30px;right:30px;background:#0E7490;color:white;border:none;border-radius:28px;padding:14px 32px;font-size:15px;font-family:Georgia,serif;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,0.25);z-index:999">🖨 Imprimer / PDF</button><button onclick="window.close()" style="position:fixed;bottom:30px;right:260px;background:#F0F0F0;color:#555;border:none;border-radius:28px;padding:14px 20px;font-size:15px;cursor:pointer;z-index:999">✕ Fermer</button></body>');
+  var w = window.open('', '_blank', 'width=1200,height=900');
+  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
+  w.document.open();
+  w.document.write(htmWithBtn);
+  w.document.close();
+}
+  }, 800);
+}
+
+function _rcfStyles() {
+  return `
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Georgia,serif;color:#1E293B;background:white;font-size:10px}
+    .page-header{background:#102A63;color:white;padding:26px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .page-header h1{font-size:20px;font-weight:700;color:white;font-family:Georgia,serif;margin-bottom:3px}
+    .page-header .sub{font-size:11px;color:rgba(255,255,255,0.7);font-family:Georgia,serif}
+    .page-header .surtitle{font-size:9px;color:rgba(255,255,255,0.55);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;font-family:Georgia,serif}
+    .page-header .date{font-size:9px;color:rgba(255,255,255,0.45);font-family:Georgia,serif;margin-top:4px}
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:2px solid #E2E8F0}
+    .kpi{padding:12px 18px;border-right:1px solid #E2E8F0}
+    .kpi:last-child{border-right:none}
+    .kpi label{display:block;font-size:8px;font-family:Georgia,serif;color:#94A3B8;letter-spacing:.07em;text-transform:uppercase;margin-bottom:3px}
+    .kpi .val{font-size:14px;font-weight:700;color:#102A63}
+    .kpi .val.red{color:#DC2626} .kpi .val.teal{color:#0E7490} .kpi .val.green{color:#065F46}
+    .section-title{font-size:9px;font-weight:700;color:#102A63;letter-spacing:.08em;text-transform:uppercase;padding:10px 16px;background:#F0F5FF;border-bottom:1px solid #BFDBFE;border-top:1px solid #BFDBFE;margin-top:16px}
+    .card{margin:12px 16px;border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+    .card-header{background:#102A63;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .card-header .title{font-size:13px;font-weight:700;color:white;font-family:Georgia,serif}
+    .card-header .sub{font-size:10px;color:rgba(255,255,255,0.6);font-family:Georgia,serif;margin-top:2px}
+    .card-header .montant{font-size:14px;font-weight:700;color:white;font-family:Georgia,serif}
+    .card-header .autorise{font-size:9px;color:rgba(255,255,255,0.55);text-align:right}
+    .card-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;background:white}
+    .card-col{padding:12px 16px;border-right:1px solid #F1F5F9}
+    .card-col:last-child{border-right:none}
+    .col-title{font-size:8px;font-weight:700;color:#102A63;letter-spacing:.07em;text-transform:uppercase;margin-bottom:7px;font-family:Georgia,serif}
+    .row{display:flex;justify-content:space-between;margin-bottom:4px}
+    .row span{font-size:10px;font-family:Georgia,serif}
+    .row .lbl{color:#888} .row .val{font-weight:600;color:#1E293B}
+    .usage-bar-bg{background:#F1F5F9;border-radius:4px;height:7px;margin:6px 0;overflow:hidden}
+    .usage-bar{height:100%;border-radius:4px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .tirage-row{display:flex;justify-content:space-between;align-items:center;padding:4px 8px;border-radius:5px;border:1px solid #E2E8F0;margin-bottom:3px;background:#F8FAFC}
+    .tirage-row.past{background:#F0FDF4}
+    .tirage-row .t-amount{font-size:10px;font-weight:700;color:#102A63;font-family:Georgia,serif}
+    .tirage-row .t-date{font-size:9px;color:#888;font-family:Georgia,serif}
+    .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:8px;font-weight:700;font-family:Georgia,serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .badge.alert-warn{background:#FEF3C7;color:#D97706} .badge.alert-urg{background:#FEE2E2;color:#DC2626}
+    .badge.renouv{background:#ECFDF5;color:#065F46;border:1px solid #6EE7B7}
+    .notes-block{padding:8px 16px;background:#F8FAFC;border-top:1px solid #F1F5F9;font-size:10px;color:#555;font-style:italic;font-family:Georgia,serif}
+    .pj-section{padding:8px 16px;border-top:1px solid #F1F5F9}
+    .pj-title{font-size:8px;font-weight:700;color:#102A63;letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px;font-family:Georgia,serif}
+    .pj-item{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #F1F5F9;font-size:9px;font-family:Georgia,serif;color:#334155}
+    .pj-item:last-child{border-bottom:none}
+    .pj-img{width:100%;max-height:180px;object-fit:contain;margin:6px 0;border-radius:4px;border:1px solid #E2E8F0;display:block}
+    .pj-pdf-preview{width:100%;height:220px;border:1px solid #E2E8F0;border-radius:4px;display:block;margin:6px 0}
+    .footer{padding:10px 32px;display:flex;justify-content:space-between;font-size:8px;color:#94A3B8;font-family:Georgia,serif;border-top:1px solid #E2E8F0;margin-top:16px}
+    @media print{@page{margin:8mm;size:A4 portrait}.no-print{display:none}}
+  `;
+}
+
+function _rcfCardHTML(l, now, opts) {
+  opts = opts || {};
+  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
+  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
+  var fmtD = function(s) { return s?s.split("-").reverse().join("/"):"—"; };
+  var today = new Date(now);
+  var alertColor = function(dateStr, urgent) {
+    if (!dateStr) return null;
+    var d = new Date(dateStr);
+    var diff = Math.round((d - today) / 86400000);
+    if (diff < 0) return { cls:"badge alert-urg", txt:"Échu" };
+    if (diff <= 30) return { cls:"badge alert-urg", txt:"< 30j (J-"+diff+")" };
+    if (diff <= 60) return { cls:"badge alert-warn", txt:"< 60j (J-"+diff+")" };
+    return null;
+  };
+  var autoriseN = parseMoney(l.montantAutorise);
+  var tireN = parseMoney(l.montantTire);
+  var dispo = Math.max(0, autoriseN - tireN);
+  var pct = autoriseN > 0 ? Math.min(100, Math.round(tireN / autoriseN * 100)) : 0;
+  var barColor = pct > 90 ? "#DC2626" : pct > 70 ? "#EA580C" : "#0E7490";
+  var alerteC = alertColor(l.dateFinContrat);
+
+  var tiragesHTML = "";
+  var tirages = (l.tirages || []).sort(function(a,b){ return (a.dateEcheance||"") > (b.dateEcheance||"") ? 1 : -1; });
+  if (tirages.length === 0) {
+    tiragesHTML = '<div style="font-size:10px;color:#CCC;font-family:Georgia,serif">Aucun tirage</div>';
+  } else {
+    tirages.forEach(function(t) {
+      var isPast = t.dateEcheance && t.dateEcheance < now;
+      var aT = alertColor(t.dateEcheance);
+      tiragesHTML += '<div class="tirage-row'+(isPast?" past":"")+'">'
+        + '<div><div class="t-amount">'+fmtE(t.montant)+'</div>'
+        + '<div class="t-date">Éch. '+fmtD(t.dateEcheance)+(t.note?" · "+t.note:"")+'</div></div>'
+        + (t.renouvAuto && !isPast ? '<span class="badge renouv">↺ Auto</span>' : "")
+        + (aT ? '<span class="'+aT.cls+'">'+aT.txt+'</span>' : "")
+        + (isPast ? '<span class="badge" style="background:#D1FAE5;color:#065F46">Remboursé</span>' : "")
+        + '</div>';
+    });
+  }
+
+  var notesHTML = l.notes ? '<div class="notes-block">📝 '+String(l.notes).replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()+'</div>' : "";
+
+  var pjHTML = "";
+  var atts = (l.attachments || []).filter(function(a){ return a.dataUrl; });
+  if (atts.length > 0) {
+    var pjItems = atts.map(function(a) {
+      var preview = "";
+      if (a.type && a.type.startsWith("image/")) {
+        preview = '<img src="'+a.dataUrl+'" class="pj-img" alt="'+a.name+'" />';
+      } else if (a.type === "application/pdf") {
+        preview = '<object data="'+a.dataUrl+'#view=FitH" type="application/pdf" class="pj-pdf-preview"><p style="font-size:9px;color:#888">'+a.name+'</p></object>';
+      }
+      var kb = a.size ? (a.size < 1048576 ? Math.round(a.size/1024)+" Ko" : (a.size/1048576).toFixed(1)+" Mo") : "";
+      return '<div class="pj-item">📎 <b>'+a.name+'</b> <span style="color:#AAA">'+kb+'</span></div>'+preview;
+    }).join("");
+    pjHTML = '<div class="pj-section"><div class="pj-title">Pièces jointes ('+atts.length+')</div>'+pjItems+'</div>';
+  }
+
+  return '<div class="card">'
+    + '<div class="card-header">'
+    +   '<div><div class="title">'+(l.intitule||"Sans titre")+'</div>'
+    +   '<div class="sub">'+(l.banque||"")+(l.reference?" · "+l.reference:"")+'</div></div>'
+    +   '<div style="text-align:right">'
+    +     '<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end">'
+    +       (alerteC ? '<span class="'+alerteC.cls+'" style="-webkit-print-color-adjust:exact;print-color-adjust:exact">'+alerteC.txt+'</span>' : "")
+    +       '<span class="montant">'+fmtE(autoriseN)+'</span>'
+    +     '</div>'
+    +     '<div class="autorise">autorisé</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="card-body">'
+    +   '<div class="card-col"><div class="col-title">Contrat</div>'
+    +     '<div class="row"><span class="lbl">Date début</span><span class="val">'+fmtD(l.dateDebutContrat)+'</span></div>'
+    +     '<div class="row"><span class="lbl">Échéance</span><span class="val">'+fmtD(l.dateFinContrat)+'</span></div>'
+    +     '<div class="row"><span class="lbl">Taux</span><span class="val">'+(l.taux?l.taux+" %":"—")+'</span></div>'
+    +     '<div class="row"><span class="lbl">Conditions</span><span class="val">'+(l.conditions||"—")+'</span></div>'
+    +   '</div>'
+    +   '<div class="card-col"><div class="col-title">Utilisation</div>'
+    +     '<div class="row"><span class="lbl">Tiré</span><span class="val teal">'+fmtE(tireN)+'</span></div>'
+    +     '<div class="row"><span class="lbl">Disponible</span><span class="val green">'+fmtE(dispo)+'</span></div>'
+    +     '<div class="usage-bar-bg"><div class="usage-bar" style="width:'+pct+'%;background:'+barColor+'"></div></div>'
+    +     '<div style="font-size:9px;color:#888;text-align:right;font-family:Georgia,serif">'+pct+'% utilisé</div>'
+    +   '</div>'
+    +   '<div class="card-col"><div class="col-title">Tirages en cours ('+tirages.filter(function(t){return t.dateEcheance>=now;}).length+')</div>'
+    +   tiragesHTML
+    +   '</div>'
+    + '</div>'
+    + notesHTML
+    + pjHTML
+    + '</div>';
+}
+
+/* Exporte tous les RCF (ou ceux de selectedIds si non vide) */
+function exportRCFPDF(lignes, selectedIds, now) {
+  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
+  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
+
+  var subset = (selectedIds && selectedIds.length > 0)
+    ? lignes.filter(function(l){ return selectedIds.includes(l.id); })
+    : lignes;
+
+  var totalAutorise = subset.reduce(function(a,l){ return a+parseMoney(l.montantAutorise); }, 0);
+  var totalTire     = subset.reduce(function(a,l){ return a+parseMoney(l.montantTire); }, 0);
+  var totalDispo    = totalAutorise - totalTire;
+  var pctGlobal     = totalAutorise > 0 ? Math.round(totalTire/totalAutorise*100) : 0;
+  var barColorG     = pctGlobal > 90 ? "#DC2626" : pctGlobal > 70 ? "#EA580C" : "#0E7490";
+
+  var synthRows = subset.map(function(l) {
+    var auto = parseMoney(l.montantAutorise);
+    var tire = parseMoney(l.montantTire);
+    var pct = auto > 0 ? Math.min(100, Math.round(tire/auto*100)) : 0;
+    var today = new Date(now);
+    var alertTxt = "";
+    if (l.dateFinContrat) {
+      var diff = Math.round((new Date(l.dateFinContrat)-today)/86400000);
+      if (diff < 0) alertTxt = '<span style="background:#FEE2E2;color:#DC2626;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">Échu</span>';
+      else if (diff <= 30) alertTxt = '<span style="background:#FEE2E2;color:#DC2626;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">J-'+diff+'</span>';
+      else if (diff <= 60) alertTxt = '<span style="background:#FEF3C7;color:#D97706;border-radius:3px;padding:1px 5px;font-size:8px;font-weight:700;-webkit-print-color-adjust:exact;print-color-adjust:exact">J-'+diff+'</span>';
+    }
+    var fmtD = function(s){ return s?s.split("-").reverse().join("/"):"—"; };
+    return '<tr><td style="text-align:left;font-weight:600">'+( l.intitule||"—")+'</td>'
+      +'<td style="text-align:left;color:#888">'+( l.banque||"—")+'</td>'
+      +'<td>'+fmtE(auto)+'</td>'
+      +'<td style="color:#0E7490;font-weight:700">'+fmtE(tire)+'</td>'
+      +'<td style="color:#065F46">'+fmtE(Math.max(0,auto-tire))+'</td>'
+      +'<td>'+pct+'%</td>'
+      +'<td>'+fmtD(l.dateDebutContrat)+'</td>'
+      +'<td>'+fmtD(l.dateFinContrat)+' '+alertTxt+'</td>'
+      +'<td>'+(l.taux?l.taux+' %':"—")+'</td>'
+      +'</tr>';
+  }).join("");
+
+  var cardsHTML = subset.map(function(l){ return _rcfCardHTML(l, now); }).join("");
+
+  var htm = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>RCF — Synthèse</title><style>'
+    + _rcfStyles()
+    + `table{width:100%;border-collapse:collapse;font-size:9px;font-family:Georgia,serif}
+       thead tr{background:#102A63;color:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+       thead th{padding:6px 8px;font-weight:400;text-align:right;white-space:nowrap}
+       thead th:nth-child(1),thead th:nth-child(2){text-align:left}
+       tbody tr td{padding:4px 8px;text-align:right;border-bottom:1px solid #F1F5F9;color:#334155}
+       tbody tr td:nth-child(1),tbody tr td:nth-child(2){text-align:left}
+       tbody tr:nth-child(even){background:#FAFAFA}
+       tfoot tr{background:#F0F5FF;border-top:2px solid #BFDBFE}
+       tfoot td{padding:5px 8px;text-align:right;font-weight:700;color:#102A63}
+       tfoot td:nth-child(1){text-align:left}
+    `
+    + '</style></head><body>'
+    + '<div class="page-header">'
+    +   '<div><div class="surtitle">Revolving Credit Facilities</div><h1>Synthèse RCF</h1>'
+    +   '<div class="sub">'+(subset.length)+' facilité'+(subset.length>1?"s":"")+(selectedIds&&selectedIds.length>0?" (sélection)":"")+' · Généré le '+new Date().toLocaleDateString("fr-FR")+'</div></div>'
+    +   '<div style="text-align:right">'
+    +     '<div style="font-size:12px;font-weight:700;color:white;font-family:Georgia,serif">'+fmtE(totalAutorise)+'</div>'
+    +     '<div style="font-size:9px;color:rgba(255,255,255,0.55);font-family:Georgia,serif">total autorisé</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="kpis">'
+    +   '<div class="kpi"><label>Total autorisé</label><div class="val">'+fmtE(totalAutorise)+'</div></div>'
+    +   '<div class="kpi"><label>Total tiré</label><div class="val teal">'+fmtE(totalTire)+'</div></div>'
+    +   '<div class="kpi"><label>Total disponible</label><div class="val green">'+fmtE(totalDispo)+'</div></div>'
+    +   '<div class="kpi"><label>Utilisation globale</label><div class="val" style="color:'+barColorG+'">'+pctGlobal+'%</div></div>'
+    + '</div>'
+    + '<div class="section-title">Tableau de synthèse</div>'
+    + '<div style="padding:0 16px 8px">'
+    + '<table><thead><tr>'
+    +   '<th style="text-align:left">Intitulé</th><th style="text-align:left">Banque</th>'
+    +   '<th>Autorisé</th><th>Tiré</th><th>Disponible</th><th>Util.</th>'
+    +   '<th>Début</th><th>Échéance</th><th>Taux</th>'
+    + '</tr></thead><tbody>'+synthRows+'</tbody>'
+    + '<tfoot><tr><td colspan="2">TOTAL</td><td>'+fmtE(totalAutorise)+'</td><td>'+fmtE(totalTire)+'</td><td>'+fmtE(totalDispo)+'</td><td colspan="4">'+pctGlobal+'% utilisé</td></tr></tfoot>'
+    + '</table></div>'
+    + '<div class="section-title">Détail des facilités</div>'
+    + cardsHTML
+    + '<div class="footer"><span>Synthèse RCF · '+subset.length+' facilité'+(subset.length>1?"s":"")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
+    + '</body></html>';
+
+  _rcfPrintIframe(htm);
+}
+
+/* Exporte un seul RCF avec ses PJ */
+function exportSingleRCFPDF(ligne, now) {
+  var parseMoney = function(v) { var n=Number(String(v||"").replace(/\s/g,"").replace(/,/g,".")); return isNaN(n)?0:n; };
+  var fmtE = function(v) { var n=parseMoney(v); return n.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €"; };
+
+  var auto = parseMoney(ligne.montantAutorise);
+  var tire = parseMoney(ligne.montantTire);
+  var dispo = Math.max(0, auto - tire);
+  var pct = auto > 0 ? Math.round(tire/auto*100) : 0;
+  var barColor = pct > 90 ? "#DC2626" : pct > 70 ? "#EA580C" : "#0E7490";
+
+  var cardHTML = _rcfCardHTML(ligne, now);
+
+  var htm = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>RCF — '+(ligne.intitule||"Fiche")+'</title><style>'
+    + _rcfStyles()
+    + '</style></head><body>'
+    + '<div class="page-header">'
+    +   '<div><div class="surtitle">Revolving Credit Facility</div>'
+    +   '<h1>'+(ligne.intitule||"Sans titre")+'</h1>'
+    +   '<div class="sub">'+(ligne.banque||"")+(ligne.reference?" · "+ligne.reference:"")+'</div></div>'
+    +   '<div style="text-align:right">'
+    +     '<div style="font-size:14px;font-weight:700;color:white;font-family:Georgia,serif">'+fmtE(auto)+'</div>'
+    +     '<div style="font-size:9px;color:rgba(255,255,255,0.55);font-family:Georgia,serif">autorisé · Tiré : '+fmtE(tire)+' · Dispo : '+fmtE(dispo)+'</div>'
+    +     '<div class="date">Généré le '+new Date().toLocaleDateString("fr-FR")+'</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="kpis">'
+    +   '<div class="kpi"><label>Autorisé</label><div class="val">'+fmtE(auto)+'</div></div>'
+    +   '<div class="kpi"><label>Tiré</label><div class="val teal">'+fmtE(tire)+'</div></div>'
+    +   '<div class="kpi"><label>Disponible</label><div class="val green">'+fmtE(dispo)+'</div></div>'
+    +   '<div class="kpi"><label>Utilisation</label><div class="val" style="color:'+barColor+'">'+pct+'%</div></div>'
+    + '</div>'
+    + '<div class="section-title">Détail de la facilité</div>'
+    + cardHTML
+    + '<div class="footer"><span>'+(ligne.reference||ligne.intitule||"RCF")+'</span><span>'+new Date().toLocaleDateString("fr-FR")+'</span></div>'
+    + '</body></html>';
+
+  _rcfPrintIframe(htm);
+}
+
 function RCFView({ settings }) {
   const [lignes, setLignes] = React.useState([]);
   const [modal, setModal] = React.useState(null); // null | "new" | ligne
@@ -14857,7 +14857,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.537<br />16/05/26 à 10:00
+          v.0.538<br />16/05/26 à 10:00
         </div>
       </div>
 
