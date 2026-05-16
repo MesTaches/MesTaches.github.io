@@ -10960,51 +10960,10 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
               </div>
               <div>{lbl("N° de contrat")}<input value={d.numContrat||""} onChange={e=>set("numContrat",e.target.value)} placeholder="CB-2024-001" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-              <div>{lbl("MONTANT")} <div style={{position:"relative"}}><input type="text" inputMode="decimal" value={d.montant||""} onChange={e=>set("montant",e.target.value)} onBlur={e=>{const n=parseNum(e.target.value);if(!isNaN(n))set("montant",n.toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2}));}} placeholder="15 000 000,00" style={{...inp,paddingRight:24}}/><span style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",fontSize:11,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
-              <div>{lbl("Durée totale (mois)")}<input type="text" inputMode="numeric" value={d.duree||""} onChange={e=>set("duree",e.target.value)} placeholder="120" style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
               <div>{lbl("Périodicité")}<select value={d.periodicite||"Mensuelle"} onChange={e=>set("periodicite",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }}><option>Mensuelle</option><option>Trimestrielle</option><option>Semestrielle</option><option>Annuelle</option></select></div>
-              <div>{lbl("Fréquence flux", "Tous les combien de mois un paiement est effectué. Ex: 3 = mensuel avec flux trimestriels (0€ les mois sans flux, comme PGE SG).")}<select value={d.fluxPeriode||"1"} onChange={e=>set("fluxPeriode",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"4px 10px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }}>
-                <option value="1">1 — Mensuel (flux chaque mois)</option>
-                <option value="3">3 — Trimestriel (flux tous les 3 mois)</option>
-                <option value="6">6 — Semestriel (flux tous les 6 mois)</option>
-                <option value="12">12 — Annuel (flux chaque année)</option>
-              </select></div>
               <div>{lbl("Date du contrat")}<input type="date" value={d.dateContrat||""} onChange={e=>set("dateContrat",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
     outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-              <div>{lbl("Date début échéancier")}<input type="date" value={d.dateDebut||""} onChange={e=>set("dateDebut",e.target.value)} style={{ border:"1px solid #E8E8E8",borderRadius:8,padding:"6px 10px",fontSize:11,
-    outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white", padding:"4px 10px", minHeight:30, lineHeight:1.2 }} /></div>
-              
-              <div style={{ gridColumn:"1/-1",background:"#F0F5FF",borderRadius:8,padding:"10px 12px",border:"1px solid #BFDBFE" }}>
-                <div style={{ fontSize:9,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>TAUX</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
-                  <div>{lbl("Taux Prêt (%/an)", "Taux d'intérêt annuel du statut Prêt (ex: 2,76)")}<input type="text" inputMode="decimal" value={d.tauxAnnuel||""} onChange={e=>set("tauxAnnuel",e.target.value)} placeholder="Ex: 2,76" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Taux Amort. (%/an)", "Taux du statut Option Amort. — phase Amortissement")}<input type="text" inputMode="decimal" value={d.tauxAmort||""} onChange={e=>set("tauxAmort",e.target.value)} placeholder="Ex: 2,70" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Taux Différé (%/an)", "Taux du statut Option Amort. — phase Différé (si différent du taux Amort.)")}<input type="text" inputMode="decimal" value={d.tauxDiffere||""} onChange={e=>set("tauxDiffere",e.target.value)} placeholder="Si différent" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                  <div>{lbl("Commission garantie (%/an)", "Prélevée sur le capital restant dû en plus des intérêts (ex: 1,39 pour PGE).")}<input type="text" inputMode="decimal" value={d.tauxGarantie||""} onChange={e=>set("tauxGarantie",e.target.value)} placeholder="Ex: 1,00" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:"white",minHeight:28 }} /></div>
-                </div>
-              </div>
-              <div style={{ gridColumn:"1/-1",background:"#FFFBEB",borderRadius:8,padding:"10px 12px",border:"1px solid #FDE68A" }}>
-                <div style={{ fontSize:9,fontWeight:700,color:"#92400E",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:8 }}>PÉRIODES</div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,alignItems:"start" }}>
-                  <div>
-                    {lbl("Différé in fine (mois)", "Mois où les intérêts s'accumulent et sont payés en 1 seule échéance.")}
-                    <input type="text" inputMode="numeric" value={d.differFin||""} onChange={e=>set("differFin",e.target.value)} placeholder="Ex: 12" style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#C2410C",background:"#FFF7ED",minHeight:28 }} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>1 seule échéance groupée</div>
-                  </div>
-                  <div>
-                    {lbl("Différé (mois)", "Calculé automatiquement depuis les lignes importées.")}
-                    <input type="text" inputMode="numeric"
-                      value={d.lignes&&d.lignes.length>0 ? (d.lignes.filter(r=>r.estDiffere).length||d.differe||"") : (d.differe||"")}
-                      onChange={e=>set("differe",e.target.value)}
-                      readOnly={!!(d.lignes&&d.lignes.length>0)}
-                      placeholder="Ex: 12"
-                      style={{ border:"1px solid #E8E8E8",borderRadius:6,padding:"4px 8px",fontSize:11,outline:"none",width:"100%",boxSizing:"border-box",fontFamily:"'Lora',serif",color:"#2C3E50",background:d.lignes&&d.lignes.length>0?"#F9FAFB":"white",minHeight:28 }} />
-                    <div style={{ fontSize:9,color:"#AAA",fontFamily:"'Lora',serif",marginTop:2 }}>Intérêts seulement, pas de capital</div>
-                  </div>
-                </div>
-              </div>
             </div>
 
 
@@ -11040,33 +10999,41 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
             })()}
 
             <div style={{ borderTop:"1px solid #F0F0F0",paddingTop:12 }}>
-              {/* Import CSV/Excel avec drag & drop */}
-              <div style={{ marginBottom:10 }}>
-                <div style={{ fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:6,letterSpacing:"0.06em",fontWeight:700 }}>IMPORTER UN ÉCHÉANCIER</div>
-                <div
-                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={e => { setDragOver(false); }}
-                  onDrop={e => {
-                    e.preventDefault(); setDragOver(false);
-                    handleImportEch(e.dataTransfer.files[0]);
-                  }}
-                  style={{ padding:"12px 8px", background: dragOver?"#DBEAFE":"#F0FDF4",
-                    border:"2px dashed "+(dragOver?"#3B82F6":"#BBF7D0"),
-                    borderRadius:8, transition:"all 0.15s" }}>
-                  <div style={{ textAlign:"center",fontSize:10,color:"#065F46",fontFamily:"'Lora',serif",fontWeight:700,marginBottom:6 }}>
-                    {dragOver ? "📥 Déposer ici" : "📥 Glisser un fichier ici"}
-                  </div>
-                  <input type="file" accept=".csv,.xlsx,.xls"
-                    style={{ display:"block",width:"100%",fontSize:10,fontFamily:"'Lora',serif",cursor:"pointer",
-                      border:"1px solid #BBF7D0",borderRadius:6,padding:"4px",background:"white",color:"#065F46" }}
-                    onChange={e => { handleImportEch(e.target.files[0]); e.target.value=""; }} />
-                  <div style={{ textAlign:"center",fontSize:9,color:"#AAA",fontFamily:"'DM Mono',monospace",marginTop:4 }}>.xlsx · .xls · .csv</div>
+              <div style={{ fontSize:9,color:"#888",fontFamily:"'Lora',serif",marginBottom:8,letterSpacing:"0.06em",fontWeight:700 }}>IMPORTER UN ÉCHÉANCIER</div>
+              <div
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); handleImportEch(e.dataTransfer.files[0]); }}
+                onClick={() => { const i=document.createElement('input'); i.type='file'; i.accept='.csv,.xlsx,.xls'; i.onchange=e=>handleImportEch(e.target.files[0]); i.click(); }}
+                style={{
+                  cursor:"pointer", border:"2px dashed "+(dragOver?"#3B82F6":"#CBD5E1"),
+                  borderRadius:12, padding:"28px 16px",
+                  background:dragOver?"#EFF6FF":"#F8FAFC",
+                  transition:"all 0.18s ease", textAlign:"center", userSelect:"none"
+                }}>
+                <div style={{ fontSize:30, marginBottom:8, lineHeight:1 }}>{dragOver?"📥":"📂"}</div>
+                <div style={{ fontSize:12, fontWeight:700, color:dragOver?"#1D4ED8":"#334155", fontFamily:"'Lora',serif", marginBottom:4 }}>
+                  {dragOver ? "Déposez ici" : "Glissez votre fichier"}
                 </div>
+                <div style={{ fontSize:10, color:"#94A3B8", fontFamily:"'Lora',serif", marginBottom:14 }}>ou cliquez pour parcourir</div>
+                <div style={{ display:"flex", justifyContent:"center", gap:6 }}>
+                  {[".xlsx",".xls",".csv"].map(ext=>(
+                    <span key={ext} style={{ fontSize:9, fontWeight:700,
+                      color:dragOver?"#1D4ED8":"#64748B",
+                      background:dragOver?"#DBEAFE":"#E2E8F0",
+                      borderRadius:4, padding:"2px 8px", fontFamily:"'Lora',serif" }}>{ext}</span>
+                  ))}
+                </div>
+                {d.lignes&&d.lignes.length>0 && (
+                  <div style={{ marginTop:12, display:"inline-flex", alignItems:"center", gap:6,
+                    background:"#F0FDF4", border:"1px solid #86EFAC", borderRadius:8, padding:"5px 12px" }}>
+                    <span>✅</span>
+                    <span style={{ fontSize:10, fontWeight:700, color:"#15803D", fontFamily:"'Lora',serif" }}>
+                      {d.lignes.length} lignes importées
+                    </span>
+                  </div>
+                )}
               </div>
-              <button onClick={regenerer}
-                style={{ width:"100%",background:"#102A63",color:"white",border:"none",borderRadius:8,padding:"8px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700 }}>
-                🔄 Générer / Recalculer l'échéancier
-              </button>
             </div>
 
             {/* Notes */}
@@ -11657,7 +11624,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               const StatLine = ({label, val}) => (
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #FDE68A"}}>
                   <span style={{fontSize:10,color:"#92400E",fontFamily:"'Lora',serif"}}>{label}</span>
-                  <span style={{fontSize:11,fontWeight:700,color:val>0?"#78350F":"#CCC",fontFamily:"'DM Mono',monospace"}}>{val>0 ? val+" mois" : "—"}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:val>0?"#78350F":"#CCC",fontFamily:"'Lora',serif"}}>{val>0 ? val+" mois" : "—"}</span>
                 </div>
               );
               return lgAll2.length>0 ? (
@@ -14863,7 +14830,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.532<br />16/05/26 à 10:00
+          v.0.534<br />16/05/26 à 10:00
         </div>
       </div>
 
