@@ -471,169 +471,7 @@ window.parseCSVEcheancier  = parseCSVEcheancier;
   return rows;
 }
 
-/* ── Export PDF Échéancier ── */
-window.exportEchPDF = function exportEchPDF(dos) {
-  const parseNumLocal = (v) => { if(!v&&v!==0) return NaN; return parseFloat(String(v).replace(/\s/g,"").replace(/'/g,"").replace(/,/g,".")); };
-  const fmtE = (v,dec=2) => {
-    if (v===null||v===undefined||isNaN(Number(v))) return "—";
-    return Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
-  };
-  const fmtD = (s) => s ? s.split("-").reverse().join("/") : "—";
-  const lignes = dos.lignes||[];
-
-  const typeLabel = (row) => {
-    if (row.estCapita)  return '<span class="badge cap">Intérêts capit.</span>';
-    if (row.estCarence) return '<span class="badge car">Carence</span>';
-    if (row.estDiffere) return '<span class="badge dif">Différé</span>';
-    return '<span class="badge amo">Amortissement</span>';
-  };
-
-  const rows = lignes.map((row,i) => `
-    <tr class="${row.date<=new Date().toISOString().split("T")[0]?"past":i%2===0?"":"alt"}">
-      <td class="c">${row.n}</td>
-      <td class="c">${fmtD(row.date)}</td>
-      <td class="c">${typeLabel(row)}</td>
-      <td>${fmtE(row.capital)}</td>
-      <td>${fmtE(row.interets)}</td>
-      <td>${fmtE(row.cumulInterets)}</td>
-      <td>${fmtE(row.commGarantie)}</td>
-      <td>${fmtE(row.assurance)}</td>
-      <td><b>${fmtE(row.echeanceGlobale)}</b></td>
-      <td><b>${fmtE(row.capitalRestant,0)}</b></td>
-    </tr>`).join("");
-
-  const totalEch  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
-  const totalInt  = lignes.reduce((a,r)=>a+(r.interets||0),0);
-  const totalGar  = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
-  const totalCout = totalInt + totalGar + lignes.reduce((a,r)=>a+(r.assurance||0),0);
-
-  const htm = `<!DOCTYPE html><html><head><meta charset="utf-8">
-  <title>Échéancier — ${dos.intitule||dos.reference}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:Georgia,serif;color:#1E293B;background:white;font-size:10px}
-
-    /* Header — styles inline pour compatibilité file:// */
-    .header{background-color:#102A63 !important;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22}
-    .header-left .surtitle{font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-    .header-left h1{font-size:20px;font-weight:700;color:white !important}
-    .header-left .sub{font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px}
-    .header-right{text-align:right}
-    .header-right .ref{font-size:10px;color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.15);border-radius:4px;padding:2px 10px;display:inline-block;margin-bottom:4px}
-    .header-right .date{font-size:10px;color:rgba(255,255,255,0.5)}
-
-    /* KPIs */
-    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:2px solid #102A63}
-    .kpi{padding:14px 20px;border-right:1px solid #E2E8F0}
-    .kpi:last-child{border-right:none}
-    .kpi label{display:block;font-size:8px;font-family:'DM Mono',monospace;color:#94A3B8;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
-    .kpi .val{font-size:15px;font-weight:700;color:#102A63}
-    .kpi .val.red{color:#DC2626}
-    .kpi .val.green{color:#059669}
-
-    /* Infos */
-    .infos{padding:16px 32px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;border-bottom:1px solid #E2E8F0;background:#F8FAFC}
-    .info-item label{font-size:8px;font-family:'DM Mono',monospace;color:#94A3B8;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:2px}
-    .info-item .v{font-size:11px;color:#1E293B;font-weight:600}
-
-    /* Table */
-    .wrap{padding:0 0 20px}
-    table{width:100%;border-collapse:collapse;font-size:9px}
-    thead tr{background:#102A63;color:white}
-    thead th{padding:6px 6px;font-weight:400;text-align:right;white-space:nowrap;font-family:'DM Mono',monospace;font-size:8px}
-    thead th.c{text-align:center}
-    tbody tr td{padding:4px 6px;text-align:right;border-bottom:1px solid #F1F5F9;font-family:'DM Mono',monospace;color:#334155}
-    tbody tr td.c{text-align:center}
-    tbody tr.past{background:#F0FDF4}
-    tbody tr.alt{background:#FAFAFA}
-    tfoot tr{background:#F1F5F9;border-top:2px solid #CBD5E1}
-    tfoot td{padding:6px 6px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;font-size:9px;color:#102A63}
-
-    /* Badges */
-    .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:7.5px;font-weight:700;font-family:'Lora',serif;white-space:nowrap}
-    .badge.cap{background:#EDE9FE;color:#6D28D9}
-    .badge.car{background:#FEE2E2;color:#B91C1C}
-    .badge.dif{background:#FEF9C3;color:#A16207}
-    .badge.amo{background:#D1FAE5;color:#065F46}
-
-    /* Footer */
-    .footer{padding:12px 32px;display:flex;justify-content:space-between;font-size:9px;color:#94A3B8;font-family:'DM Mono',monospace;border-top:1px solid #E2E8F0;margin-top:auto}
-    @media print{@page{margin:10mm;size:A4 landscape}.no-print{display:none}}
-  </style></head><body>
-
-  <div style="background:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22;-webkit-print-color-adjust:exact;print-color-adjust:exact">
-    <div>
-      <div style="font-size:10px;color:rgba(255,255,255,0.65);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;font-family:Georgia,serif">ÉCHÉANCIER DE PRÊT</div>
-      <div style="font-size:22px;font-weight:700;color:white;font-family:Georgia,serif;margin-bottom:4px">${dos.intitule||"Sans titre"}</div>
-      <div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:Georgia,serif">${dos.banque||""}${dos.objet?" · "+dos.objet:""}</div>
-    </div>
-    <div style="text-align:right">
-      <div style="font-size:10px;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.12);border-radius:4px;padding:3px 12px;display:inline-block;margin-bottom:6px;font-family:Georgia,serif">${dos.reference||""}</div>
-      <div style="font-size:10px;color:rgba(255,255,255,0.45);font-family:Georgia,serif">Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
-    </div>
-  </div>
-
-  <div class="kpis">
-    <div class="kpi"><label>Montant initial</label><div class="val">${fmtE(parseNumLocal(dos.montant),0)}</div></div>
-    <div class="kpi"><label>Total intérêts</label><div class="val red">${fmtE(totalInt)}</div></div>
-    <div class="kpi"><label>Total commission garantie</label><div class="val">${fmtE(totalGar)}</div></div>
-    <div class="kpi"><label>Coût total du crédit</label><div class="val red">${fmtE(totalCout)}</div></div>
-  </div>
-
-  <div class="infos">
-    <div class="info-item"><label>Taux intérêts</label><div class="v">${dos.tauxAnnuel||"—"} %</div></div>
-    <div class="info-item"><label>Durée totale</label><div class="v">${dos.duree||"—"} mois</div></div>
-    <div class="info-item"><label>Carence</label><div class="v">${dos.carence||"0"} mois</div></div>
-    <div class="info-item"><label>Différé</label><div class="v">${dos.differe||"0"} mois</div></div>
-    <div class="info-item"><label>Date début</label><div class="v">${fmtD(dos.dateDebut)}</div></div>
-    <div class="info-item"><label>Com. garantie</label><div class="v">${dos.tauxGarantie||"—"} %/an</div></div>
-    <div class="info-item"><label>Assurance</label><div class="v">${dos.assuranceMensuelle||"0"} €/mois</div></div>
-    <div class="info-item"><label>Garantie</label><div class="v">${dos.garantie||"—"}</div></div>
-  </div>
-
-  <div class="wrap">
-    <table>
-      <thead>
-        <tr>
-          <th class="c">N°</th><th class="c">Date</th><th class="c">Type</th>
-          <th>Échéance</th><th>Capital</th><th>Intérêts</th><th>Cumul int.</th>
-          <th>Com. gar.</th><th>Assurance</th><th>Éch. globale</th><th>Cap. restant</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr>
-          <td colspan="3">TOTAL</td>
-          <td>${fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
-          <td>${fmtE(lignes.reduce((a,r)=>a+(r.capital||0),0))}</td>
-          <td>${fmtE(totalInt)}</td>
-          <td></td>
-          <td>${fmtE(totalGar)}</td>
-          <td>${fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
-          <td>${fmtE(totalEch)}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>
-  </div>
-
-  <div class="footer">
-    <span>${dos.reference||""} · ${dos.intitule||""}</span>
-    <span>${new Date().toLocaleDateString("fr-FR")} · ${lignes.length} échéances</span>
-  </div>
-
-  <button onclick="window.print()" style="position:fixed;bottom:30px;right:30px;background:#102A63;color:white;border:none;border-radius:28px;padding:14px 32px;font-size:15px;font-family:Georgia,serif;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,0.25);z-index:999">\u{1F5A8} Imprimer / PDF</button>
-  <button onclick="window.close()" style="position:fixed;bottom:30px;right:260px;background:#F0F0F0;color:#555;border:none;border-radius:28px;padding:14px 20px;font-size:15px;cursor:pointer;z-index:999">\u2715 Fermer</button>
-  </body></html>`;
-
-  // window.open + document.write : méthode universelle
-  var w = window.open('', '_blank', 'width=1200,height=900');
-  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
-  w.document.open();
-  w.document.write(htm);
-  w.document.close();
-}
-
+/* exportEchPDF → déplacée dans jsx-source */
 /* ═══════════════════════════════════════════════════════════
    EXPORT PDF RCF — utilitaires partagés
 ═══════════════════════════════════════════════════════════ */
@@ -11429,11 +11267,175 @@ function EchAttachments({ attachments, onChange }) {
   );
 }
 
+/* ── Export PDF Échéancier ── */
+function exportEchPDF(dos) {
+  const parseNumLocal = (v) => { if(!v&&v!==0) return NaN; return parseFloat(String(v).replace(/\s/g,"").replace(/'/g,"").replace(/,/g,".")); };
+  const fmtE = (v,dec=2) => {
+    if (v===null||v===undefined||isNaN(Number(v))) return "—";
+    return Number(v).toLocaleString("fr-FR",{minimumFractionDigits:dec,maximumFractionDigits:dec})+" €";
+  };
+  const fmtD = (s) => s ? s.split("-").reverse().join("/") : "—";
+  const lignes = dos.lignes||[];
+
+  const typeLabel = (row) => {
+    if (row.estCapita)  return '<span class="badge cap">Intérêts capit.</span>';
+    if (row.estCarence) return '<span class="badge car">Carence</span>';
+    if (row.estDiffere) return '<span class="badge dif">Différé</span>';
+    return '<span class="badge amo">Amortissement</span>';
+  };
+
+  const rows = lignes.map((row,i) => `
+    <tr class="${row.date<=new Date().toISOString().split("T")[0]?"past":i%2===0?"":"alt"}">
+      <td class="c">${row.n}</td>
+      <td class="c">${fmtD(row.date)}</td>
+      <td class="c">${typeLabel(row)}</td>
+      <td>${fmtE(row.capital)}</td>
+      <td>${fmtE(row.interets)}</td>
+      <td>${fmtE(row.cumulInterets)}</td>
+      <td>${fmtE(row.commGarantie)}</td>
+      <td>${fmtE(row.assurance)}</td>
+      <td><b>${fmtE(row.echeanceGlobale)}</b></td>
+      <td><b>${fmtE(row.capitalRestant,0)}</b></td>
+    </tr>`).join("");
+
+  const totalEch  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
+  const totalInt  = lignes.reduce((a,r)=>a+(r.interets||0),0);
+  const totalGar  = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
+  const totalCout = totalInt + totalGar + lignes.reduce((a,r)=>a+(r.assurance||0),0);
+
+  const htm = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  <title>Échéancier — ${dos.intitule||dos.reference}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Georgia,serif;color:#1E293B;background:white;font-size:10px}
+
+    /* Header — styles inline pour compatibilité file:// */
+    .header{background-color:#102A63 !important;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22}
+    .header-left .surtitle{font-size:10px;color:rgba(255,255,255,0.7);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+    .header-left h1{font-size:20px;font-weight:700;color:white !important}
+    .header-left .sub{font-size:11px;color:rgba(255,255,255,0.75);margin-top:3px}
+    .header-right{text-align:right}
+    .header-right .ref{font-size:10px;color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.15);border-radius:4px;padding:2px 10px;display:inline-block;margin-bottom:4px}
+    .header-right .date{font-size:10px;color:rgba(255,255,255,0.5)}
+
+    /* KPIs */
+    .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:2px solid #102A63}
+    .kpi{padding:14px 20px;border-right:1px solid #E2E8F0}
+    .kpi:last-child{border-right:none}
+    .kpi label{display:block;font-size:8px;font-family:'DM Mono',monospace;color:#94A3B8;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px}
+    .kpi .val{font-size:15px;font-weight:700;color:#102A63}
+    .kpi .val.red{color:#DC2626}
+    .kpi .val.green{color:#059669}
+
+    /* Infos */
+    .infos{padding:16px 32px;display:grid;grid-template-columns:repeat(4,1fr);gap:12px;border-bottom:1px solid #E2E8F0;background:#F8FAFC}
+    .info-item label{font-size:8px;font-family:'DM Mono',monospace;color:#94A3B8;letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:2px}
+    .info-item .v{font-size:11px;color:#1E293B;font-weight:600}
+
+    /* Table */
+    .wrap{padding:0 0 20px}
+    table{width:100%;border-collapse:collapse;font-size:9px}
+    thead tr{background:#102A63;color:white}
+    thead th{padding:6px 6px;font-weight:400;text-align:right;white-space:nowrap;font-family:'DM Mono',monospace;font-size:8px}
+    thead th.c{text-align:center}
+    tbody tr td{padding:4px 6px;text-align:right;border-bottom:1px solid #F1F5F9;font-family:'DM Mono',monospace;color:#334155}
+    tbody tr td.c{text-align:center}
+    tbody tr.past{background:#F0FDF4}
+    tbody tr.alt{background:#FAFAFA}
+    tfoot tr{background:#F1F5F9;border-top:2px solid #CBD5E1}
+    tfoot td{padding:6px 6px;text-align:right;font-weight:700;font-family:'DM Mono',monospace;font-size:9px;color:#102A63}
+
+    /* Badges */
+    .badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:7.5px;font-weight:700;font-family:'Lora',serif;white-space:nowrap}
+    .badge.cap{background:#EDE9FE;color:#6D28D9}
+    .badge.car{background:#FEE2E2;color:#B91C1C}
+    .badge.dif{background:#FEF9C3;color:#A16207}
+    .badge.amo{background:#D1FAE5;color:#065F46}
+
+    /* Footer */
+    .footer{padding:12px 32px;display:flex;justify-content:space-between;font-size:9px;color:#94A3B8;font-family:'DM Mono',monospace;border-top:1px solid #E2E8F0;margin-top:auto}
+    @media print{@page{margin:10mm;size:A4 landscape}.no-print{display:none}}
+  </style></head><body>
+
+  <div style="background:#102A63;color:white;padding:28px 32px;display:flex;justify-content:space-between;align-items:flex-end;border-bottom:4px solid #E67E22;-webkit-print-color-adjust:exact;print-color-adjust:exact">
+    <div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.65);letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;font-family:Georgia,serif">ÉCHÉANCIER DE PRÊT</div>
+      <div style="font-size:22px;font-weight:700;color:white;font-family:Georgia,serif;margin-bottom:4px">${dos.intitule||"Sans titre"}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.7);font-family:Georgia,serif">${dos.banque||""}${dos.objet?" · "+dos.objet:""}</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:rgba(255,255,255,0.55);background:rgba(255,255,255,0.12);border-radius:4px;padding:3px 12px;display:inline-block;margin-bottom:6px;font-family:Georgia,serif">${dos.reference||""}</div>
+      <div style="font-size:10px;color:rgba(255,255,255,0.45);font-family:Georgia,serif">Généré le ${new Date().toLocaleDateString("fr-FR")}</div>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><label>Montant initial</label><div class="val">${fmtE(parseNumLocal(dos.montant),0)}</div></div>
+    <div class="kpi"><label>Total intérêts</label><div class="val red">${fmtE(totalInt)}</div></div>
+    <div class="kpi"><label>Total commission garantie</label><div class="val">${fmtE(totalGar)}</div></div>
+    <div class="kpi"><label>Coût total du crédit</label><div class="val red">${fmtE(totalCout)}</div></div>
+  </div>
+
+  <div class="infos">
+    <div class="info-item"><label>Taux intérêts</label><div class="v">${dos.tauxAnnuel||"—"} %</div></div>
+    <div class="info-item"><label>Durée totale</label><div class="v">${dos.duree||"—"} mois</div></div>
+    <div class="info-item"><label>Carence</label><div class="v">${dos.carence||"0"} mois</div></div>
+    <div class="info-item"><label>Différé</label><div class="v">${dos.differe||"0"} mois</div></div>
+    <div class="info-item"><label>Date début</label><div class="v">${fmtD(dos.dateDebut)}</div></div>
+    <div class="info-item"><label>Com. garantie</label><div class="v">${dos.tauxGarantie||"—"} %/an</div></div>
+    <div class="info-item"><label>Assurance</label><div class="v">${dos.assuranceMensuelle||"0"} €/mois</div></div>
+    <div class="info-item"><label>Garantie</label><div class="v">${dos.garantie||"—"}</div></div>
+  </div>
+
+  <div class="wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="c">N°</th><th class="c">Date</th><th class="c">Type</th>
+          <th>Échéance</th><th>Capital</th><th>Intérêts</th><th>Cumul int.</th>
+          <th>Com. gar.</th><th>Assurance</th><th>Éch. globale</th><th>Cap. restant</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">TOTAL</td>
+          <td>${fmtE(lignes.reduce((a,r)=>a+(r.echeance||0),0))}</td>
+          <td>${fmtE(lignes.reduce((a,r)=>a+(r.capital||0),0))}</td>
+          <td>${fmtE(totalInt)}</td>
+          <td></td>
+          <td>${fmtE(totalGar)}</td>
+          <td>${fmtE(lignes.reduce((a,r)=>a+(r.assurance||0),0))}</td>
+          <td>${fmtE(totalEch)}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span>${dos.reference||""} · ${dos.intitule||""}</span>
+    <span>${new Date().toLocaleDateString("fr-FR")} · ${lignes.length} échéances</span>
+  </div>
+
+  <button onclick="window.print()" style="position:fixed;bottom:30px;right:30px;background:#102A63;color:white;border:none;border-radius:28px;padding:14px 32px;font-size:15px;font-family:Georgia,serif;font-weight:700;cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,0.25);z-index:999">\u{1F5A8} Imprimer / PDF</button>
+  <button onclick="window.close()" style="position:fixed;bottom:30px;right:260px;background:#F0F0F0;color:#555;border:none;border-radius:28px;padding:14px 20px;font-size:15px;cursor:pointer;z-index:999">\u2715 Fermer</button>
+  </body></html>`;
+
+  // window.open + document.write : méthode universelle
+  var w = window.open('', '_blank', 'width=1200,height=900');
+  if (!w) { alert("Autorisez les popups pour exporter en PDF."); return; }
+  w.document.open();
+  w.document.write(htm);
+  w.document.close();
+}
+
 /* ── EchDossierTab ── */
 function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const now = new Date().toISOString().split("T")[0];
   const [localDos, setLocalDos] = React.useState(dos);
   const [editMode, setEditMode] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
   React.useEffect(()=>setLocalDos(dos),[dos.id]);
   const insertRow = (afterIdx) => {
     const newRow={n:0,date:"",echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:0,versement:0,estCarence:false,estCapita:false,estDiffere:false,paye:false,datePaiement:"",commentaire:""};
@@ -11706,7 +11708,17 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:"'Lora',serif",letterSpacing:"0.06em",marginBottom:6}}>PIÈCES JOINTES</div>
             <EchAttachments attachments={localDos.attachments||[]} onChange={v=>{const u={...localDos,attachments:v};setLocalDos(u);saveDossier(u);}}/>
           </div>
-          <button onClick={()=>deleteDossier(dos.id)} style={{border:"1px solid #ECEAE5",background:"white",color:"#AAA",borderRadius:8,padding:"6px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",marginTop:4}}>🗑 Supprimer</button>
+          {!confirmDel
+            ? <button onClick={()=>setConfirmDel(true)} style={{border:"1px solid #ECEAE5",background:"white",color:"#AAA",borderRadius:8,padding:"6px 10px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",marginTop:4}}>🗑 Supprimer</button>
+            : <div style={{marginTop:6,background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{fontSize:11,fontFamily:"'Lora',serif",color:"#991B1B",fontWeight:600,marginBottom:8}}>Supprimer cet échéancier ?</div>
+                <div style={{fontSize:10,color:"#B91C1C",fontFamily:"'Lora',serif",marginBottom:10}}>Cette action est annulable pendant 10 secondes.</div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{setConfirmDel(false);deleteDossier(dos.id);}} style={{flex:1,background:"#DC2626",color:"white",border:"none",borderRadius:6,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>Oui, supprimer</button>
+                  <button onClick={()=>setConfirmDel(false)} style={{flex:1,background:"white",color:"#666",border:"1px solid #DDD",borderRadius:6,padding:"7px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif"}}>Annuler</button>
+                </div>
+              </div>
+          }
         </div>
         <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
           {lignes.length===0
@@ -11824,7 +11836,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                       📥 Import CSV/Excel
                     </span>
                   </label>
-                  <button onClick={()=>window.exportEchPDF(localDos)}
+                  <button onClick={()=>exportEchPDF(localDos)}
                     style={{fontSize:10,fontFamily:"'Lora',serif",background:"#FFF7ED",color:"#C2410C",border:"1px solid #FED7AA",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>
                     📄 Export PDF
                   </button>
@@ -14848,7 +14860,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.530<br />16/05/26 à 10:00
+          v.0.531<br />16/05/26 à 10:00
         </div>
       </div>
 
