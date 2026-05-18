@@ -13057,14 +13057,6 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState({ clientName:"", clientCode:"", description:"", followupDate:today0, reminderDate:"", suiviType:"", closed:false, ...item });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
-  const uidP = () => Math.random().toString(36).substr(2,9);
-  const addPmt   = () => setD(p=>({...p,paiements:[...(p.paiements||[]),{id:uidP(),montant:"",effectuePar:"Banque",date:"",nature:""}]}));
-  const updPmt   = (id,k,v) => setD(p=>({...p,paiements:(p.paiements||[]).map(r=>r.id===id?{...r,[k]:v}:r)}));
-  const delPmt   = (id) => setD(p=>({...p,paiements:(p.paiements||[]).filter(r=>r.id!==id)}));
-  const fmtTotal = (pmts) => { const t=(pmts||[]).reduce((a,r)=>a+(parseFloat(r.montant)||0),0); return t>0?t.toLocaleString("fr-FR",{minimumFractionDigits:0})+" €":"—"; };
-  const inp = { border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"#FAFAFA" };
-  const lbl = (t) => <div style={{ fontSize:10, fontFamily:_FL, color:"#102A63", marginBottom:4, fontWeight:700, letterSpacing:"0.06em" }}>{t}</div>;
-  const ss=[{id:"todo",name:"À faire",color:"#888",bg:"#F0F0F0"},{id:"inprogress",name:"En cours",color:"#1D4ED8",bg:"#DBEAFE"},{id:"waiting",name:"En attente",color:"#A16207",bg:"#FEF9C3"},{id:"blocked",name:"Bloqué",color:"#B91C1C",bg:"#FEE2E2"},{id:"done",name:"Fait",color:"#065F46",bg:"#D1FAE5"},{id:"cancelled",name:"Annulé",color:"#92400E",bg:"#F5E6DC"}];
   const inp = {...S.input, fontSize:11, fontFamily:_FL, padding:"6px 10px"};
   const lblD = (t) => <div style={{fontSize:9,fontFamily:_FL,color:"#102A63",marginBottom:3,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>{t}</div>;
   const SuiSection = ({title,children}) => (
@@ -13082,47 +13074,44 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
         <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
             <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>Suivi clients</div>
-            <div style={{fontSize:18,fontWeight:700,color:"white",fontFamily:_FL}}>{d.id?"Modifier le client":"Nouveau client"}</div>
+            <div style={{fontSize:18,fontWeight:700,color:"white",fontFamily:_FL}}>{d.id?"Modifier":"Nouveau suivi"}</div>
           </div>
           <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",lineHeight:1,borderRadius:8,padding:"4px 9px"}}>×</button>
         </div>
 
         <div style={{overflowY:"auto",padding:"20px 24px",flex:1}}>
           <SuiSection title="Identification">
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-              <div style={{gridColumn:"1/-1"}}>{lblD("Nom du client")}<input value={d.clientName} onChange={e=>setD({...d,clientName:e.target.value})} placeholder="Nom complet" style={inp} autoFocus /></div>
-              <div>{lblD("Secteur")}<input value={d.sector||""} onChange={e=>setD({...d,sector:e.target.value})} placeholder="Ex: Industrie" style={inp} /></div>
-              <div>{lblD("Responsable")}<input value={d.manager||""} onChange={e=>setD({...d,manager:e.target.value})} placeholder="Nom" style={inp} /></div>
+            <div style={{marginBottom:10}}>
+              {lblD("Nom du client")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} placeholder="Nom complet" style={inp} autoFocus />
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>{lblD("Statut")}<select value={d.status||"prospect"} onChange={e=>setD({...d,status:e.target.value})} style={inp}>
-                <option value="prospect">Prospect</option>
-                <option value="actif">Actif</option>
-                <option value="inactif">Inactif</option>
-                <option value="perdu">Perdu</option>
-              </select></div>
-              <div>{lblD("Priorité")}<select value={d.priority||"normale"} onChange={e=>setD({...d,priority:e.target.value})} style={inp}>
-                <option value="haute">Haute</option>
-                <option value="normale">Normale</option>
-                <option value="basse">Basse</option>
+              <div>{lblD("Code client")}<input value={d.clientCode||""} onChange={e=>set("clientCode",e.target.value)} placeholder="Code" style={inp} /></div>
+              <div>{lblD("Type de suivi")}<select value={d.suiviType||""} onChange={e=>set("suiviType",e.target.value)} style={inp}>
+                <option value="">— Choisir —</option>
+                {(suiviTypes||[]).map(t=><option key={t} value={t}>{t}</option>)}
               </select></div>
             </div>
           </SuiSection>
 
-          <SuiSection title="Encours & limites">
+          <SuiSection title="Dates">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <div>{lblD("Encours autorisé (€)")}<input value={d.authorizedAmount||""} onChange={e=>setD({...d,authorizedAmount:e.target.value})} placeholder="0" style={{...inp,fontFamily:_DM}} /></div>
-              <div>{lblD("Encours actuel (€)")}<input value={d.currentAmount||""} onChange={e=>setD({...d,currentAmount:e.target.value})} placeholder="0" style={{...inp,fontFamily:_DM}} /></div>
+              <div>{lblD("Date de suivi")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={inp} /></div>
+              <div>{lblD("Date de rappel")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={inp} /></div>
             </div>
           </SuiSection>
 
-          <SuiSection title="Notes">
-            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Notes sur ce client…" rows={3} />
+          <SuiSection title="Description">
+            <RichTextArea value={d.description||""} onChange={v=>set("description",v)} placeholder="Description du suivi…" rows={4} />
           </SuiSection>
 
           <SuiSection title="Pièces jointes">
-            <AttachmentZone attachments={d.attachments} onChange={v=>setD({...d,attachments:v})} />
+            <AttachmentZone attachments={d.attachments||[]} onChange={v=>set("attachments",v)} />
           </SuiSection>
+
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:11,fontFamily:_FL,color:"#2C3E50",userSelect:"none",marginBottom:8}}>
+            <input type="checkbox" checked={d.closed||false} onChange={e=>set("closed",e.target.checked)} style={{width:14,height:14,accentColor:"#102A63"}} />
+            Dossier clôturé
+          </label>
         </div>
 
         <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC"}}>
@@ -14569,7 +14558,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.545<br />16/05/26 à 10:00
+          v.0.546<br />16/05/26 à 10:00
         </div>
       </div>
 
