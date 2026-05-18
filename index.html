@@ -410,59 +410,6 @@ function parseXLSXEcheancier(arrayBuffer) {
 window.parseXLSXEcheancier = parseXLSXEcheancier;
 window.parseCSVEcheancier  = parseCSVEcheancier;
 
-  // Détecter le séparateur ; ou ,
-  const sep = lines[0].includes(';') ? ';' : ',';
-  const headers = lines[0].split(sep).map(h => h.replace(/^\uFEFF/, '').trim().toLowerCase());
-
-  const idx = {
-    n:       headers.findIndex(h => h === 'n°' || h === 'n' || h === 'rang'),
-    date:    headers.findIndex(h => h.includes('date')),
-    capAvant:headers.findIndex(h => h.includes('capital restant d') || (h.includes('capital') && h.includes('restant') && !h.includes('apr'))),
-    capRbt:  headers.findIndex(h => h.includes('remboursé') || h.includes('rembours')),
-    inter:   headers.findIndex(h => h.includes('intérêts') || h.includes('interets') || (h.includes('int') && !h.includes('cumul'))),
-    cumul:   headers.findIndex(h => h.includes('cumul')),
-    comm:    headers.findIndex(h => h.includes('commission') || h.includes('garantie')),
-    ech:     headers.findIndex(h => h.includes('échéance') || h.includes('echeance')),
-    capApres:headers.findIndex(h => h.includes('après') || h.includes('apres') || (h.includes('capital') && h.includes('apr'))),
-  };
-
-  const rows = [];
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(sep);
-    if (cols.length < 3) continue;
-    const n        = parseInt(cols[idx.n] || i) || i;
-    const date     = parseDate(idx.date >= 0 ? cols[idx.date] : '');
-    const capital  = parseNum(idx.capRbt >= 0 ? cols[idx.capRbt] : '0');
-    const interets = parseNum(idx.inter >= 0 ? cols[idx.inter] : '0');
-    const cumul    = parseNum(idx.cumul >= 0 ? cols[idx.cumul] : '0');
-    const comm     = parseNum(idx.comm >= 0 ? cols[idx.comm] : '0');
-    const ech      = parseNum(idx.ech >= 0 ? cols[idx.ech] : '0');
-    const capR     = parseNum(idx.capApres >= 0 ? cols[idx.capApres] : (idx.capAvant >= 0 ? cols[idx.capAvant] : '0'));
-
-    // Détecter le type de ligne
-    const estCapita  = interets > 0 && capital === 0 && ech === 0 && i === 1;
-    const estSansFlux = capital === 0 && interets === 0 && ech === 0 && i > 1;
-    const estCarence = false; // Dans un CSV importé, pas de vraie carence
-    const estDiffere = capital === 0 && (interets > 0 || comm > 0) && ech > 0;
-
-    rows.push({
-      n, date,
-      echeance: ech, capital, interets,
-      cumulInterets: cumul,
-      commGarantie: comm,
-      assurance: 0,
-      echeanceGlobale: ech,
-      capitalRestant: capR,
-      estCapita,
-      estCarence,
-      estDiffere,
-      estSansFlux: estSansFlux||false,
-      paye: false, datePaiement: '', commentaire: ''
-    });
-  }
-  return rows;
-}
-
 /* exportEchPDF → déplacée dans jsx-source */
 /* exportRCFPDF, exportSingleRCFPDF, _rcfPrintIframe → déplacées dans jsx-source */</script>
 
@@ -14346,7 +14293,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.556{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.557{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
