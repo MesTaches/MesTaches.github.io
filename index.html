@@ -1094,7 +1094,7 @@ function CotationView({ settings }) {
             style={{ border:`1px solid ${showTrashCot?"#E67E22":"#E0E0E0"}`,background:showTrashCot?"#FEF9E7":"white",color:showTrashCot?"#E67E22":"#888",borderRadius:8,padding:"4px 12px",fontSize:11,cursor:"pointer",fontFamily:_FL,display:"flex",alignItems:"center",gap:5 }}>
             🗑 Corbeille {activeTrashCot.length>0&&<span style={{ background:"#E67E22",color:"white",borderRadius:10,fontSize:9,padding:"1px 5px" }}>{activeTrashCot.length}</span>}
           </button>
-          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"4px 14px", fontSize:11 }}>+ Nouvelle</button>
+          <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"4px 14px", fontSize:11 }}>+ Nouveau suivi</button>
         </div>
       </div>
 
@@ -4206,14 +4206,20 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
   }, [showLabelPicker]);
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backdropFilter:"blur(4px)" }}
-      onClick={e => e.target===e.currentTarget && onClose()}>
-      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:560,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.18)",borderTop:`4px solid ${catAccent}` }}>
-        <div style={{ padding:"20px 24px 0" }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-            <h2 style={{ margin:0,fontSize:18,fontFamily:_FL,color:"#2C3E50" }}>{isNew ? "Nouvelle évolution" : "Modifier"}</h2>
-            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:22,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)" }}
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:560,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
+
+        <div style={{ background:"linear-gradient(135deg,#C2410C 0%,#EA580C 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0 }}>
+          <div>
+            <div style={{ fontSize:10,color:"rgba(255,255,255,0.6)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4 }}>Dev tracker</div>
+            <div style={{ fontSize:18,fontWeight:700,color:"white",fontFamily:_FL }}>{isNew?"Nouvelle évolution":"Modifier l'évolution"}</div>
           </div>
+          <button onClick={onClose} style={{ background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",lineHeight:1,borderRadius:8,padding:"4px 9px" }}>×</button>
+        </div>
+
+        <div style={{ overflowY:"auto",padding:"20px 24px",flex:1 }}>
           <input value={d.title} onChange={e => setD({...d,title:e.target.value})} placeholder="Titre de l'évolution…" autoFocus style={{ ...S.input,fontSize:15,marginBottom:12 }} />
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
             <select value={d.category} onChange={e => setD({...d,category:e.target.value})} style={{ ...S.input,cursor:"pointer",color:d.category?"#2C3E50":"#999" }}>
@@ -4308,9 +4314,9 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
             <button onClick={addDevSub} style={{ marginTop:8,background:"none",border:"none",padding:"4px 0",fontSize:11,cursor:"pointer",fontFamily:_FL,color:"#BBBBBB",display:"flex",alignItems:"center",gap:5 }}><span style={{ fontSize:16,lineHeight:1 }}>+</span> Ajouter une sous-tâche</button>
           </div>
         </div>
-        <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666") }}>Annuler</button>
-          <button onClick={() => { if(d.title.trim()){ onSave(d); onClose(); } }} style={{ ...S.btn(catAccent),opacity:d.title.trim()?1:0.5 }}>
+        <div style={{ padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC" }}>
+          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11 }}>Annuler</button>
+          <button onClick={() => { if(d.title.trim()){ onSave(d); onClose(); } }} style={{ ...S.btn("#EA580C"),padding:"8px 18px",fontSize:11,opacity:d.title.trim()?1:0.5 }}>
             {isNew ? "Créer" : "Enregistrer"}
           </button>
         </div>
@@ -8778,7 +8784,7 @@ function CBDashboard({ dossiers, fmtE, onOpen, alertMonths }) {
                   <div style={{width:70,height:5,background:"#F0F0F0",borderRadius:3,overflow:"hidden",flexShrink:0}}>
                     <div style={{width:`${pct}%`,height:"100%",background:PAL_S[s.id]||"#888",borderRadius:3}}/>
                   </div>
-                  <span style={{fontSize:10,color:"#AAA",fontFamily:_DM,width:56,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtE(s.total)}</span>
+                  <span style={{fontSize:10,color:"#AAA",fontFamily:_DM,width:80,textAlign:"right",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{fmtE(s.total)}</span>
                 </div>
               );
             })}
@@ -14332,7 +14338,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.562{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.563{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
