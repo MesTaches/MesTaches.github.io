@@ -14294,7 +14294,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.558{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.559{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -14351,7 +14351,7 @@ function App() {
             <SuiviClientView settings={settings} />
           )}
           {view === "cotation" && (
-            <Tasks2View fullscreen={fullscreen} onToggleFullscreen={() => setFullscreen(f => !f)} />
+            <CotationView settings={settings} />
           )}
           {view === "dev" && (
             <DevView />
@@ -14383,7 +14383,6 @@ function App() {
           {/* calendar moved to full-width block */}
           {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
-          {/* cotation view supprimée */}
           {view === "rcf"           && <RCFView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
           {view === "settings"      && <SettingsView    settings={settings} onSave={saveSettingsFn} />}
