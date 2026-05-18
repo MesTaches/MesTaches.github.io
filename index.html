@@ -6182,173 +6182,78 @@ function ReportModal({ report, onSave, onClose }) {
   const typeObj   = REPORT_TYPES.find(t => t.id === d.type) || REPORT_TYPES[0];
   const statusObj = REPORT_STATUSES.find(s => s.id === d.status) || REPORT_STATUSES[0];
 
+  const inp = { ...S.input, fontSize:11, fontFamily:_FL, padding:"6px 10px" };
+  const lblD = (t) => <div style={{fontSize:9,fontFamily:_FL,color:"#102A63",marginBottom:3,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>{t}</div>;
+  const RepSection = ({title,children}) => (
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:9,fontWeight:700,color:"#94A3B8",fontFamily:_FL,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #F1F5F9"}}>{title}</div>
+      {children}
+    </div>
+  );
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 3000,
-      display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backdropFilter: "blur(4px)" }}
-      onMouseDown={(e) => { if (e.target === e.currentTarget) e.currentTarget._mdOutside = true; }}
-      onMouseUp={(e) => { if (e.target === e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside = false; onClose(); } }}>
-      <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 1230,
-        maxHeight: "92vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.2)", borderTop: "4px solid #102A63" }}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{width:"min(900px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
 
-        {/* Header */}
-        <div style={{ padding: "16px 22px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 18, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>
-            {report ? "Modifier le reporting" : "Nouveau reporting"}
+        <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>Reporting</div>
+            <div style={{fontSize:18,fontWeight:700,color:"white",fontFamily:_FL}}>{report.id?"Modifier le reporting":"Nouveau reporting"}</div>
           </div>
-          <button onClick={onClose} style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer", color: "#BDC3C7" }}>×</button>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",lineHeight:1,borderRadius:8,padding:"4px 9px"}}>×</button>
         </div>
 
-        <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: 14 }}>
-
-          {/* Ligne 1 : Nom */}
+        <div style={{overflowY:"auto",padding:"20px 24px",flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>NOM DU REPORTING</label>
-            <input value={d.name} onChange={e => setD({...d, name: e.target.value})} placeholder="Ex: Reporting mensuel CA"
-              className="payment-field"
-              style={{ ...S.input, fontSize: 13, fontFamily: "'Lora',serif", width: "100%", marginTop: 4, fontWeight: 600 }} />
-          </div>
-
-          {/* Ligne 2 : Type + Statut */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing:"0.06em" }}>TYPE DE REPORTING</label>
-              <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
-                {REPORT_TYPES.map(t => (
-                  <button key={t.id} type="button" onClick={() => setD({...d, type: t.id})}
-                    style={{ border: `2px solid ${d.type === t.id ? t.color : "#E0E0E0"}`,
-                      background: d.type === t.id ? t.bg : "white", color: d.type === t.id ? t.color : "#888",
-                      borderRadius: 8, padding: "5px 14px", fontSize: 11, cursor: "pointer",
-                      fontFamily: "'Lora',serif", fontWeight: d.type === t.id ? 700 : 400 }}>
-                    {t.label}
-                  </button>
-                ))}
+            <RepSection title="Informations">
+              <div style={{marginBottom:10}}>
+                {lblD("Titre")}<input value={title_} onChange={e=>setTitle(e.target.value)} placeholder="Titre du reporting" style={inp} autoFocus />
               </div>
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>STATUT</label>
-              <div style={{ display: "flex", gap: 5, marginTop: 6, flexWrap: "wrap" }}>
-                {REPORT_STATUSES.map(s => (
-                  <button key={s.id} type="button" onClick={() => setD({...d, status: s.id})}
-                    style={{ border: `2px solid ${d.status === s.id ? s.color : "#E0E0E0"}`,
-                      background: d.status === s.id ? s.bg : "white", color: d.status === s.id ? s.color : "#888",
-                      borderRadius: 8, padding: "5px 12px", fontSize: 10, cursor: "pointer",
-                      fontFamily: "'Lora',serif", fontWeight: d.status === s.id ? 700 : 400 }}>
-                    {s.label}
-                  </button>
-                ))}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                <div>{lblD("Période de début")}<input type="date" value={dateStart} onChange={e=>setDateStart(e.target.value)} style={inp} /></div>
+                <div>{lblD("Période de fin")}<input type="date" value={dateEnd} onChange={e=>setDateEnd(e.target.value)} style={inp} /></div>
               </div>
-            </div>
+              <div>{lblD("Responsable")}<input value={owner} onChange={e=>setOwner(e.target.value)} placeholder="Nom" style={inp} /></div>
+            </RepSection>
+            <RepSection title="Notes">
+              <RichTextArea value={notes} onChange={setNotes} placeholder="Commentaires…" rows={4} />
+            </RepSection>
           </div>
-
-          {/* Ligne 3 : Description */}
           <div>
-            <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>DESCRIPTION</label>
-            <textarea value={d.description || ""} onChange={e => setD({...d, description: e.target.value})} rows={2}
-              className="payment-field"
-              style={{ ...S.input, fontSize: 11, width: "100%", resize: "vertical", marginTop: 4 }} />
-          </div>
-
-          {/* Ligne 4 : Dates */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>DATE DE CRÉATION</label>
-              <input type="date" value={d.createdAt || ""} onChange={e => setD({...d, createdAt: e.target.value})}
-                onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
-                className="payment-field"
-                style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
-            </div>
-            <div>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>DATE DE PUBLICATION</label>
-              <input type="date" value={d.publishedAt || ""} onChange={e => setD({...d, publishedAt: e.target.value})}
-                onClick={e => { try { e.currentTarget.showPicker(); } catch(_) {} }}
-                className="payment-field"
-                style={{ ...S.input, fontSize: 11, width: "100%", marginTop: 4 }} />
-            </div>
-          </div>
-
-          {/* Ligne 5 : Suivi des tâches */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <label style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif", letterSpacing: "0.06em" }}>SUIVI DES TÂCHES</label>
-              <div style={{ display: "flex", gap: 6 }}>
-                {(d.tasks || []).length > 0 && (
-                  <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif" }}>
-                    {(d.tasks || []).filter(t => t.done).length}/{(d.tasks || []).length} terminées
-                  </span>
-                )}
-                <button type="button" onClick={addTask}
-                  style={{ ...S.btn("#102A63"), padding: "3px 10px", fontSize: 10 }}>+ Tâche</button>
-              </div>
-            </div>
-
-            {(d.tasks || []).length === 0 ? (
-              <div style={{ border: "1px dashed #E0E0E0", borderRadius: 8, padding: "16px", textAlign: "center", color: "#CCC", fontSize: 11, fontFamily: "'Lora',serif" }}>
-                Aucune tâche — cliquez sur "+ Tâche" pour commencer
-              </div>
-            ) : (
-              <div style={{ border: "1px solid #ECEAE5", borderRadius: 10, overflow: "hidden" }}>
-                {/* En-têtes */}
-                <div style={{ display: "grid", gridTemplateColumns: "20px 16px 56px 1fr 28px 3fr 72px 160px 88px 88px 32px 32px",
-                  padding: "5px 8px", background: "#102A63", borderBottom: "1px solid #102A63" }}>
-                  <div />
-                  <div />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>PRIO.</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>LIBELLÉ</div>
-                  <div />
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>DESCRIPTION</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>TYPE</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE CRÉATION</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif" }}>STATUT</div>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", textAlign: "center" }}>DATE FIN</div>
-                  <div /><div />
+            <RepSection title="Tâches du reporting">
+              {reportTasks.length>0 ? (
+                <div style={{display:"flex",flexDirection:"column",gap:4,maxHeight:400,overflowY:"auto"}}>
+                  {reportTasks.map(t=>(
+                    <ReportTaskRow key={t.id} task={t}
+                      onUpdate={(id,upd)=>setReportTasks(prev=>prev.map(x=>x.id===id?{...x,...upd}:x))}
+                      onDelete={id=>setReportTasks(prev=>prev.filter(x=>x.id!==id))}
+                      depth={0}
+                      onAddSubtask={(parentId)=>{
+                        const newSub={id:String(Date.now()),title:"",status:"todo",parentId,subtasks:[]};
+                        setReportTasks(prev=>prev.map(x=>x.id===parentId?{...x,subtasks:[...(x.subtasks||[]),newSub]}:x));
+                      }}/>
+                  ))}
                 </div>
-
-                {/* Tâches */}
-                {(d.tasks || []).map(task => (
-                  <React.Fragment key={task.id}>
-                    <ReportTaskRow task={task} depth={0} onUpdate={updateTask} onDelete={handleDeleteTask} onAddSubtask={addSubtask} />
-
-                  </React.Fragment>
-                ))}
-              </div>
-            )}
+              ) : (
+                <div style={{color:"#CCC",fontFamily:_FL,fontSize:11,padding:"20px 0",textAlign:"center"}}>Aucune tâche — utilisez le bouton ci-dessous</div>
+              )}
+              <button onClick={()=>{const sel=tasks.filter(t=>t.status!=="done"&&t.status!=="cancelled");setReportTasks(sel.map(t=>({...t,subtasks:t.subtasks||[]})));}}
+                style={{...S.ghost,marginTop:8,fontSize:11,width:"100%"}}>+ Importer les tâches actives</button>
+            </RepSection>
           </div>
         </div>
 
-        {undoTask && (
-          <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-            zIndex: 9999, background: "#2C3E50", color: "white", borderRadius: 12,
-            padding: "12px 20px", boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-            display: "flex", alignItems: "center", gap: 16,
-            fontFamily: "'Lora',serif", fontSize: 12, animation: "slideUp 0.3s ease" }}>
-            <span>🗑 <strong>"{(undoTask.label||"Tâche").slice(0,30)}"</strong> supprimée</span>
-            <button onClick={undoDelete}
-              style={{ background: "#27AE60", border: "none", borderRadius: 6, color: "white",
-                padding: "5px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700, fontFamily: "'Lora',serif" }}>↩ Annuler</button>
-            <button onClick={() => setUndoTask(null)}
-              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
-          </div>
-        )}
-        <div style={{ padding:"0 22px 16px" }}>
-          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,marginBottom:7,letterSpacing:"0.06em" }}>NOTES</div>
-            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Notes sur ce reporting…" rows={3} />
-          </div>
-          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14, marginBottom:14 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em",marginBottom:8 }}>PIÈCES JOINTES</div>
-            <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
-          </div>
-          <div style={{ display:"flex", justifyContent:"flex-end", gap:8, paddingBottom:4 }}>
-            <button onClick={onClose} style={{ ...S.btn("#F0F0F0", "#666"), padding: "7px 16px", fontSize: 12 }}>Annuler</button>
-            <button onClick={() => { onSave(d); onClose(); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>✓ Enregistrer</button>
-          </div>
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC"}}>
+          <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+          <button onClick={handleSave} style={{...S.btn("#102A63"),padding:"8px 18px",fontSize:11}}>✓ Enregistrer</button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ── ReportCard ── */
 function ReportCard({ report, onClick }) {
   const typeObj   = REPORT_TYPES.find(t => t.id === report.type) || REPORT_TYPES[0];
   const statusObj = REPORT_STATUSES.find(s => s.id === report.status) || REPORT_STATUSES[0];
@@ -13088,7 +12993,7 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
               <div>{lblD("Code client")}<input value={d.clientCode||""} onChange={e=>set("clientCode",e.target.value)} placeholder="Code" style={inp} /></div>
               <div>{lblD("Type de suivi")}<select value={d.suiviType||""} onChange={e=>set("suiviType",e.target.value)} style={inp}>
                 <option value="">— Choisir —</option>
-                {(suiviTypes||[]).map(t=><option key={t} value={t}>{t}</option>)}
+                {(suiviTypes||[]).map(t=><option key={t.id||t} value={t.id||t}>{t.name||t}</option>)}
               </select></div>
             </div>
           </SuiSection>
@@ -14558,7 +14463,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.546<br />16/05/26 à 10:00
+          v.0.547
         </div>
       </div>
 
