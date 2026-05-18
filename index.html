@@ -1031,7 +1031,7 @@ function CotationView({ settings }) {
   const totObt  = displayed.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
 
   const colOrder = ["clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
-  const gridTpl = "44px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
+  const gridTpl = "44px 40px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
 
   const ColH = ({col,label,right}) => (
     <div style={{ position:"relative", overflow:"hidden", textAlign:right?"right":"left", paddingRight:right?10:0 }}>
@@ -1069,7 +1069,7 @@ function CotationView({ settings }) {
         </div>
       </div>
 
-      /* ── Sous-titre ── */}
+      {/* ── Sous-titre ── */}
       <div style={{ padding:"8px 12px 4px", background:"#F7F6F3" }}>
         <span style={{ fontSize:11, color:"#999", fontFamily:_DM }}>
           {displayed.length} demande{displayed.length!==1?"s":""} · {cotations.filter(c=>!["done","refused"].includes(c.status)).length} en cours
@@ -1080,6 +1080,7 @@ function CotationView({ settings }) {
       <div style={{ overflowX:"auto", background:"white", borderTop:"1px solid #ECEAE5" }}>
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"0 8px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50", height:25 }}>
+          <div></div>
           <div style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:_FL }}>PRIO.</div>
           <ColH col="clientName"       label="CLIENT"    />
           <ColH col="clientCode"       label="CODE"      />
@@ -14294,7 +14295,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.559{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.560{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
