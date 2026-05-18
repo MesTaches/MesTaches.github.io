@@ -867,7 +867,7 @@ function CotationModal({ cotation, onSave, onClose }) {
   const lbl = (t) => <div style={{fontSize:9,fontFamily:_FL,color:"rgba(255,255,255,0.55)",marginBottom:3,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>{t}</div>;
   const lblD = (t) => <div style={{fontSize:9,fontFamily:_FL,color:"#102A63",marginBottom:3,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>{t}</div>;
   const inp = {...S.input, fontSize:11, fontFamily:_FL, padding:"6px 10px"};
-  const Section = ({title, children}) => (
+  const CotSection = ({title, children}) => (
     <div style={{marginBottom:16}}>
       <div style={{fontSize:9,fontWeight:700,color:"#94A3B8",fontFamily:_FL,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #F1F5F9"}}>{title}</div>
       {children}
@@ -896,7 +896,7 @@ function CotationModal({ cotation, onSave, onClose }) {
         {/* ── Corps scrollable ── */}
         <div style={{overflowY:"auto",padding:"20px 24px",flex:1}}>
 
-          <Section title="Identification">
+          <CotSection title="Identification">
             <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:10,marginBottom:10}}>
               <div>{lblD("Nom client")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={inp} placeholder="Nom du client" /></div>
               <div>{lblD("Code client")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={inp} placeholder="Code" /></div>
@@ -905,9 +905,9 @@ function CotationModal({ cotation, onSave, onClose }) {
               <div>{lblD("Date demande")}<input type="date" value={d.requestDate} onChange={e=>set("requestDate",e.target.value)} style={inp} /></div>
               <div>{lblD("Demandeur")}<input value={d.requester} onChange={e=>set("requester",e.target.value)} style={inp} placeholder="Prénom" /></div>
             </div>
-          </Section>
+          </CotSection>
 
-          <Section title="Statut & priorité">
+          <CotSection title="Statut & priorité">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
               <div>{lblD("Priorité")}<select value={d.priority} onChange={e=>set("priority",e.target.value)} style={inp}>
                 {COT_PRIOS.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></div>
@@ -916,9 +916,9 @@ function CotationModal({ cotation, onSave, onClose }) {
               <div>{lblD("Étiquette")}<select value={d.label} onChange={e=>set("label",e.target.value)} style={inp}>
                 {COT_LABELS.map(l=><option key={l.id} value={l.id}>{l.label}</option>)}</select></div>
             </div>
-          </Section>
+          </CotSection>
 
-          <Section title="Montants">
+          <CotSection title="Montants">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
               <div>{lblD("Encours autorisé (€)")}<input value={d.authorizedAmount} onChange={e=>set("authorizedAmount",e.target.value)} style={inp} placeholder="0" /></div>
               <div>{lblD("Besoin (€)")}<input value={d.need} onChange={e=>set("need",e.target.value)} style={inp} placeholder="0" /></div>
@@ -927,11 +927,11 @@ function CotationModal({ cotation, onSave, onClose }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>{lblD("Date clôture")}<input type="date" value={d.closeDate} onChange={e=>set("closeDate",e.target.value)} style={inp} /></div>
             </div>
-          </Section>
+          </CotSection>
 
-          <Section title="Notes">
+          <CotSection title="Notes">
             <RichTextArea value={d.notes} onChange={v=>set("notes",v)} placeholder="Notes libres…" rows={3} />
-          </Section>
+          </CotSection>
 
           {/* Sous-tâches */}
           {(()=>{
@@ -943,7 +943,7 @@ function CotationModal({ cotation, onSave, onClose }) {
             const updSub=s=>updSubs(subtasks.map(x=>x.id===s.id?s:x));
             const delSub=id=>updSubs(subtasks.filter(x=>x.id!==id));
             return (
-              <Section title={`Sous-tâches${subtasks.length>0?" ("+done+"/"+subtasks.length+")":""}`}>
+              <CotSection title={`Sous-tâches${subtasks.length>0?" ("+done+"/"+subtasks.length+")":""}`}>
                 {subtasks.map(sub=>(
                   <div key={sub.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5"}}>
                     <button onClick={()=>updSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})}
@@ -957,13 +957,13 @@ function CotationModal({ cotation, onSave, onClose }) {
                 <button onClick={addSub} style={{marginTop:8,background:"none",border:"none",padding:"4px 0",fontSize:11,cursor:"pointer",fontFamily:_FL,color:"#BBBBBB",display:"flex",alignItems:"center",gap:5}}>
                   <span style={{fontSize:16,lineHeight:1}}>+</span> Ajouter une sous-tâche
                 </button>
-              </Section>
+              </CotSection>
             );
           })()}
 
-          <Section title="Pièces jointes">
+          <CotSection title="Pièces jointes">
             <AttachmentZone attachments={d.attachments||[]} onChange={v=>setD({...d,attachments:v})} />
-          </Section>
+          </CotSection>
 
         </div>
 
@@ -4416,12 +4416,17 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
       onMouseUp={handleOverlayMouseUp}>
       <div
         onMouseDown={handlePanelMouseDown}
-        style={{ background:"white",borderRadius:16,width:"100%",maxWidth:640,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.2)",borderTop:`4px solid ${catAccent}` }}>
-        <div style={{ padding:"20px 24px 0" }}>
-          <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14 }}>
-            <h2 style={{ margin:0,fontSize:18,fontFamily:_FL,color:"#2C3E50" }}>{isNew ? "Nouveau dossier" : `Dossier ${d.reference||d.clientName}`}</h2>
-            <button onClick={onClose} style={{ border:"none",background:"none",fontSize:22,cursor:"pointer",color:"#BDC3C7" }}>×</button>
+        style={{ background:"white",borderRadius:16,width:"100%",maxWidth:640,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
+
+        <div style={{background:`linear-gradient(135deg,${catAccent} 0%,${catAccent}CC 100%)`,padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.65)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>Contentieux</div>
+            <div style={{fontSize:18,fontWeight:700,color:"white",fontFamily:_FL}}>{isNew?"Nouveau dossier":`Dossier ${d.reference||d.clientName}`}</div>
           </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",fontSize:20,cursor:"pointer",lineHeight:1,borderRadius:8,padding:"4px 9px"}}>×</button>
+        </div>
+        <div style={{ padding:"20px 24px 0", overflowY:"auto", flex:1 }}>
+          <div style={{marginBottom:14}}>
 
           {/* Référence + Client */}
           <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8 }}>
@@ -4594,11 +4599,13 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
         </div>
 
         <div style={{ padding:"14px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          {!isNew && <span style={{ fontSize:10,color:"#AAA",fontFamily:_DM }}>Ouvert le {d.dateOuverture||"—"}</span>}
-          <div style={{ display:"flex",gap:8,marginLeft:"auto" }}>
-            <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666") }}>Annuler</button>
-            <button onClick={()=>{ if(d.reference.trim()||d.clientName.trim()){ onSave({...d,montant:montantRaw}); onClose(); } }}
-              style={{ ...S.btn("#C0392B"),opacity:(d.reference.trim()||d.clientName.trim())?1:0.5 }}>
+        </div>{/* fin scroll */}
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#FAFBFC"}}>
+          {!isNew && <span style={{fontSize:10,color:"#AAA",fontFamily:_DM}}>Ouvert le {d.dateOuverture||"—"}</span>}
+          <div style={{display:"flex",gap:8,marginLeft:"auto"}}>
+            <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+            <button onClick={()=>{if(d.reference.trim()||d.clientName.trim()){onSave({...d,montant:montantRaw});onClose();}}}
+              style={{...S.btn("#C0392B"),padding:"8px 18px",fontSize:11,opacity:(d.reference.trim()||d.clientName.trim())?1:0.5}}>
               {isNew?"Créer le dossier":"Enregistrer"}
             </button>
           </div>
@@ -13059,78 +13066,69 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
   const inp = { border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"#FAFAFA" };
   const lbl = (t) => <div style={{ fontSize:10, fontFamily:_FL, color:"#102A63", marginBottom:4, fontWeight:700, letterSpacing:"0.06em" }}>{t}</div>;
   const ss=[{id:"todo",name:"À faire",color:"#888",bg:"#F0F0F0"},{id:"inprogress",name:"En cours",color:"#1D4ED8",bg:"#DBEAFE"},{id:"waiting",name:"En attente",color:"#A16207",bg:"#FEF9C3"},{id:"blocked",name:"Bloqué",color:"#B91C1C",bg:"#FEE2E2"},{id:"done",name:"Fait",color:"#065F46",bg:"#D1FAE5"},{id:"cancelled",name:"Annulé",color:"#92400E",bg:"#F5E6DC"}];
+  const inp = {...S.input, fontSize:11, fontFamily:_FL, padding:"6px 10px"};
+  const lblD = (t) => <div style={{fontSize:9,fontFamily:_FL,color:"#102A63",marginBottom:3,fontWeight:700,letterSpacing:"0.07em",textTransform:"uppercase"}}>{t}</div>;
+  const SuiSection = ({title,children}) => (
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:9,fontWeight:700,color:"#94A3B8",fontFamily:_FL,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10,paddingBottom:6,borderBottom:"1px solid #F1F5F9"}}>{title}</div>
+      {children}
+    </div>
+  );
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"center", justifyContent:"center" }}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
       onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{ background:"white", borderRadius:16, width:540, boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
-        <div style={{ padding:"16px 22px 12px", borderBottom:"1px solid #F0F0F0", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ fontFamily:_DM, fontSize:12, fontWeight:700, color:"#102A63", letterSpacing:"0.06em" }}>{d.id?"MODIFIER LE CLIENT":"NOUVEAU CLIENT"}</span>
-          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            {d.id && <button onMouseDown={(e) => { e.preventDefault(); exportSingleSuiviPDF(d, window._suiviNotes||[], suiviTypes); }} title="Exporter en PDF"
-              style={{ border:"1px solid #E0E0E0", background:"white", borderRadius:8, padding:"3px 8px", fontSize:14, cursor:"pointer", color:"#102A63" }}>🖨</button>}
-            <button onClick={onClose} style={{ background:"none", border:"none", fontSize:20, cursor:"pointer", color:"#999" }}>×</button>
+      <div style={{width:"min(560px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+
+        <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.55)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:4}}>Suivi clients</div>
+            <div style={{fontSize:18,fontWeight:700,color:"white",fontFamily:_FL}}>{d.id?"Modifier le client":"Nouveau client"}</div>
           </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",lineHeight:1,borderRadius:8,padding:"4px 9px"}}>×</button>
         </div>
-        <div style={{ padding:"18px 22px", display:"flex", flexDirection:"column", gap:12 }}>
-          <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:2 }}>{lbl("NOM CLIENT")}<input value={d.clientName} onChange={e=>set("clientName",e.target.value)} style={inp} placeholder="Nom du client" autoFocus /></div>
-            <div style={{ flex:1 }}>{lbl("CODE CLIENT")}<input value={d.clientCode} onChange={e=>set("clientCode",e.target.value)} style={inp} placeholder="Ex: ACM-001" /></div>
-          </div>
-          <div>{lbl("DESCRIPTION")}<input value={d.description} onChange={e=>set("description",e.target.value)} style={inp} placeholder="Courte description" /></div>
-          <div style={{ display:"flex", gap:12 }}>
-            <div style={{ flex:1 }}>
-              {lbl("TYPE DE SUIVI")}
-              <select value={d.suiviType||""} onChange={e=>set("suiviType",e.target.value)} style={{...inp, cursor:"pointer"}}>
-                <option value="">— Aucun —</option>
-                {(suiviTypes||[]).map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
+
+        <div style={{overflowY:"auto",padding:"20px 24px",flex:1}}>
+          <SuiSection title="Identification">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <div style={{gridColumn:"1/-1"}}>{lblD("Nom du client")}<input value={d.clientName} onChange={e=>setD({...d,clientName:e.target.value})} placeholder="Nom complet" style={inp} autoFocus /></div>
+              <div>{lblD("Secteur")}<input value={d.sector||""} onChange={e=>setD({...d,sector:e.target.value})} placeholder="Ex: Industrie" style={inp} /></div>
+              <div>{lblD("Responsable")}<input value={d.manager||""} onChange={e=>setD({...d,manager:e.target.value})} placeholder="Nom" style={inp} /></div>
             </div>
-            <div style={{ flex:1 }}>{lbl("DATE DE SUIVI")}<input type="date" value={d.followupDate||""} onChange={e=>set("followupDate",e.target.value)} style={{ border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"#FAFAFA" }} /></div>
-            <div style={{ flex:1 }}>{lbl("DATE DE RAPPEL")}<input type="date" value={d.reminderDate||""} onChange={e=>set("reminderDate",e.target.value)} style={{ border:"1px solid #E8E8E8", borderRadius:8, padding:"6px 10px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"#FAFAFA" }} /></div>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, paddingTop:4 }}>
-            <input type="checkbox" id="sc-closed" checked={!!d.closed} onChange={e=>set("closed",e.target.checked)} style={{ width:15, height:15, cursor:"pointer" }} />
-            <label htmlFor="sc-closed" style={{ fontSize:12, fontFamily:_FL, color:"#2C3E50", cursor:"pointer", userSelect:"none" }}>Clôturer ce client</label>
-          </div>
-          {/* Notes */}
-          <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14 }}>
-            <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,marginBottom:7,letterSpacing:"0.06em" }}>NOTES</div>
-            <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)} placeholder="Notes sur ce suivi client…" rows={3} />
-          </div>
-          {/* Sous-tâches */}
-          {(()=>{
-            const subtasks=d.subtasks||[];
-            const done=subtasks.filter(s=>s.completed).length;
-            const updSubs=subs=>set("subtasks",subs);
-            const addSub=()=>updSubs([...subtasks,{id:String(Date.now()),text:"",status:"todo",completed:false}]);
-            const updSub=s=>updSubs(subtasks.map(x=>x.id===s.id?s:x));
-            const delSub=id=>updSubs(subtasks.filter(x=>x.id!==id));
-            return (
-              <div style={{ borderTop:"1px solid #F0F0F0", paddingTop:14 }}>
-                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
-                  <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em" }}>SOUS-TÂCHES</div>
-                  {subtasks.length>0&&<span style={{ fontSize:10,color:"#27AE60",fontFamily:_FL,fontWeight:600 }}>{done}/{subtasks.length}</span>}
-                </div>
-                {subtasks.map(sub=>{const st=ss.find(x=>x.id===sub.status)||ss[0];return(
-                  <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
-                    <button onClick={()=>updSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})} style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:"2px solid "+(sub.completed?"#27AE60":"#CCC"),background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
-                    <input value={sub.text} onChange={e=>updSub({...sub,text:e.target.value})} placeholder="Sous-tâche…" style={{ flex:1,border:"none",outline:"none",fontSize:12,fontFamily:_FL,color:sub.completed?"#AAA":"#2C3E50",textDecoration:sub.completed?"line-through":"none",background:"transparent" }} />
-                    <SubStatusSelect value={sub.status} onChange={v=>updSub({...sub,status:v,completed:v==="done"})} />
-                    <button onClick={()=>delSub(sub.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0 }}>×</button>
-                  </div>
-                );})}
-                <button onClick={addSub} style={{ marginTop:8,background:"none",border:"none",padding:"4px 0",fontSize:11,cursor:"pointer",fontFamily:_FL,color:"#BBBBBB",display:"flex",alignItems:"center",gap:5 }}><span style={{ fontSize:16,lineHeight:1 }}>+</span> Ajouter une sous-tâche</button>
-              </div>
-            );
-          })()}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>{lblD("Statut")}<select value={d.status||"prospect"} onChange={e=>setD({...d,status:e.target.value})} style={inp}>
+                <option value="prospect">Prospect</option>
+                <option value="actif">Actif</option>
+                <option value="inactif">Inactif</option>
+                <option value="perdu">Perdu</option>
+              </select></div>
+              <div>{lblD("Priorité")}<select value={d.priority||"normale"} onChange={e=>setD({...d,priority:e.target.value})} style={inp}>
+                <option value="haute">Haute</option>
+                <option value="normale">Normale</option>
+                <option value="basse">Basse</option>
+              </select></div>
+            </div>
+          </SuiSection>
+
+          <SuiSection title="Encours & limites">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>{lblD("Encours autorisé (€)")}<input value={d.authorizedAmount||""} onChange={e=>setD({...d,authorizedAmount:e.target.value})} placeholder="0" style={{...inp,fontFamily:_DM}} /></div>
+              <div>{lblD("Encours actuel (€)")}<input value={d.currentAmount||""} onChange={e=>setD({...d,currentAmount:e.target.value})} placeholder="0" style={{...inp,fontFamily:_DM}} /></div>
+            </div>
+          </SuiSection>
+
+          <SuiSection title="Notes">
+            <RichTextArea value={d.notes||""} onChange={v=>setD({...d,notes:v})} placeholder="Notes sur ce client…" rows={3} />
+          </SuiSection>
+
+          <SuiSection title="Pièces jointes">
+            <AttachmentZone attachments={d.attachments} onChange={v=>setD({...d,attachments:v})} />
+          </SuiSection>
         </div>
-        <div style={{ padding:"10px 22px 18px", display:"flex", justifyContent:"flex-end", gap:8 }}>
-          <button onClick={onClose} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"7px 14px" }}>Annuler</button>
-          <button onClick={()=>{ if(!d.clientName.trim()) return; onSave(d); }} style={{ ...S.btn("#102A63"), fontSize:11, padding:"7px 14px" }}>✓ Enregistrer</button>
-        </div>
-        <div style={{ padding:"0 22px 16px" }}>
-          <AttachmentZone attachments={d.attachments} onChange={v => setD({ ...d, attachments: v })} />
+
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC"}}>
+          <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+          <button onClick={()=>{if(!d.clientName.trim())return;onSave(d);}} style={{...S.btn("#102A63"),padding:"8px 18px",fontSize:11}}>✓ Enregistrer</button>
         </div>
       </div>
     </div>
@@ -14572,7 +14570,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.543<br />16/05/26 à 10:00
+          v.0.544<br />16/05/26 à 10:00
         </div>
       </div>
 
