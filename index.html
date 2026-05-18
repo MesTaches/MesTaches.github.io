@@ -966,6 +966,10 @@ function CotationView({ settings }) {
     const list = d.id ? cotations.map(c=>c.id===d.id?{...d,isDuplicate:true}:c) : [...cotations,{...d,id:Date.now().toString(),isDuplicate:true}];
     saveData(list); setModal(null); setDupAlert(null);
   };
+  const handlePin = (id) => {
+    const next = cotations.map(c=>c.id===id?{...c,pinned:!c.pinned}:c);
+    saveData(next);
+  };
   const handleDelete = (id) => {
     const found = cotations.find(c=>c.id===id); if (!found) return;
     saveData(cotations.filter(c=>c.id!==id));
@@ -1009,6 +1013,7 @@ function CotationView({ settings }) {
     .filter(c => filterLabel==="Toutes" || COT_LABELS.find(l=>l.label===filterLabel)?.id===c.label)
     .filter(c => !search || [c.clientName,c.clientCode,c.requester].some(v=>(v||"").toLowerCase().includes(search.toLowerCase())))
     .sort((a,b) => {
+      if(!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
       if (!sortCol) {
         const ra = COT_PRIOS.find(p=>p.id===a.priority)?.rank??2;
         const rb = COT_PRIOS.find(p=>p.id===b.priority)?.rank??2;
@@ -1031,7 +1036,7 @@ function CotationView({ settings }) {
   const totObt  = displayed.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
 
   const colOrder = ["clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
-  const gridTpl = "44px 40px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
+  const gridTpl = "20px 44px 40px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
 
   const ColH = ({col,label,right}) => (
     <div style={{ position:"relative", overflow:"hidden", textAlign:right?"right":"left", paddingRight:right?10:0 }}>
@@ -1081,6 +1086,7 @@ function CotationView({ settings }) {
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"0 8px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50", height:25 }}>
           <div></div>
+          <div></div>
           <div style={{ fontSize:10, fontWeight:700, color:"white", fontFamily:_FL }}>PRIO.</div>
           <ColH col="clientName"       label="CLIENT"    />
           <ColH col="clientCode"       label="CODE"      />
@@ -1105,8 +1111,15 @@ function CotationView({ settings }) {
           const pr=COT_PRIOS.find(p=>p.id===(c.priority||"normal"))||COT_PRIOS[2];
           return (
             <div key={c.id} style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"3px 8px",
-              borderBottom:"1px solid #F5F5F5", background:i%2===0?"white":"#FAFAFA",
+              borderBottom:"1px solid #F5F5F5", background:c.pinned?"#FFFBEB":i%2===0?"white":"#FAFAFA",
               alignItems:"center", minWidth:"max-content", height:25 }}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <button onClick={e=>{e.stopPropagation();handlePin(c.id);}}
+                  title={c.pinned?"Désépingler":"Épingler"}
+                  style={{border:"none",background:"none",cursor:"pointer",fontSize:11,padding:0,opacity:c.pinned?1:0.3,lineHeight:1}}>
+                  📌
+                </button>
+              </div>
               <div><button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }} style={{ width:18, height:18, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:"white", padding:0, lineHeight:1 }}>✓</button></div>
               {/* Prio */}
               <div style={{ display:"flex", alignItems:"center", gap:2 }}>
@@ -1156,7 +1169,7 @@ function CotationView({ settings }) {
         {/* Footer totaux */}
         {displayed.length>0&&(
           <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"5px 8px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5", minWidth:"max-content", alignItems:"center" }}>
-            <div/><div/><div/><div/><div/><div/>
+            <div/><div/><div/><div/><div/><div/><div/><div/>
             <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:_FL, textAlign:"right", paddingRight:10 }}>{fmtCotEur(totAuth)}</div>
             <div style={{ fontSize:11, fontWeight:700, color:"#102A63", fontFamily:_FL, textAlign:"right", paddingRight:10 }}>{fmtCotEur(totNeed)}</div>
             <div style={{ fontSize:11, fontWeight:700, color:"#065F46", fontFamily:_FL, textAlign:"right", paddingRight:10 }}>{fmtCotEur(totObt)}</div>
@@ -14295,7 +14308,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.560{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.561{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
