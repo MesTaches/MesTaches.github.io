@@ -9824,134 +9824,6 @@ function saveEchDossiers(v) { appDbSet("echeancier", v); }
 const ECH_NATURE_OPTIONS = ["Prêt amortissable","Prêt in fine","Crédit-bail","Découvert","Affacturage","Prêt d'honneur","Autre"];
 const ECH_GARANTIE_OPTIONS = ["Hypothèque","Caution personnelle","Nantissement","Gage","Caution bancaire","Aucune","Autre"];
 
-/* ── Calcul échéancier avec structure réelle
-   CARENCE    = aucun paiement (ni capital, ni intérêts)
-   DIFFÉRÉ    = paiement des intérêts seulement (pas de capital)
-   AMORTISSMT = capital + intérêts (mensualité constante)
-   CAPITALISA = rang 1 spécial PGE : intérêts annuels capitalisés (aucun flux sortant)
-── */
-function calcEcheancier(montant, tauxAnnuel, dureeM, dateDebut, assuranceMensuelle=0,
-  carenceMois=0, tauxGarantieAnnuel=0, tauxDiffere=null, tauxCapita=0, differeMois=0,
-  typeAmort="annuites", tauxGarantie2=0, dureeGarantie1=0, carenceCapitalisee=false,
-  differFinMois=0, fluxPeriode=1) {
-  if (!montant || !dureeM) return [];
-
-  const fp = Math.max(1, Math.round(fluxPeriode)); // fréquence de flux (1 ou 3)
-
-  const r   = tauxAnnuel > 0 ? (tauxAnnuel / 100) / 12 * fp : 0;
-  const rD  = tauxDiffere !== null ? (tauxDiffere / 100) / 12 * fp : r;
-  const rG1 = tauxGarantieAnnuel > 0 ? (tauxGarantieAnnuel / 100) / 12 * fp : 0;
-  const rG2 = tauxGarantie2 > 0 ? (tauxGarantie2 / 100) / 12 * fp : rG1;
-  const _dG1 = dureeGarantie1 > 0 ? dureeGarantie1 : 999999;
-  const ass  = parseNum(assuranceMensuelle) || 0;
-
-  const nbFluxDifferFin = differFinMois > 0 ? 1 : 0; // 1 seule ligne groupée
-  const nbFluxDiffere   = Math.round(differeMois / fp);
-  const nbFluxAmort     = Math.round((dureeM - differFinMois - differeMois - carenceMois) / fp);
-  const avecCapita      = tauxCapita > 0;
-
-  let capital = montant;
-  const capitalCapitalise   = avecCapita ? montant * (1 + tauxCapita / 100) : montant;
-  const capitalApresCarence = (carenceCapitalisee && r > 0 && carenceMois > 0)
-    ? montant * Math.pow(1 + r/fp, carenceMois) : capitalCapitalise;
-  const pmtBase = r > 0 && nbFluxAmort > 0
-    ? capitalApresCarence * r * Math.pow(1+r, nbFluxAmort) / (Math.pow(1+r, nbFluxAmort) - 1)
-    : (nbFluxAmort > 0 ? capitalApresCarence / nbFluxAmort : 0);
-
-  const phases = [];
-  for (let k = 0; k < carenceMois; k++)       phases.push({ type:"carence",   mois:1 });
-  if (differFinMois > 0)                       phases.push({ type:"differFin", mois:differFinMois });
-  if (avecCapita)                              phases.push({ type:"capita",    mois:fp });
-  for (let k = 0; k < nbFluxDiffere; k++)      phases.push({ type:"differe",   mois:fp });
-  for (let k = 0; k < nbFluxAmort; k++)        phases.push({ type:"amort",     mois:fp });
-
-  const rows = [];
-  let cumulInterets = 0;
-  let moisEcoule    = 0;
-  const d0 = dateDebut ? new Date(dateDebut) : new Date();
-  let fluxIdx = 0; // compteur pour _dG1
-
-  phases.forEach((ph) => {
-    const moisDebutPhase = moisEcoule;
-
-    if (ph.mois > 1 && ph.type !== "differFin") {
-      for (let m = 1; m < ph.mois; m++) {
-        moisEcoule++;
-        const dt = new Date(d0);
-        dt.setMonth(dt.getMonth() + moisEcoule);
-        const mx = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate();
-        dt.setDate(Math.min(d0.getDate(), mx));
-        rows.push({
-          n: rows.length + 1, date: dt.toISOString().split("T")[0],
-          echeance: 0, capital: 0, interets: 0, cumulInterets,
-          commGarantie: 0, assurance: 0,
-          echeanceGlobale: 0, capitalRestant: capital,
-          estCapita: false, estCarence: ph.type==="carence",
-          estDiffere: ph.type==="differe", estDifferFin: false,
-          estSansFlux: true,
-          paye: false, datePaiement:"", commentaire:""
-        });
-      }
-    }
-
-    moisEcoule += (ph.type === "differFin" ? ph.mois : 1);
-    const date = new Date(d0);
-    date.setMonth(date.getMonth() + moisEcoule);
-    const maxDay = new Date(date.getFullYear(), date.getMonth()+1, 0).getDate();
-    date.setDate(Math.min(d0.getDate(), maxDay));
-    const dateStr = date.toISOString().split("T")[0];
-
-    let interets = 0, amort = 0, commGar = 0, echeance = 0;
-    fluxIdx++;
-    const rGi = fluxIdx <= _dG1 ? rG1 : rG2;
-
-    if (ph.type === "carence") {
-      if (carenceCapitalisee && r > 0) {
-        interets = capital * r / fp; // mensuel
-        capital  = capital + interets;
-        cumulInterets += interets;
-      }
-    } else if (ph.type === "differFin") {
-      interets = capital * (tauxAnnuel / 100) / 12 * ph.mois;
-      commGar  = capital * (tauxGarantieAnnuel / 100) / 12 * ph.mois;
-      echeance = interets + commGar + ass;
-      cumulInterets += interets;
-    } else if (ph.type === "capita") {
-      interets = montant * (tauxCapita / 100);
-      capital  = capitalCapitalise;
-      cumulInterets += interets;
-    } else if (ph.type === "differe") {
-      interets = capital * rD;
-      commGar  = capital * rGi;
-      echeance = interets + commGar + ass;
-      cumulInterets += interets;
-    } else { // amort
-      interets = capital * r;
-      commGar  = capital * rGi;
-      amort    = typeAmort === "capital"
-        ? Math.min(capitalApresCarence / nbFluxAmort, capital)
-        : Math.min(pmtBase - interets, capital);
-      echeance = amort + interets + commGar + ass;
-      cumulInterets += interets;
-      capital  = Math.max(0, capital - amort);
-    }
-
-    rows.push({
-      n: rows.length + 1, date: dateStr,
-      echeance, capital: amort, interets, cumulInterets,
-      commGarantie: commGar, assurance: ass,
-      echeanceGlobale: echeance, capitalRestant: capital,
-      estCapita:    ph.type === "capita",
-      estCarence:   ph.type === "carence",
-      estDiffere:   ph.type === "differe",
-      estDifferFin: ph.type === "differFin",
-      estSansFlux:  false,
-      paye: false, datePaiement:"", commentaire:""
-    });
-  });
-
-  return rows;
-}
 
 /* ═══════════════════════════════════════════════════════════════
    ECHEANCIER DOSSIER MODAL (panneau latéral)
@@ -14474,7 +14346,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.555{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.556{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
