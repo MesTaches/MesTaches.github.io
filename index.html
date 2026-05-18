@@ -4264,7 +4264,7 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
             {showLabelPicker && (
               <div ref={labelPickerRef} style={{ display:"flex",flexWrap:"wrap",gap:6,padding:8,background:"#F8F8F8",borderRadius:8,border:"1px solid #E8E8E8" }}>
                 {devSettings.labels.filter(l => !(d.labels||[]).includes(l.name)).map(l => (
-                  <span key={l.id} onClick={() => { setD(p=>({...p, labels:[...(d.labels||[]),l.name]}); setShowLabelPicker(false); }}
+                  <span key={l.id} onClick={() => { setD(p=>({...p, labels:[...(d.labels||[]),l.name]})); setShowLabelPicker(false); }}
                     style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:_DM,border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
                 ))}
                 {devSettings.labels.filter(l => !(d.labels||[]).includes(l.name)).length===0 && <span style={{ fontSize:10,color:"#AAA",fontFamily:_DM }}>Toutes les étiquettes sont déjà ajoutées</span>}
@@ -4522,7 +4522,7 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
             {showLP && (
               <div ref={lpRef} style={{ display:"flex",flexWrap:"wrap",gap:6,padding:8,background:"#F8F8F8",borderRadius:8,border:"1px solid #E8E8E8" }}>
                 {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).map(l=>(
-                  <span key={l.id} onClick={()=>{setD(p=>({...p, labels:[...(d.labels||[]),l.name]});setShowLP(false);}}
+                  <span key={l.id} onClick={()=>{setD(p=>({...p, labels:[...(d.labels||[]),l.name]}));setShowLP(false);}}
                     style={{ fontSize:10,background:l.bg,color:l.color,borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:_DM,border:`1px solid ${l.color}30` }}>🏷 {l.name}</span>
                 ))}
                 {cSettings.labels.filter(l=>!(d.labels||[]).includes(l.name)).length===0 && <span style={{fontSize:10,color:"#AAA",fontFamily:_DM}}>Toutes ajoutées</span>}
@@ -14338,7 +14338,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.566{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.567{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
