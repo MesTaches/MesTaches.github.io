@@ -254,37 +254,61 @@ async function fbLogout() {
   <div style="font-size:28px;font-family:'Lora',serif;color:#102A63">✦ Mes Tâches</div>
   <div style="font-size:12px;font-family:'DM Mono',monospace;color:#AAA;letter-spacing:0.08em">SYNCHRONISATION…</div>
 </div>
-<div id="fb-login" class="fb-screen" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#F7F6F2;padding:20px;position:fixed;inset:0;z-index:10000;">
-  <div style="background:white;border-radius:16px;width:100%;max-width:380px;box-shadow:0 20px 60px rgba(0,0,0,0.12);border-top:4px solid #102A63;">
-    <div style="padding:28px 28px 20px">
-      <div style="text-align:center;margin-bottom:24px">
-        <div style="font-size:28px;font-family:'Lora',serif;color:#102A63;margin-bottom:4px">✦ Mes Tâches</div>
-        <div id="fb-title" style="font-size:11px;font-family:'DM Mono',monospace;color:#AAA;letter-spacing:0.08em">CONNEXION</div>
+<div id="fb-login" class="fb-screen" style="display:flex;align-items:center;justify-content:center;height:100vh;background:linear-gradient(135deg,#0A1E4E 0%,#102A63 60%,#1a3d8f 100%);padding:20px;position:fixed;inset:0;z-index:10000;">
+
+  <!-- Motif décoratif -->
+  <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none;">
+    <div style="position:absolute;top:-120px;right:-120px;width:400px;height:400px;border-radius:50%;background:rgba(255,255,255,0.03);"></div>
+    <div style="position:absolute;bottom:-80px;left:-80px;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,0.03);"></div>
+  </div>
+
+  <div style="background:white;border-radius:20px;width:100%;max-width:400px;box-shadow:0 32px 80px rgba(0,0,0,0.4);overflow:hidden;position:relative;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#102A63 0%,#1a3d8f 100%);padding:36px 32px 28px;text-align:center;">
+      <div style="font-size:32px;font-family:'Lora',serif;color:white;font-weight:700;margin-bottom:6px;letter-spacing:-0.01em;">✦ Mes Tâches</div>
+      <div id="fb-title" style="font-size:10px;font-family:'Lora',serif;color:rgba(255,255,255,0.5);letter-spacing:0.12em;font-weight:400;">CONNEXION</div>
+    </div>
+
+    <!-- Corps -->
+    <div style="padding:28px 32px 24px;">
+
+      <div style="margin-bottom:16px;">
+        <label style="font-size:9px;font-family:'Lora',serif;color:#102A63;display:block;margin-bottom:5px;font-weight:700;letter-spacing:0.08em;">EMAIL</label>
+        <input id="fb-email" type="email" required placeholder="votre@email.com"
+          onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
+          style="border:1.5px solid #E2E8F0;border-radius:10px;padding:11px 14px;font-size:14px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#1E293B;background:#F8FAFC;transition:border-color 0.15s;"
+          onfocus="this.style.borderColor='#102A63';this.style.background='white'"
+          onblur="this.style.borderColor='#E2E8F0';this.style.background='#F8FAFC'"/>
       </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:11px;font-family:'DM Mono',monospace;color:#888;display:block;margin-bottom:4px">EMAIL</label>
-        <input id="fb-email" type="email" required placeholder="votre@email.com" onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
-          style="border:1px solid #E8E8E8;border-radius:8px;padding:10px 12px;font-size:16px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#2C3E50;background:#FAFAFA"/>
+
+      <div style="margin-bottom:20px;">
+        <label style="font-size:9px;font-family:'Lora',serif;color:#102A63;display:block;margin-bottom:5px;font-weight:700;letter-spacing:0.08em;">MOT DE PASSE</label>
+        <input id="fb-password" type="password" required placeholder="••••••••" minlength="6"
+          onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
+          style="border:1.5px solid #E2E8F0;border-radius:10px;padding:11px 14px;font-size:14px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#1E293B;background:#F8FAFC;"
+          onfocus="this.style.borderColor='#102A63';this.style.background='white'"
+          onblur="this.style.borderColor='#E2E8F0';this.style.background='#F8FAFC'"/>
       </div>
-      <div style="margin-bottom:16px">
-        <label style="font-size:11px;font-family:'DM Mono',monospace;color:#888;display:block;margin-bottom:4px">MOT DE PASSE</label>
-        <input id="fb-password" type="password" required placeholder="••••••••" minlength="6" onkeydown="if(event.key==='Enter')fbSubmit(_fbIsRegister)"
-          style="border:1px solid #E8E8E8;border-radius:8px;padding:10px 12px;font-size:16px;outline:none;width:100%;box-sizing:border-box;font-family:'Lora',serif;color:#2C3E50;background:#FAFAFA"/>
-      </div>
-      <div id="fb-error" style="display:none;background:#FEE2E2;border-radius:8px;padding:8px 12px;font-size:12px;color:#B91C1C;font-family:'DM Mono',monospace;margin-bottom:12px"></div>
+
+      <div id="fb-error" style="display:none;background:#FEE2E2;border-radius:8px;padding:9px 13px;font-size:11px;color:#B91C1C;font-family:'Lora',serif;margin-bottom:14px;"></div>
+
       <button id="fb-btn" onclick="fbSubmit(false)"
-        style="border:none;border-radius:8px;padding:11px 16px;font-size:13px;cursor:pointer;background:#102A63;color:white;font-family:'DM Mono',monospace;letter-spacing:0.04em;width:100%;margin-bottom:12px;touch-action:manipulation">
+        style="border:none;border-radius:10px;padding:13px 16px;font-size:13px;cursor:pointer;background:linear-gradient(135deg,#102A63 0%,#1a3d8f 100%);color:white;font-family:'Lora',serif;font-weight:700;letter-spacing:0.04em;width:100%;margin-bottom:16px;box-shadow:0 4px 14px rgba(16,42,99,0.35);touch-action:manipulation;transition:opacity 0.15s;"
+        onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
         → Se connecter
       </button>
-      <div style="text-align:center;margin-bottom:6px">
+
+      <div style="text-align:center;margin-bottom:4px;">
         <button onclick="fbResetPassword()"
-          style="border:none;background:none;font-size:11px;color:#AAA;cursor:pointer;font-family:'Lora',serif;text-decoration:underline;touch-action:manipulation">
+          style="border:none;background:none;font-size:11px;color:#94A3B8;cursor:pointer;font-family:'Lora',serif;text-decoration:none;touch-action:manipulation;transition:color 0.15s;"
+          onmouseover="this.style.color='#102A63'" onmouseout="this.style.color='#94A3B8'">
           Mot de passe oublié ?
         </button>
       </div>
-      <div style="text-align:center">
+      <div style="text-align:center;">
         <button id="fb-toggle" onclick="toggleMode()"
-          style="border:none;background:none;font-size:12px;color:#102A63;cursor:pointer;font-family:'DM Mono',monospace;text-decoration:underline;touch-action:manipulation">
+          style="border:none;background:none;font-size:11px;color:#102A63;cursor:pointer;font-family:'Lora',serif;font-weight:600;text-decoration:none;touch-action:manipulation;">
           Pas encore de compte → S'inscrire
         </button>
       </div>
@@ -14308,7 +14332,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.561{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.562{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
