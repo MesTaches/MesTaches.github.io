@@ -1154,7 +1154,7 @@ function CotationView({ settings }) {
           </div>
         </div>
       )}
-      {modal!==null&&<CotationModal cotation={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
+      {modal!==null&&<CotationModalNew cotation={modal} onSave={handleSave} onClose={()=>setModal(null)} />}
     </div>
   );
 }
@@ -11396,7 +11396,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   });
 };
 
-function CotationModal({ cotation, onSave, onClose }) {
+function CotationModalNew({ cotation, onSave, onClose }) {
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState(() => {
     const base = { priority:"normal", clientName:"", clientCode:"", requestDate:today0,
@@ -14473,7 +14473,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.550{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.551{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
