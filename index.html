@@ -14244,6 +14244,14 @@ function App() {
   const isMobile = useIsMobile();
   const closeDailySummary = () => { try { localStorage.setItem("taskmanager_daily_summary_last", new Date().toISOString().split("T")[0]); } catch(e) {} setShowDailySummary(false); };
 
+  React.useEffect(() => {
+    const hk = e => {
+      if ((e.metaKey||e.ctrlKey) && e.key==="k") { e.preventDefault(); setShowSearch(p=>!p); }
+      if (e.key==="Escape") setShowSearch(false);
+    };
+    window.addEventListener("keydown", hk);
+    return () => window.removeEventListener("keydown", hk);
+  }, []);
   useEffect(() => {
     (async () => {
       await migrateAllToIDB();
@@ -14622,7 +14630,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.576{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.577{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -14839,16 +14847,6 @@ function App() {
     }
     window._doMount = doMount;
     if (window._pendingMount) doMount();
-  
-ount) doMount();
-  React.useEffect(() => {
-    const hk = e => {
-      if ((e.metaKey||e.ctrlKey) && e.key==="k") { e.preventDefault(); setShowSearch(p=>!p); }
-      if (e.key==="Escape") setShowSearch(false);
-    };
-    window.addEventListener("keydown", hk);
-    return () => window.removeEventListener("keydown", hk);
-  }, []);
   
 </script>
 <script>
