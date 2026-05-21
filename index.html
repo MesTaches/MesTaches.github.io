@@ -14622,7 +14622,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.575{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.576{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -14653,6 +14653,7 @@ function App() {
           )}
           {/* Bouton + adapté selon la vue */}
           {view !== "dev" && (
+            <>
             <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               + {isMobile ? "" : "Nouvelle tâche"}
             </button>
@@ -14663,6 +14664,7 @@ function App() {
                 fontSize:11, fontFamily:"'Lora',serif", flexShrink:0, minHeight:32 }}>
               🔍 {!isMobile && <span style={{fontSize:9,color:"#CBD5E1",fontFamily:"'DM Mono',monospace",border:"1px solid #E2E8F0",borderRadius:4,padding:"1px 5px",marginLeft:2}}>⌘K</span>}
             </button>
+            </>
           )}
         </div>
 
