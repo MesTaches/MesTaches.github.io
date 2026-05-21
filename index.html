@@ -13935,105 +13935,6 @@ function Tasks2View({ fullscreen, onToggleFullscreen }) {
   );
 }
 
-/* ─── APP ─── */
-
-function GlobalSearch({ tasks, settings, onNavigate }) {
-  const [open, setOpen] = React.useState(false);
-  const [query, setQuery] = React.useState("");
-  const inputRef = React.useRef(null);
-
-  const getMeetings = () => { try { return JSON.parse(localStorage.getItem("taskmanager_meetings_v1") || "[]"); } catch { return []; } };
-  const getCotations = () => { try { return JSON.parse(localStorage.getItem("taskmanager_cotations") || "[]"); } catch { return []; } };
-  const getClients = () => { try { return JSON.parse(localStorage.getItem("taskmanager_suivi_clients") || "[]"); } catch { return []; } };
-
-  React.useEffect(() => {
-    const handler = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "f") { e.preventDefault(); setOpen(true); }
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, []);
-
-  React.useEffect(() => {
-    if (open && inputRef.current) setTimeout(() => inputRef.current.focus(), 50);
-  }, [open]);
-
-  const results = React.useMemo(() => {
-    if (!query.trim() || query.length < 2) return [];
-    const q = query.toLowerCase();
-    const out = [];
-
-    tasks.filter(t => (t.title||"").toLowerCase().includes(q) || (t.notes||"").toLowerCase().includes(q)).slice(0,5).forEach(t => {
-      out.push({ type: "Tâche", icon: "✦", label: t.title, sub: t.category + (t.dueDate ? " · " + t.dueDate : ""), view: "tasks", id: t.id });
-    });
-
-    getMeetings().filter(m => (m.title||"").toLowerCase().includes(q) || (m.agenda||"").toLowerCase().includes(q) || (m.participants||"").toLowerCase().includes(q)).slice(0,3).forEach(m => {
-      out.push({ type: "Réunion", icon: "◷", label: m.title || "Sans titre", sub: m.date || "", view: "meetings" });
-    });
-
-    getCotations().filter(c => (c.clientName||"").toLowerCase().includes(q) || (c.clientCode||"").toLowerCase().includes(q) || (c.requester||"").toLowerCase().includes(q)).slice(0,3).forEach(c => {
-      out.push({ type: "Cotation", icon: "◎", label: c.clientName || "Sans nom", sub: c.clientCode + " · " + (c.status||""), view: "cotation" });
-    });
-
-    getClients().filter(c => (c.clientName||"").toLowerCase().includes(q) || (c.code||"").toLowerCase().includes(q)).slice(0,3).forEach(c => {
-      out.push({ type: "Suivi client", icon: "◈", label: c.clientName || "Sans nom", sub: c.code || "", view: "suiviclient" });
-    });
-
-    return out;
-  }, [query, tasks]);
-
-  if (!open) return (
-    <button onClick={() => setOpen(true)} title="Recherche globale (Ctrl+F)"
-      style={{ border: "none", background: "none", fontSize: 18, cursor: "pointer", color: "#888", padding: "4px 6px", flexShrink: 0 }}>
-      🔍
-    </button>
-  );
-
-  return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: 80 }}
-      onClick={() => { setOpen(false); setQuery(""); }}>
-      <div style={{ background: "white", borderRadius: 14, width: "100%", maxWidth: 560, boxShadow: "0 20px 60px rgba(0,0,0,0.2)", overflow: "hidden" }}
-        onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderBottom: "1px solid #F0F0F0", gap: 10 }}>
-          <span style={{ fontSize: 16 }}>🔍</span>
-          <input ref={inputRef} value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Rechercher dans tâches, réunions, cotations, suivi clients…"
-            style={{ flex: 1, border: "none", outline: "none", fontSize: 14, fontFamily: "'Lora',serif", color: "#2C3E50" }} />
-          <span style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", cursor: "pointer" }} onClick={() => { setOpen(false); setQuery(""); }}>Échap</span>
-        </div>
-        {results.length === 0 && query.length >= 2 && (
-          <div style={{ padding: 24, textAlign: "center", color: "#AAA", fontSize: 13, fontFamily: "'Lora',serif" }}>Aucun résultat pour « {query} »</div>
-        )}
-        {results.length === 0 && query.length < 2 && (
-          <div style={{ padding: "16px 20px" }}>
-            {[["✦","Tâches"],["◷","Réunions"],["◎","Cotations"],["◈","Suivi clients"]].map(([icon,label]) => (
-              <span key={label} style={{ display: "inline-flex", alignItems: "center", gap: 4, marginRight: 12, fontSize: 12, color: "#888", fontFamily: "'DM Mono',monospace" }}>{icon} {label}</span>
-            ))}
-          </div>
-        )}
-        {results.length > 0 && (
-          <div style={{ maxHeight: 360, overflowY: "auto" }}>
-            {results.map((r, i) => (
-              <div key={i} onClick={() => { onNavigate(r.view); setOpen(false); setQuery(""); }}
-                style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", cursor: "pointer", borderBottom: "1px solid #F8F8F8" }}
-                onMouseEnter={e => e.currentTarget.style.background="#F7F6F3"}
-                onMouseLeave={e => e.currentTarget.style.background="white"}>
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{r.icon}</span>
-                <div style={{ flex: 1, overflow: "hidden" }}>
-                  <div style={{ fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</div>
-                  <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{r.sub}</div>
-                </div>
-                <span style={{ fontSize: 10, background: "#F0F0F0", color: "#888", borderRadius: 4, padding: "2px 7px", fontFamily: "'DM Mono',monospace", flexShrink: 0 }}>{r.type}</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function PaymentsView({ settings }) {
   const [payments, setPayments] = React.useState([]);
   const [payReady, setPayReady] = React.useState(false);
@@ -14721,7 +14622,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.574{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.575{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
