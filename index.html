@@ -13498,6 +13498,7 @@ function SuiviClientView({ settings }) {
           </> : <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", fontFamily:_FL }}><div style={{ fontSize:40, marginBottom:12, opacity:0.2 }}>◈</div><div style={{ fontSize:14, color:"#AAA" }}>Sélectionnez un client pour afficher son suivi</div><div style={{ fontSize:11, color:"#CCC", marginTop:6 }}>Les notes sont sauvegardées automatiquement</div></div>}
         </div>
       </div>
+      )} {/* fin ternaire mobile/desktop */}
       {deletedClient && <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9998, background:"#2C3E50", color:"white", borderRadius:12, padding:"12px 20px", boxShadow:"0 8px 24px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:16, fontFamily:_DM, fontSize:12 }}><span><strong>{deletedClient.clientName}</strong> supprimé</span><button onClick={undoDelete} style={{ background:"#27AE60", border:"none", borderRadius:6, color:"white", padding:"5px 12px", fontSize:11, cursor:"pointer", fontFamily:_DM, fontWeight:700 }}>Annuler</button><button onClick={()=>setDeletedClient(null)} style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", cursor:"pointer", fontSize:16, padding:0 }}>×</button></div>}
       {suiviDupAlert && (
         <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:2100,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(4px)" }}>
@@ -13516,7 +13517,6 @@ function SuiviClientView({ settings }) {
             </div>
           </div>
         </div>
-      )} {/* fin ternaire mobile/desktop */}
       {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
       {quickOpen && <QuickCapture />}
     </div>
@@ -14720,7 +14720,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.572{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.573{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
