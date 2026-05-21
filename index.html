@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
   <meta name="app-version" content="v547-1779107496"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -454,6 +454,7 @@ function ModalSection({title, children}) {
 
 function CotationForm1779117410({ cotation, onSave, onClose }) {
   console.log("CotationForm v558 CALLED", cotation?.id || "new");
+    const isMobile = useIsMobile();
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState(() => {
     const base = { priority:"normal", clientName:"", clientCode:"", requestDate:today0,
@@ -480,10 +481,10 @@ function CotationForm1779117410({ cotation, onSave, onClose }) {
   );
 
   return (
-    <div data-modal="cotation-v550" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+    <div data-modal="cotation-v550" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
       onMouseDown={e=>{if(e.target===e.currentTarget) e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{width:"min(680px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+      <div style={{width:isMobile?"100%":"min(680px,96vw)",background:"white",borderRadius:isMobile?"20px 20px 0 0":16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
 
         <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
@@ -961,7 +962,7 @@ function SubStatusSelect({ value, onChange }) {
 
 /* ── CotationView (calquée sur TasksView) ── */
 function CotationView({ settings }) {
-  console.log("CotationView v558 RUNNING");
+  const isMobile = useIsMobile();
   const [cotations, setCotations] = React.useState([]);
   const [cotReady, setCotReady] = React.useState(false);
   React.useEffect(()=>{ appDbGet("cotations").then(v=>{if(v&&Array.isArray(v))setCotations(v);setCotReady(true);}).catch(()=>setCotReady(true)); },[]);
@@ -970,6 +971,7 @@ function CotationView({ settings }) {
   const [noteModal, setNoteModal] = React.useState(null);
   const [search, setSearch]       = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("Tous");
+  React.useEffect(() => setPage(1), [filterStatus, filterLabel, search, sortCol, sortDir]);
   const [filterLabel,  setFilterLabel]  = React.useState("Toutes");
   const [sortCol,  setSortCol]  = React.useState(null);
   const [sortDir,  setSortDir]  = React.useState("asc");
@@ -978,6 +980,8 @@ function CotationView({ settings }) {
   const [dupAlert, setDupAlert]         = React.useState(null);
   const [undoCot, setUndoCot]           = React.useState(null);
   const undoCotTimerRef                 = React.useRef(null);
+  const [page, setPage]                 = React.useState(1);
+  const PAGE_SIZE                       = 25;
   const [showTrashCot, setShowTrashCot] = React.useState(false);
   const [trashCot, setTrashCot] = useAppStore("trash_cotations", []);
   const saveTrashCot = t => { try { localStorage.setItem("cotation_trash_v1", JSON.stringify(t)); } catch {} };
@@ -1114,7 +1118,42 @@ function CotationView({ settings }) {
         </span>
       </div>
 
-      {/* ── Tableau ── */}
+      {/* ── Tableau / Cards ── */}
+      {isMobile ? (
+        <div style={{padding:"8px 12px",display:"flex",flexDirection:"column",gap:8}}>
+          {displayed.length===0 && <div style={{textAlign:"center",color:"#CCC",padding:"40px 0",fontFamily:_FL,fontSize:13}}>Aucune demande</div>}
+          {paginated.map(c=>{
+            const prio = COT_PRIOS.find(p=>p.id===c.priority)||COT_PRIOS[0];
+            const stat = COT_STATUSES.find(s=>s.id===c.status)||COT_STATUSES[0];
+            const lbl  = COT_LABELS.find(l=>l.id===c.label);
+            return (
+              <div key={c.id} onClick={()=>setModal(c)}
+                style={{background:c.pinned?"#FFFBEB":"white",borderRadius:12,padding:"12px 14px",
+                  border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",position:"relative"}}>
+                {c.pinned && <span style={{position:"absolute",top:10,right:10,fontSize:12}}>📌</span>}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:10,fontWeight:700,color:prio.color,background:prio.bg,borderRadius:20,padding:"2px 8px",fontFamily:_DM}}>{prio.label}</span>
+                  <span style={{fontSize:10,fontWeight:600,color:stat.color,background:stat.bg,borderRadius:20,padding:"2px 8px",fontFamily:_DM}}>{stat.label}</span>
+                  {lbl && <span style={{fontSize:10,color:lbl.color,background:lbl.bg,borderRadius:20,padding:"2px 8px",fontFamily:_DM,border:`1px solid ${lbl.color}30`}}>{lbl.label}</span>}
+                </div>
+                <div style={{fontSize:14,fontWeight:700,color:"#1E293B",fontFamily:_FL,marginBottom:4}}>{c.clientName||"—"}</div>
+                <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                  {c.clientCode && <span style={{fontSize:11,color:"#94A3B8",fontFamily:_DM}}>{c.clientCode}</span>}
+                  {c.requester && <span style={{fontSize:11,color:"#64748B",fontFamily:_FL}}>👤 {c.requester}</span>}
+                  {c.requestDate && <span style={{fontSize:11,color:"#94A3B8",fontFamily:_DM}}>{c.requestDate.split("-").reverse().join("/")}</span>}
+                </div>
+                {(c.need||c.authorizedAmount||c.obtainedAmount) && (
+                  <div style={{display:"flex",gap:12,marginTop:8,paddingTop:8,borderTop:"1px solid #F1F5F9"}}>
+                    {c.authorizedAmount && <div style={{fontSize:11,fontFamily:_DM}}><span style={{color:"#94A3B8",fontSize:9}}>ENCOURS </span><span style={{fontWeight:700,color:"#102A63"}}>{Number(c.authorizedAmount).toLocaleString("fr-FR")} €</span></div>}
+                    {c.need && <div style={{fontSize:11,fontFamily:_DM}}><span style={{color:"#94A3B8",fontSize:9}}>BESOIN </span><span style={{fontWeight:700,color:"#102A63"}}>{Number(c.need).toLocaleString("fr-FR")} €</span></div>}
+                    {c.obtainedAmount && <div style={{fontSize:11,fontFamily:_DM}}><span style={{color:"#94A3B8",fontSize:9}}>OBTENU </span><span style={{fontWeight:700,color:"#27AE60"}}>{Number(c.obtainedAmount).toLocaleString("fr-FR")} €</span></div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div style={{ overflowX:"auto", background:"white", borderTop:"1px solid #ECEAE5" }}>
         {/* Header */}
         <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"0 8px", background:"#102A63", minWidth:"max-content", alignItems:"center", borderBottom:"1px solid #0A1F50", height:25 }}>
@@ -1149,7 +1188,7 @@ function CotationView({ settings }) {
               <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <button onClick={e=>{e.stopPropagation();handlePin(c.id);}}
                   title={c.pinned?"Désépingler":"Épingler"}
-                  style={{border:"none",background:"none",cursor:"pointer",fontSize:11,padding:0,opacity:c.pinned?1:0.3,lineHeight:1}}>
+                  style={{border:"none",background:"none",cursor:"pointer",fontSize:11,padding:"4px",opacity:c.pinned?1:0.3,lineHeight:1,minWidth:28,minHeight:28}}>
                   📌
                 </button>
               </div>
@@ -1199,6 +1238,26 @@ function CotationView({ settings }) {
           );
         })}
 
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"8px 0",borderTop:"1px solid #F1F5F9",background:"white"}}>
+            <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+              style={{border:"1px solid #E2E8F0",borderRadius:6,padding:"4px 10px",cursor:page===1?"not-allowed":"pointer",color:page===1?"#CBD5E1":"#102A63",background:"white",fontSize:11,fontFamily:_FL}}>‹ Préc.</button>
+            {Array.from({length:totalPages},(_,i)=>i+1).filter(p=>p===1||p===totalPages||Math.abs(p-page)<=1).map((p,i,arr)=>(
+              <React.Fragment key={p}>
+                {i>0 && arr[i-1]!==p-1 && <span style={{color:"#CBD5E1",fontFamily:_DM}}>…</span>}
+                <button onClick={()=>setPage(p)}
+                  style={{border:p===page?"2px solid #102A63":"1px solid #E2E8F0",borderRadius:6,padding:"4px 8px",cursor:"pointer",
+                    color:p===page?"white":"#64748B",background:p===page?"#102A63":"white",fontSize:11,fontFamily:_DM,minWidth:28}}>
+                  {p}
+                </button>
+              </React.Fragment>
+            ))}
+            <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+              style={{border:"1px solid #E2E8F0",borderRadius:6,padding:"4px 10px",cursor:page===totalPages?"not-allowed":"pointer",color:page===totalPages?"#CBD5E1":"#102A63",background:"white",fontSize:11,fontFamily:_FL}}>Suiv. ›</button>
+          </div>
+        )}
+
         {/* Footer totaux */}
         {displayed.length>0&&(
           <div style={{ display:"grid", gridTemplateColumns:gridTpl, padding:"5px 8px", background:"#F8F9FB", borderTop:"2px solid #ECEAE5", minWidth:"max-content", alignItems:"center" }}>
@@ -1210,6 +1269,8 @@ function CotationView({ settings }) {
           </div>
         )}
       </div>
+
+      )} {/* fin ternaire mobile/desktop */}
 
       {/* Modal note */}
       {noteModal&&(
@@ -2692,8 +2753,171 @@ function MobileTaskCard({ task, onToggle, onEdit, onDelete, onSaveComment, setti
 }
 
 /* ─── DASHBOARD ─── */
+/* ── GlobalSearch : recherche dans toutes les collections ── */
+function GlobalSearch({ onClose, onNavigate }) {
+  const [q, setQ] = React.useState("");
+  const [results, setResults] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (inputRef.current) inputRef.current.focus();
+  }, []);
+
+  React.useEffect(() => {
+    if (q.trim().length < 2) { setResults([]); return; }
+    setLoading(true);
+    const term = q.toLowerCase();
+
+    Promise.all([
+      appDbGet("tasks").catch(()=>[]),
+      appDbGet("cotations").catch(()=>[]),
+      appDbGet("payments").catch(()=>[]),
+      appDbGet("suivi_clients").catch(()=>[]),
+      appDbGet("contentieux").catch(()=>[]),
+      appDbGet("echeancier").catch(()=>[]),
+    ]).then(([tasks, cots, pays, suivis, cx, ech]) => {
+      const R = [];
+
+      // Tâches
+      (tasks||[]).forEach(t => {
+        if ([t.title,t.description,t.category].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"task", icon:"☰", label:t.title||"Sans titre",
+            sub: t.category||"", id:t.id, view:"tasks" });
+        }
+      });
+
+      // Cotations
+      (cots||[]).forEach(c => {
+        if ([c.clientName,c.clientCode,c.requester,c.notes].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"cotation", icon:"◎", label:c.clientName||"Sans nom",
+            sub:c.status||"", id:c.id, view:"cotation" });
+        }
+      });
+
+      // Paiements
+      (pays||[]).forEach(p => {
+        if ([p.supplier,p.requester,p.notes].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"payment", icon:"⬡", label:p.supplier||"Sans nom",
+            sub:p.status||"", id:p.id, view:"payments" });
+        }
+      });
+
+      // Suivi clients
+      (suivis||[]).forEach(s => {
+        if ([s.clientName,s.clientCode,s.description].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"suivi", icon:"◈", label:s.clientName||"Sans nom",
+            sub:s.suiviType||"", id:s.id, view:"suiviclient" });
+        }
+      });
+
+      // Contentieux
+      (Array.isArray(cx)?cx:(cx?.dossiers||[])).forEach(d => {
+        if ([d.reference,d.clientName,d.description].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"contentieux", icon:"⚖", label:d.clientName||d.reference||"Dossier",
+            sub:d.reference||"", id:d.id, view:"contentieux" });
+        }
+      });
+
+      // Emprunts
+      (Array.isArray(ech)?ech:(ech?.dossiers||[])).forEach(d => {
+        if ([d.intitule,d.banque,d.numContrat,d.objet].some(v=>(v||"").toLowerCase().includes(term))) {
+          R.push({ type:"emprunt", icon:"▦", label:d.intitule||d.banque||"Emprunt",
+            sub:d.banque||"", id:d.id, view:"echeancier" });
+        }
+      });
+
+      setResults(R.slice(0, 20));
+      setLoading(false);
+    });
+  }, [q]);
+
+  const TYPE_COLORS = {
+    task:"#102A63", cotation:"#1D4ED8", payment:"#065F46",
+    suivi:"#92400E", contentieux:"#C0392B", emprunt:"#7C3AED"
+  };
+  const TYPE_LABELS = {
+    task:"Tâche", cotation:"Cotation", payment:"Paiement",
+    suivi:"Suivi client", contentieux:"Contentieux", emprunt:"Emprunt"
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:5000,display:"flex",alignItems:"flex-start",justifyContent:"center",paddingTop:"10vh",backdropFilter:"blur(4px)"}}
+      onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{width:"min(600px,96vw)",background:"white",borderRadius:16,overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.3)"}}>
+
+        {/* Barre de recherche */}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid #F1F5F9"}}>
+          <span style={{fontSize:18,color:"#94A3B8"}}>🔍</span>
+          <input ref={inputRef} value={q} onChange={e=>setQ(e.target.value)}
+            placeholder="Rechercher dans toutes les données…"
+            onKeyDown={e=>{ if(e.key==="Escape") onClose(); }}
+            style={{flex:1,border:"none",outline:"none",fontSize:15,fontFamily:_FL,color:"#1E293B",background:"transparent"}} />
+          {q && <button onClick={()=>setQ("")} style={{border:"none",background:"none",color:"#94A3B8",cursor:"pointer",fontSize:18,padding:0}}>×</button>}
+          <kbd style={{fontSize:10,color:"#94A3B8",border:"1px solid #E2E8F0",borderRadius:4,padding:"1px 5px",fontFamily:_DM}}>Esc</kbd>
+        </div>
+
+        {/* Résultats */}
+        <div style={{maxHeight:"60vh",overflowY:"auto"}}>
+          {q.trim().length < 2 && (
+            <div style={{padding:"24px 16px",textAlign:"center",color:"#94A3B8",fontFamily:_FL,fontSize:13}}>
+              Tapez au moins 2 caractères pour chercher
+            </div>
+          )}
+          {loading && q.trim().length >= 2 && (
+            <div style={{padding:"24px 16px",textAlign:"center",color:"#94A3B8",fontFamily:_FL,fontSize:13}}>Recherche…</div>
+          )}
+          {!loading && q.trim().length >= 2 && results.length === 0 && (
+            <div style={{padding:"24px 16px",textAlign:"center",color:"#94A3B8",fontFamily:_FL,fontSize:13}}>
+              Aucun résultat pour "{q}"
+            </div>
+          )}
+          {results.map((r,i) => (
+            <div key={i} onClick={()=>{ onNavigate(r.view); onClose(); }}
+              style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",cursor:"pointer",borderBottom:"1px solid #F8FAFC",transition:"background 0.1s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
+              onMouseLeave={e=>e.currentTarget.style.background="white"}>
+              <div style={{width:32,height:32,borderRadius:8,background:TYPE_COLORS[r.type]||"#888",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:14,color:"white"}}>
+                {r.icon}
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:"#1E293B",fontFamily:_FL,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.label}</div>
+                <div style={{fontSize:11,color:"#94A3B8",fontFamily:_DM}}>{TYPE_LABELS[r.type]}{r.sub?" · "+r.sub:""}</div>
+              </div>
+              <span style={{fontSize:10,color:"#CBD5E1",fontFamily:_DM}}>→</span>
+            </div>
+          ))}
+        </div>
+
+        {results.length > 0 && (
+          <div style={{padding:"8px 16px",borderTop:"1px solid #F1F5F9",fontSize:10,color:"#94A3B8",fontFamily:_DM}}>
+            {results.length} résultat{results.length>1?"s":""}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function Dashboard({ tasks, onNavigate, settings }) {
   const isMobile = useIsMobile();
+  const [finData, setFinData] = React.useState({ cots:[], pays:[], cx:[], ech:[] });
+  React.useEffect(() => {
+    Promise.all([
+      appDbGet("cotations").catch(()=>[]),
+      appDbGet("payments").catch(()=>[]),
+      appDbGet("contentieux").catch(()=>[]),
+      appDbGet("echeancier").catch(()=>[]),
+    ]).then(([cots, pays, cx, ech]) => {
+      setFinData({
+        cots: Array.isArray(cots) ? cots : [],
+        pays: Array.isArray(pays) ? pays : [],
+        cx: Array.isArray(cx) ? cx : (cx?.dossiers||[]),
+        ech: Array.isArray(ech) ? ech : (ech?.dossiers||[]),
+      });
+    });
+  }, []);
   const active  = tasks.filter(t => !t.completed);
   const overdue = active.filter(t => isOverdue(t.dueDate));
   const todayT  = active.filter(t => isToday(t.dueDate));
@@ -2848,6 +3072,63 @@ function Dashboard({ tasks, onNavigate, settings }) {
         </div>;
       })}
     </div>}
+
+    {/* ── Section Finance ── */}
+    {(finData.cots.length>0 || finData.pays.length>0 || finData.cx.length>0 || finData.ech.length>0) && (
+      <div style={{background:"white",borderRadius:14,padding:isMobile?"12px 14px":"16px 20px",border:"1px solid #ECEAE5"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#102A63",fontFamily:_FL,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>💼</span> Finance
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:10}}>
+          {/* Cotations actives */}
+          <div onClick={()=>onNavigate("cotation")} style={{cursor:"pointer",background:"#EFF6FF",borderRadius:10,padding:"10px 12px",border:"1px solid #BFDBFE"}}>
+            <div style={{fontSize:10,color:"#1D4ED8",fontFamily:_FL,fontWeight:700,marginBottom:4}}>COTATIONS ACTIVES</div>
+            <div style={{fontSize:22,fontWeight:700,color:"#1D4ED8",fontFamily:_DM}}>
+              {finData.cots.filter(c=>!["done","refused"].includes(c.status)).length}
+            </div>
+            <div style={{fontSize:10,color:"#93C5FD",fontFamily:_DM}}>
+              {finData.cots.filter(c=>c.obtainedAmount>0).length} obtenu{finData.cots.filter(c=>c.obtainedAmount>0).length>1?"s":""}
+            </div>
+          </div>
+
+          {/* Paiements en attente */}
+          <div onClick={()=>onNavigate("payments")} style={{cursor:"pointer",background:"#F0FDF4",borderRadius:10,padding:"10px 12px",border:"1px solid #86EFAC"}}>
+            <div style={{fontSize:10,color:"#15803D",fontFamily:_FL,fontWeight:700,marginBottom:4}}>PAIEMENTS EN ATTENTE</div>
+            <div style={{fontSize:22,fontWeight:700,color:"#15803D",fontFamily:_DM}}>
+              {finData.pays.filter(p=>p.status==="pending"||p.status==="approved").length}
+            </div>
+            <div style={{fontSize:10,color:"#86EFAC",fontFamily:_DM}}>
+              {finData.pays.filter(p=>p.status==="paid").length} réglé{finData.pays.filter(p=>p.status==="paid").length>1?"s":""}
+            </div>
+          </div>
+
+          {/* Contentieux actifs */}
+          <div onClick={()=>onNavigate("contentieux")} style={{cursor:"pointer",background:"#FEF2F2",borderRadius:10,padding:"10px 12px",border:"1px solid #FECACA"}}>
+            <div style={{fontSize:10,color:"#C0392B",fontFamily:_FL,fontWeight:700,marginBottom:4}}>CONTENTIEUX ACTIFS</div>
+            <div style={{fontSize:22,fontWeight:700,color:"#C0392B",fontFamily:_DM}}>
+              {finData.cx.filter(d=>!d.closed).length}
+            </div>
+            <div style={{fontSize:10,color:"#FCA5A5",fontFamily:_DM}}>
+              {finData.cx.length} dossier{finData.cx.length>1?"s":""}
+            </div>
+          </div>
+
+          {/* Emprunts */}
+          <div onClick={()=>onNavigate("echeancier")} style={{cursor:"pointer",background:"#F5F3FF",borderRadius:10,padding:"10px 12px",border:"1px solid #DDD6FE"}}>
+            <div style={{fontSize:10,color:"#7C3AED",fontFamily:_FL,fontWeight:700,marginBottom:4}}>EMPRUNTS</div>
+            <div style={{fontSize:22,fontWeight:700,color:"#7C3AED",fontFamily:_DM}}>
+              {finData.ech.length}
+            </div>
+            <div style={{fontSize:10,color:"#C4B5FD",fontFamily:_DM}}>
+              {finData.ech.filter(d=>{
+                const lastLine = (d.lignes||[]).filter(l=>!l.estVersement).slice(-1)[0];
+                return lastLine && (lastLine.capitalRestant||0) > 0;
+              }).length} en cours
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
 
   </div>;
 }
@@ -4193,6 +4474,7 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
     { id:"cancelled", name:"Annulé",     color:"#92400E", bg:"#F5E6DC" },
   ];
 
+    const isMobile = useIsMobile();
   const [d, setD] = useState({ ...task, category: task.category||"", type: task.type||"", status: task.status||"backlog", labels: task.labels||[], subtasks: task.subtasks||[] });
   const addDevSub = () => setD(prev => ({...prev, subtasks: [...(prev.subtasks||[]), {id: String(Date.now()), text:"", status:"todo", completed:false}]}));
   const updDevSub = (sub) => setD(prev => ({...prev, subtasks: prev.subtasks.map(x => x.id===sub.id ? sub : x)}));
@@ -4215,10 +4497,10 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
   }, [showLabelPicker]);
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)" }}
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",backdropFilter:"blur(3px)" }}
       onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{ background:"white",borderRadius:16,width:"100%",maxWidth:560,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
+      <div style={{ background:"white",borderRadius:16,width:"min(560px,96vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
 
         <div style={{ background:"linear-gradient(135deg,#C2410C 0%,#EA580C 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0 }}>
           <div>
@@ -4339,6 +4621,7 @@ function DevTaskModal({ task, devSettings, onSave, onClose }) {
 ═══════════════════════════════════════════════ */
 
 function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
+    const isMobile = useIsMobile();
   const isNew = !dossier.reference && !dossier.clientName;
   const [d, setD] = useState({
     reference:"", clientName:"", montant:"", category:"", type:"",
@@ -4419,7 +4702,7 @@ function ContentieuxDossierModal({ dossier, cSettings, onSave, onClose }) {
       onMouseUp={handleOverlayMouseUp}>
       <div
         onMouseDown={handlePanelMouseDown}
-        style={{ background:"white",borderRadius:16,width:"100%",maxWidth:640,maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
+        style={{ background:"white",borderRadius:isMobile?"20px 20px 0 0":16,width:isMobile?"100%":"min(640px,96vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)",overflow:"hidden" }}>
 
         <div style={{background:`linear-gradient(135deg,${catAccent} 0%,${catAccent}CC 100%)`,padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
@@ -4729,6 +5012,7 @@ function ContentieuxSettingsPanel({ cSettings, onSave, onClose }) {
 }
 
 function ContentieuxView() {
+  const isMobile = useIsMobile();
   const uid_fn = () => Math.random().toString(36).substr(2,9);
   const [cSettings, setCSettings] = useState(() => loadContentieuxSettings());
   const [dossiers, setDossiers, cxReady] = useAppStore("contentieux", []);
@@ -6137,6 +6421,7 @@ function ReportTaskRow({ task, onUpdate, onDelete, depth, onAddSubtask }) {
 
 /* ── ReportModal ── */
 function ReportModal({ report, onSave, onClose }) {
+    const isMobile = useIsMobile();
   const empty = {
     id: uid(), name: "", type: "", status: "project",
     description: "", createdAt: today(), publishedAt: "",
@@ -6195,10 +6480,10 @@ function ReportModal({ report, onSave, onClose }) {
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
       onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{width:"min(960px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+      <div style={{width:isMobile?"100%":"min(960px,96vw)",background:"white",borderRadius:isMobile?"20px 20px 0 0":16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
 
         <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
@@ -6554,6 +6839,7 @@ function loadPayments() { return []; } // replaced by useAppStore
 function savePayments(p) { appDbSet("payments", p); }
 
 function PaymentModal({ payment, onSave, onClose, settings }) {
+    const isMobile = useIsMobile();
   const [d, setD] = React.useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", priority: "normal", isClientSupplier: false, notes: "" });
   const [amountDisplay, setAmountDisplay] = React.useState(payment && payment.amount ? fmtAmountInput(payment.amount) : "");
 
@@ -6574,10 +6860,10 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
   );
 
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
       onMouseDown={e=>{if(e.target===e.currentTarget) e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{width:"min(580px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+      <div style={{width:isMobile?"100%":"min(580px,96vw)",background:"white",borderRadius:isMobile?"20px 20px 0 0":16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
 
         <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
@@ -7238,6 +7524,40 @@ async function exportCBPDF(d) {
       .header{background-color:#102A63 !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
       thead tr{background-color:#102A63 !important;-webkit-print-color-adjust:exact !important;print-color-adjust:exact !important}
     }
+
+  /* ── Mobile / Touch optimisations ── */
+  @media (max-width: 640px) {
+    /* Touch targets minimum 44px */
+    button { min-height: 36px; }
+    
+    /* Inputs plus grands et lisibles */
+    input[type="text"], input[type="email"], input[type="date"],
+    input[type="password"], select, textarea {
+      font-size: 16px !important; /* Empêche le zoom auto iOS */
+      min-height: 40px;
+    }
+    
+    /* Scroll smooth partout */
+    * { -webkit-overflow-scrolling: touch; }
+    
+    /* Modales : éviter le scroll du body quand la modale est ouverte */
+    .modal-open { overflow: hidden; }
+    
+    /* Tables horizontalement scrollables */
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    
+    /* Padding réduit pour les vues principales */
+    .view-padding { padding: 8px !important; }
+    
+    /* Sidebar hamburger plus grand */
+    .hamburger-btn { min-width: 44px; min-height: 44px; }
+  }
+  
+  /* Améliorer le tap highlight sur iOS */
+  button, a, [role="button"] {
+    -webkit-tap-highlight-color: rgba(16, 42, 99, 0.1);
+    touch-action: manipulation;
+  }
   </style></head><body>
   <div class="header">
     <div>
@@ -7397,7 +7717,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
   const DUREES = ["12","24","36","48","60","72","84"];
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"stretch",justifyContent:isMobile?"center":"flex-end" }}
       onMouseDown={e=>{ if(e.target===e.currentTarget) saveAndClose(); }}>
       <div style={{ width:"min(900px,96vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
         {/* Header */}
@@ -9971,6 +10291,7 @@ async function echAnalyzeWithAI(aiFiles, groqKey, setAiLog, setAiError, setAiLoa
 }
 
 function EchDossierPanel({ dossier, onSave, onClose, settings }) {
+  const isMobile = useIsMobile();
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => {
     document.body.classList.add("cb-modal-open");
@@ -10201,7 +10522,7 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
   const prochaine = lignes.find(r=>r.date>nowPanel);
 
   return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:"stretch",justifyContent:"flex-end" }}
+    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"stretch",justifyContent:isMobile?"center":"flex-end" }}
       onMouseDown={e=>{ if(e.target===e.currentTarget) onClose(); }}>
       <div style={{ width:"min(1050px,97vw)",background:"white",display:"flex",flexDirection:"column",height:"100vh",boxShadow:"-8px 0 40px rgba(0,0,0,0.2)" }}>
 
@@ -10239,10 +10560,10 @@ function EchDossierPanel({ dossier, onSave, onClose, settings }) {
           </div>
         </div>}
         {/* Corps : 2 colonnes */}
-        <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"row" }}>
+        <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:isMobile?"column":"row" }}>
 
           {/* ── Colonne gauche : infos générales ── */}
-          <div style={{ width:340,flexShrink:0,overflowY:"auto",borderRight:"1px solid #ECEAE5",padding:"18px 20px",display:"flex",flexDirection:"column",gap:12 }}>
+          <div style={{ width:isMobile?"100%":340,flexShrink:0,overflowY:"auto",borderRight:isMobile?"none":"1px solid #ECEAE5",borderBottom:isMobile?"1px solid #ECEAE5":"none",padding:"18px 20px",display:"flex",flexDirection:"column",gap:12 }}>
 
             {/* Statut rapide */}
             <div style={{ background:"#F0F5FF",borderRadius:10,padding:"12px 14px",border:"1px solid #BFDBFE" }}>
@@ -11400,6 +11721,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
 };
 
 function EcheancierView({ tasks, settings }) {
+  const isMobile = useIsMobile();
   const uid = () => Math.random().toString(36).substr(2,9);
   const [dossiers, setDossiers] = React.useState([]);
   const [echReady, setEchReady] = React.useState(false);
@@ -11493,10 +11815,10 @@ function EcheancierView({ tasks, settings }) {
   );
 
   return (
-    <div style={{ display:"flex",flexDirection:"row",background:"#F7F6F3",minHeight:"100vh" }}>
+    <div style={{ display:"flex",flexDirection:isMobile?"column":"row",background:"#F7F6F3",minHeight:"100vh" }}>
 
-      {/* Sidebar verticale */}
-      <div style={{ width:200,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
+      {/* Sidebar verticale (cachée sur mobile) */}
+      <div style={{ width:isMobile?0:200,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:isMobile?"none":"flex",flexDirection:"column",minHeight:"100vh" }}>
         <div style={{ padding:"12px 14px",borderBottom:"1px solid #ECEAE5",flexShrink:0 }}>
           <button onClick={openNew} style={{ ...S.btn("#102A63"),padding:"6px 10px",fontSize:11,width:"100%" }}>+ Nouvel échéancier</button>
         </div>
@@ -11541,6 +11863,18 @@ function EcheancierView({ tasks, settings }) {
 
       {/* Contenu principal */}
       <div style={{ flex:1,overflow:"hidden",display:"flex",flexDirection:"column",minHeight:"100vh" }}>
+
+      {/* Navigation mobile (remplace la sidebar sur téléphone) */}
+      {isMobile && (
+        <div style={{padding:"8px 12px",background:"white",borderBottom:"1px solid #ECEAE5",display:"flex",gap:8,alignItems:"center"}}>
+          <select value={activeTab} onChange={e=>setActiveTab(e.target.value)}
+            style={{flex:1,border:"1px solid #E8E8E8",borderRadius:8,padding:"8px 10px",fontSize:13,fontFamily:_FL,color:"#102A63",background:"white"}}>
+            <option value="dashboard">📊 Tableau de bord</option>
+            <option value="synthese">📋 Synthèse</option>
+            {dossiers.map(d=><option key={d.id} value={d.id}>{d.intitule||d.banque||"Dossier"}</option>)}
+          </select>
+        </div>
+      )}
 
       {/* ── TABLEAU DE BORD ── */}
       {activeTab==="dashboard" && (
@@ -12096,6 +12430,7 @@ function exportSingleRCFPDF(ligne, now) {
 }
 
 function RCFView({ settings }) {
+  const isMobile = useIsMobile();
   const [lignes, setLignes] = React.useState([]);
   const [modal, setModal] = React.useState(null); // null | "new" | ligne
   const [selectedIds, setSelectedIds] = React.useState([]);
@@ -12172,7 +12507,7 @@ function RCFView({ settings }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: isMobile?"flex-start":"center", justifyContent: "space-between", flexWrap:"wrap", gap:8 }}>
         <div>
           <h2 style={{ fontFamily: "'Lora',serif", fontSize: 20, fontWeight: 700, color: "#102A63", margin: 0 }}>Revolving Credit Facilities</h2>
           <p style={{ fontFamily: "'Lora',serif", fontSize: 12, color: "#888", margin: "3px 0 0" }}>Suivi des contrats et tirages RCF</p>
@@ -12843,6 +13178,7 @@ function loadSuiviNotes() { return {}; } // replaced by appDbGet
 function saveSuiviNotes(d) { appDbSet("suivi_clients_notes", d); }
 
 function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
+    const isMobile = useIsMobile();
   const today0 = new Date().toISOString().split("T")[0];
   const [d, setD] = React.useState({ clientName:"", clientCode:"", description:"", followupDate:today0, reminderDate:"", suiviType:"", closed:false, ...item });
   const set = (k,v) => setD(p=>({...p,[k]:v}));
@@ -12855,10 +13191,10 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
     </div>
   );
   return (
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,display:"flex",alignItems:isMobile?"flex-end":"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
       onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
       onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
-      <div style={{width:"min(560px,96vw)",background:"white",borderRadius:16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+      <div style={{width:isMobile?"100%":"min(560px,96vw)",background:"white",borderRadius:isMobile?"20px 20px 0 0":16,overflow:"hidden",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
 
         <div style={{background:"linear-gradient(135deg,#102A63 0%,#1a3d8f 100%)",padding:"20px 24px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
@@ -12984,6 +13320,8 @@ function SuiviClientView({ settings }) {
     };
     return <div onClick={()=>handleSort(col)} style={{ position:"relative", width:w, minWidth:w, maxWidth:w, padding:"0 6px", fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap", boxSizing:"border-box" }}>{label}{si(col)}<span onMouseDown={startResize} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", userSelect:"none" }} /></div>;
   };
+  const suiTotalPages = Math.ceil(filtered.length / SUIVI_PAGE_SIZE) || 1;
+  const filteredPage   = filtered.slice((page-1)*SUIVI_PAGE_SIZE, page*SUIVI_PAGE_SIZE);
 
   const QuickCapture = () => quickOpen ? <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:5000, display:"flex", alignItems:"center", justifyContent:"center" }} onMouseDown={e=>{ if(e.target===e.currentTarget) setQuickOpen(false); }}>
     <div style={{ background:"white", borderRadius:16, width:520, maxWidth:"92vw", boxShadow:"0 24px 64px rgba(0,0,0,0.18)", borderTop:"4px solid #102A63" }}>
@@ -13028,6 +13366,31 @@ function SuiviClientView({ settings }) {
           <button onClick={()=>setModal({})} style={{ ...S.btn("#102A63"), padding:"5px 14px", fontSize:10 }}>+ Nouveau suivi</button>
         </div>
       </div>
+      {isMobile ? (
+        <div style={{flex:1,overflowY:"auto",padding:"8px 12px",display:"flex",flexDirection:"column",gap:8}}>
+          {filtered.length===0 && <div style={{textAlign:"center",color:"#CCC",padding:"40px 0",fontFamily:_FL,fontSize:13}}>Aucun client</div>}
+          {filtered.map(c=>{
+            const st = suiviTypes.find(t=>t.id===c.suiviType);
+            const pastReminder = c.reminderDate && c.reminderDate < today;
+            return (
+              <div key={c.id} onClick={()=>setModal(c)}
+                style={{background:c.closed?"#F8FAFC":"white",borderRadius:12,padding:"12px 14px",
+                  border:"1px solid #ECEAE5",boxShadow:"0 1px 4px rgba(0,0,0,0.06)",opacity:c.closed?0.6:1}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                  <div style={{fontSize:14,fontWeight:700,color:"#1E293B",fontFamily:_FL}}>{c.clientName||"—"}</div>
+                  {st && <span style={{fontSize:9,fontWeight:700,background:st.bg,color:st.color,borderRadius:20,padding:"2px 8px",fontFamily:_DM}}>{st.name}</span>}
+                </div>
+                {c.clientCode && <div style={{fontSize:11,color:"#94A3B8",fontFamily:_DM,marginBottom:4}}>{c.clientCode}</div>}
+                {c.description && <div style={{fontSize:11,color:"#64748B",fontFamily:_FL,marginBottom:6,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.description}</div>}
+                <div style={{display:"flex",gap:12,marginTop:4}}>
+                  {c.followupDate && <span style={{fontSize:11,color:"#94A3B8",fontFamily:_DM}}>📅 {c.followupDate.split("-").reverse().join("/")}</span>}
+                  {c.reminderDate && <span style={{fontSize:11,color:pastReminder?"#E74C3C":"#94A3B8",fontFamily:_DM}}>🔔 {c.reminderDate.split("-").reverse().join("/")}</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <QuickCapture />
         <div style={{ width:"52.8%", minWidth:396, display:"flex", flexDirection:"column", borderRight:"1px solid #ECEAE5", background:"white" }}>
@@ -13063,6 +13426,15 @@ function SuiviClientView({ settings }) {
               </div>
             })}
           </div>
+          {suiTotalPages > 1 && (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"6px 0",background:"white",borderTop:"1px solid #F1F5F9"}}>
+              <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+                style={{border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 8px",cursor:page===1?"not-allowed":"pointer",color:page===1?"#CBD5E1":"#102A63",background:"white",fontSize:10,fontFamily:_FL}}>‹</button>
+              <span style={{fontSize:10,fontFamily:_DM,color:"#64748B"}}>{page} / {suiTotalPages}</span>
+              <button onClick={()=>setPage(p=>Math.min(suiTotalPages,p+1))} disabled={page===suiTotalPages}
+                style={{border:"1px solid #E2E8F0",borderRadius:6,padding:"3px 8px",cursor:page===suiTotalPages?"not-allowed":"pointer",color:page===suiTotalPages?"#CBD5E1":"#102A63",background:"white",fontSize:10,fontFamily:_FL}}>›</button>
+            </div>
+          )}
           <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_DM, color:"#AAA" }}>{filtered.length} client{filtered.length!==1?"s":""}</div>
         </div>
         <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC" }}>
@@ -13144,7 +13516,7 @@ function SuiviClientView({ settings }) {
             </div>
           </div>
         </div>
-      )}
+      )} {/* fin ternaire mobile/desktop */}
       {modal!==null && <SuiviClientModal item={modal} onSave={handleSave} onClose={()=>setModal(null)} suiviTypes={suiviTypes} />}
       {quickOpen && <QuickCapture />}
     </div>
@@ -13759,9 +14131,9 @@ function PaymentsView({ settings }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       {/* ── Header ── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap:"wrap", gap:8 }}>
         <div>
-          <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Paiements fournisseurs</div>
+          <div style={{ fontSize: isMobile?16:22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Paiements fournisseurs</div>
           <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'Lora',serif", marginTop: 2 }}>{pending.length} en attente · Total : {fmtEuro(totalPending)}</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
@@ -13902,7 +14274,7 @@ function PaymentsView({ settings }) {
               const isPast = date !== "Sans date" && date < today_str;
               const isSoon = date !== "Sans date" && !isPast && (new Date(date) - new Date()) / 86400000 <= 7;
               return (
-                <div key={date} style={{ marginBottom: 8, padding: "8px 10px", background: "#F8F9FB", borderRadius: 8, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
+                <div key={date} style={{ marginBottom: 8, padding: isMobile?"12px 14px":"8px 10px", background: "#F8F9FB", borderRadius: 8, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'Lora',serif" }}>
                       {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}{date === "Sans date" ? "Sans date" : date.split("-").reverse().join("/")}
@@ -13948,6 +14320,7 @@ function App() {
   const [settings, setSettings] = useState(() => loadSettings());
   const [tasks, setTasks, tasksReady] = useAppStore("tasks", sampleTasks(settings.categories));
   const [appReady, setAppReady] = useState(false); // IDB migration done
+  const [showSearch, setShowSearch] = React.useState(false);
   const [view, setView] = useState("dashboard");
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -14347,15 +14720,15 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.569{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.572{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
       {/* ── MAIN ── */}
-      <div style={{ marginLeft: isMobile ? 0 : 200, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", minWidth: 0 }}>
+      <div style={{ marginLeft: isMobile ? 0 : 200, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh", paddingBottom: isMobile ? "calc(65px + env(safe-area-inset-bottom, 0px))" : 0, minWidth: 0 }}>
         {/* Topbar */}
         <div style={{ background: "white", borderBottom: "1px solid #ECEAE5", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.05)", display: "flex", alignItems: "center", height: 56, padding: "0 24px", gap: 12, boxSizing: "border-box" }}>
-          {isMobile && <button onClick={() => setSidebarOpen(s => !s)} style={{ border: "none", background: "none", fontSize: 20, cursor: "pointer", color: "#102A63", padding: "0 4px", flexShrink: 0 }}>☰</button>}
+          {isMobile && <button onClick={() => setSidebarOpen(s => !s)} style={{ border: "none", background: "rgba(16,42,99,0.05)", fontSize: 22, cursor: "pointer", color: "#102A63", padding: "8px 10px", flexShrink: 0, borderRadius: 8, minWidth:44, minHeight:44, display:"flex", alignItems:"center", justifyContent:"center" }}>☰</button>}
           <div style={{ fontSize: 15, fontWeight: 700, fontFamily: "'Lora',serif", color: "#102A63", flex: 1 }}>
             {(visibleNav.find(n => n.id === view) || {}).icon} {(visibleNav.find(n => n.id === view) || {}).label || ""}
           </div>
@@ -14381,13 +14754,20 @@ function App() {
             <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               + {isMobile ? "" : "Nouvelle tâche"}
             </button>
+            <button onClick={() => setShowSearch(true)}
+              title="Recherche globale (⌘K)"
+              style={{ border:"1px solid #E8E8E8", background:"white", borderRadius:8, padding:"6px 10px",
+                display:"flex", alignItems:"center", gap:5, cursor:"pointer", color:"#64748B",
+                fontSize:11, fontFamily:"'Lora',serif", flexShrink:0, minHeight:32 }}>
+              🔍 {!isMobile && <span style={{fontSize:9,color:"#CBD5E1",fontFamily:"'DM Mono',monospace",border:"1px solid #E2E8F0",borderRadius:4,padding:"1px 5px",marginLeft:2}}>⌘K</span>}
+            </button>
           )}
         </div>
 
       {overdueCount > 0 && (
         <div style={{ background: "#102A63", color: "white", padding: "8px 24px", textAlign: "center", fontSize: 12, fontFamily: "'DM Mono',monospace", letterSpacing: "0.04em" }}>
           ⚠ {overdueCount} tâche{overdueCount > 1 ? "s" : ""} en retard —{" "}
-          <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => setView("tasks")}>Voir les tâches</span>
+          <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => { setView("tasks"); setSidebarOpen(false); }}>Voir les tâches</span>
         </div>
       )}
 
@@ -14507,6 +14887,43 @@ function App() {
       {modal && <TaskModal task={modal} onSave={handleSave} onClose={() => setModal(null)} onAddTask={addTask} settings={settings} />}
       <Toast notifs={toasts} onDismiss={id => { dismissedRef.current.add(id); setToasts(p => p.filter(x => x.id !== id)); }} />
       {undoTask && <UndoBanner task={undoTask} onUndo={undoDelete} onDismiss={() => setUndoTask(null)} />}
+
+      {/* ── Global Search ── */}
+      {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} onNavigate={(v) => { setView(v); setSidebarOpen(false); }} />}
+
+      {/* ── Bottom Navigation Bar (iPhone) ── */}
+      {isMobile && (
+        <div style={{
+          position:"fixed", bottom:0, left:0, right:0, zIndex:150,
+          background:"rgba(255,255,255,0.95)", backdropFilter:"blur(10px)",
+          borderTop:"1px solid #ECEAE5",
+          display:"flex", alignItems:"stretch",
+          paddingBottom:"env(safe-area-inset-bottom, 0px)",
+          boxShadow:"0 -4px 20px rgba(0,0,0,0.08)"
+        }}>
+          {[
+            { id:"dashboard", icon:"◈", label:"Accueil" },
+            { id:"tasks",     icon:"☰", label:"Tâches" },
+            { id:"cotation",  icon:"◎", label:"Cotation" },
+            { id:"payments",  icon:"⬡", label:"Paiements" },
+            { id:"more",      icon:"•••", label:"Plus" },
+          ].map(tab => (
+            <button key={tab.id} onClick={()=>{ if(tab.id==="more"){ setSidebarOpen(p=>!p); } else { setView(tab.id); setSidebarOpen(false); } }}
+              style={{
+                flex:1, border:"none", background:"none", cursor:"pointer",
+                display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                padding:"8px 4px 6px",
+                color: (tab.id==="more" ? (sidebarOpen?"#102A63":"#94A3B8") : (view===tab.id?"#102A63":"#94A3B8")),
+                transition:"color 0.15s"
+              }}>
+              <span style={{fontSize:20,lineHeight:1,marginBottom:3}}>{tab.icon}</span>
+              <span style={{fontSize:9,fontFamily:"'Lora',serif",fontWeight:view===tab.id?700:400,letterSpacing:"0.02em"}}>{tab.label}</span>
+              {(view===tab.id && tab.id!=="more") && <div style={{width:4,height:4,borderRadius:"50%",background:"#102A63",marginTop:3}}/>}
+            </button>
+          ))}
+        </div>
+      )}
+
     </div>
   );
 }
@@ -14518,6 +14935,8 @@ function App() {
     }
     window._doMount = doMount;
     if (window._pendingMount) doMount();
+  
+ount) doMount();
   
 </script>
 <script>
@@ -14572,4 +14991,12 @@ window.exportPaymentsCSV = function(payments) {
 };
 </script>
 </body>
-</html>
+</html>React.useEffect(() => {
+    const hk = e => {
+      if ((e.metaKey||e.ctrlKey) && e.key==="k") { e.preventDefault(); setShowSearch(p=>!p); }
+      if (e.key==="Escape") setShowSearch(false);
+    };
+    window.addEventListener("keydown", hk);
+    return () => window.removeEventListener("keydown", hk);
+  }, []);
+  >
