@@ -15333,7 +15333,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.586{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.587{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -15422,7 +15422,7 @@ function App() {
           )}
         </div>
       ) : (
-        <div style={{ maxWidth: view === "payments" ? 1200 : view === "rcf" ? 1100 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : "24px" }}>
+        <div style={{ maxWidth: view === "payments" ? 1200 : view === "rcf" ? 1100 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : view === "meetings" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : view === "meetings" ? "0px" : "24px" }}>
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "kanban"        && <KanbanView tasks={tasks} onEdit={openEdit} onToggle={togTask} onUpdate={updTask} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
