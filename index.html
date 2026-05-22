@@ -14911,9 +14911,9 @@ function App() {
   const [tasks, setTasks, tasksReady] = useAppStore("tasks", sampleTasks(settings.categories));
   const [appReady, setAppReady] = useState(false); // IDB migration done
   const [showSearch, setShowSearch] = React.useState(false);
+  const [view, setView] = useState("dashboard");
   const [reunionsForNotifs, setReunionsForNotifs] = React.useState([]);
   React.useEffect(() => { appDbGet(MTG_KEY).then(d=>setReunionsForNotifs(d||[])).catch(()=>{}); }, [view]);
-  const [view, setView] = useState("dashboard");
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showTrash, setShowTrash] = useState(false);
@@ -15320,7 +15320,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.583{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.584{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
