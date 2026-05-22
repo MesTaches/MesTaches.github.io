@@ -3526,8 +3526,7 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
           {triggered.map(t => {
             const co = settings.categories.find(c => c.name === t.category);
             return (
-              </>
-            <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #E8E8E8", borderLeft: `4px solid ${co?.accent || "#888"}`, padding: "14px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
+              <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #E8E8E8", borderLeft: `4px solid ${co?.accent || "#888"}`, padding: "14px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
                 <span style={{ fontSize: 22 }}>🔔</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 3 }}>{t.title}</div>
@@ -3542,6 +3541,7 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
           })}
         </div>
       )}
+      </>
 
       {/* ── Alertes RCF J-60 (avertissements) ── */}
       {rcfWarn.length > 0 && (
@@ -15321,7 +15321,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.579{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.580{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
