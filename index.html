@@ -3617,32 +3617,501 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
 
 const MTG_KEY = "meetings";
 
-function MeetingsView({ onAddTask, settings }) {
-  const [data, setData] = React.useState([]);
-  const [loaded, setLoaded] = React.useState(false);
-  const [error, setError] = React.useState(null);
+/* ── Meetings : constantes ── */
+const MTG_COLORS = ["#102A63","#C0392B","#27AE60","#E67E22","#8E44AD","#2980B9","#16A085","#D35400","#7F8C8D"];
+const MTG_PRIOS = [
+  {id:"P1",label:"P1 — Critique",color:"#C0392B"},
+  {id:"P2",label:"P2 — Haute",   color:"#E67E22"},
+  {id:"P3",label:"P3 — Normale", color:"#2980B9"},
+  {id:"P4",label:"P4 — Basse",   color:"#27AE60"},
+];
+const MTG_ST = [
+  {id:"open",       label:"À faire",  color:"#64748B", bg:"#F1F5F9"},
+  {id:"inprogress", label:"En cours", color:"#2980B9", bg:"#EBF5FB"},
+  {id:"done",       label:"Terminé",  color:"#27AE60", bg:"#E8F8F5"},
+  {id:"cancelled",  label:"Annulé",   color:"#9CA3AF", bg:"#F5F5F5"},
+];
+const MTG_REC = [
+  {id:"none",      label:"Ponctuelle"},
+  {id:"weekly",    label:"Hebdomadaire"},
+  {id:"biweekly",  label:"Bi-hebdomadaire"},
+  {id:"monthly",   label:"Mensuelle"},
+];
+const MTG_REMINDERS = [
+  {id:"none",label:"Pas de rappel"},
+  {id:"same",label:"Jour même"},
+  {id:"1d",  label:"1 jour avant"},
+  {id:"3d",  label:"3 jours avant"},
+  {id:"1w",  label:"1 semaine avant"},
+];
 
-  React.useEffect(() => {
-    appDbGet(MTG_KEY)
-      .then(d => { setData(Array.isArray(d) ? d : []); setLoaded(true); })
-      .catch(e => { setError(String(e)); setLoaded(true); });
-  }, []);
+/* ── Meetings : factories ── */
+function _mkMtg(title) {
+  return {
+    id:uid(), title:title||"Nouvelle réunion", color:"#102A63",
+    recurrence:{type:"none"}, categories:["Suivi","Action","Info"],
+    sessions:[_mkSess()], createdAt:new Date().toISOString()
+  };
+}
+function _mkSess(date) {
+  return { id:uid(), date:date||new Date().toISOString().split("T")[0], agenda:"", notes:"", actions:[] };
+}
+function _mkAct() {
+  return { id:uid(), title:"", assignee:"", priority:"P3", status:"open", category:"", dueDate:"", reminder:"none", subtasks:[], syncedTaskId:null };
+}
+function _fmtMtgDate(d) {
+  if(!d) return "—";
+  var parts=d.split("-"); return parts[2]+"/"+parts[1]+"/"+parts[0];
+}
 
-  if (!loaded) return <div style={{padding:40,fontFamily:"'Lora',serif",color:"#94A3B8"}}>Chargement…</div>;
-  if (error) return <div style={{padding:40,fontFamily:"'Lora',serif",color:"#C0392B"}}>Erreur IDB : {error}</div>;
-
+/* ── MeetingActionPanel ── */
+function MeetingActionPanel({ action, categories, onSave, onClose }) {
+  var blank = _mkAct();
+  Object.assign(blank, action||{});
+  var [a, setA] = React.useState(blank);
+  var set = function(k,v){ setA(function(p){ var n=Object.assign({},p); n[k]=v; return n; }); };
+  var addSub = function(){ setA(function(p){ return Object.assign({},p,{subtasks:[...p.subtasks,{id:uid(),title:"",done:false}]}); }); };
+  var updSub = function(id,k,v){ setA(function(p){ return Object.assign({},p,{subtasks:p.subtasks.map(function(x){ return x.id===id?Object.assign({},x,{[k]:v}):x; })}); }); };
+  var delSub = function(id){ setA(function(p){ return Object.assign({},p,{subtasks:p.subtasks.filter(function(x){ return x.id!==id; })}); }); };
+  var prio = MTG_PRIOS.find(function(p){ return p.id===a.priority; })||MTG_PRIOS[2];
+  var subs = a.subtasks||[];
   return (
-    <div style={{padding:40,fontFamily:"'Lora',serif"}}>
-      <div style={{fontSize:20,fontWeight:700,color:"#102A63",marginBottom:16}}>Réunions ({data.length})</div>
-      <div style={{color:"#64748B",fontSize:13}}>Module chargé correctement ✓</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"white",borderRadius:16,width:540,maxWidth:"92vw",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.18)",borderTop:"4px solid "+prio.color}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:prio.color,letterSpacing:"0.06em"}}>ACTION</span>
+          <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
+        </div>
+        <div style={{overflowY:"auto",padding:"20px 24px",flex:1,display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            {_MODAL_LBL("Titre")}
+            <input value={a.title} onChange={function(e){set("title",e.target.value);}} style={_MODAL_INP} placeholder="Description de l'action…" autoFocus />
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              {_MODAL_LBL("Assigné à")}
+              <input value={a.assignee} onChange={function(e){set("assignee",e.target.value);}} style={_MODAL_INP} placeholder="Prénom Nom" />
+            </div>
+            <div>
+              {_MODAL_LBL("Catégorie")}
+              <select value={a.category} onChange={function(e){set("category",e.target.value);}} style={_MODAL_INP}>
+                <option value="">— aucune —</option>
+                {(categories||[]).map(function(c){ return <option key={c} value={c}>{c}</option>; })}
+              </select>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}}>
+            <div>
+              {_MODAL_LBL("Priorité")}
+              <select value={a.priority} onChange={function(e){set("priority",e.target.value);}} style={_MODAL_INP}>
+                {MTG_PRIOS.map(function(p){ return <option key={p.id} value={p.id}>{p.label}</option>; })}
+              </select>
+            </div>
+            <div>
+              {_MODAL_LBL("Statut")}
+              <select value={a.status} onChange={function(e){set("status",e.target.value);}} style={_MODAL_INP}>
+                {MTG_ST.map(function(s){ return <option key={s.id} value={s.id}>{s.label}</option>; })}
+              </select>
+            </div>
+            <div>
+              {_MODAL_LBL("Échéance")}
+              <input type="date" value={a.dueDate} onChange={function(e){set("dueDate",e.target.value);}} style={_MODAL_INP} />
+            </div>
+          </div>
+          <div>
+            {_MODAL_LBL("Rappel")}
+            <select value={a.reminder} onChange={function(e){set("reminder",e.target.value);}} style={_MODAL_INP}>
+              {MTG_REMINDERS.map(function(r){ return <option key={r.id} value={r.id}>{r.label}</option>; })}
+            </select>
+          </div>
+          <div>
+            {_MODAL_LBL("Sous-tâches ("+subs.filter(function(x){return x.done;}).length+"/"+subs.length+")")}
+            {subs.map(function(sub){
+              return (
+                <div key={sub.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5"}}>
+                  <input type="checkbox" checked={!!sub.done} onChange={function(e){updSub(sub.id,"done",e.target.checked);}} style={{accentColor:"#27AE60",cursor:"pointer",width:13,height:13,flexShrink:0}} />
+                  <input value={sub.title} onChange={function(e){updSub(sub.id,"title",e.target.value);}} style={{border:"none",background:"none",padding:"2px 4px",flex:1,outline:"none",fontFamily:_FL,fontSize:12,textDecoration:sub.done?"line-through":"none",color:sub.done?"#AAA":"inherit"}} placeholder="Sous-tâche…" />
+                  <button onClick={function(){delSub(sub.id);}} style={{border:"none",background:"none",cursor:"pointer",color:"#DDD",fontSize:15,lineHeight:1,padding:0}}>×</button>
+                </div>
+              );
+            })}
+            <button onClick={addSub} style={Object.assign({},S.ghost,{marginTop:6,display:"flex",alignItems:"center",gap:4,fontSize:11})}>
+              <span style={{fontSize:16,lineHeight:1}}>+</span> Ajouter une sous-tâche
+            </button>
+          </div>
+        </div>
+        <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:10}}>
+          <button onClick={onClose} style={S.btn("#F0F0F0","#555")}>Annuler</button>
+          <button onClick={function(){onSave(a);}} disabled={!a.title.trim()} style={S.btn(prio.color)}>Enregistrer</button>
+        </div>
+      </div>
     </div>
   );
 }
 
-function MeetingNewModal({onSave,onClose,blank}){return null;}
-function MeetingPanel({reunion,onSave,onDelete,onAddTask}){return null;}
-function MeetingActionPanel({action,categories,onSave,onClose}){return null;}
-function MeetingSettingsPanel({reunion,onSave,onClose}){return null;}
+/* ── MeetingSettingsPanel ── */
+function MeetingSettingsPanel({ reunion, onSave, onClose }) {
+  var [d, setD] = React.useState(Object.assign({},reunion));
+  var set = function(k,v){ setD(function(p){ var n=Object.assign({},p); n[k]=v; return n; }); };
+  var [newCat, setNewCat] = React.useState("");
+  var cats = d.categories||[];
+  var addCat = function(){
+    var t=newCat.trim();
+    if(!t) return;
+    setD(function(p){ return Object.assign({},p,{categories:[...(p.categories||[]),t]}); });
+    setNewCat("");
+  };
+  var delCat = function(c){ setD(function(p){ return Object.assign({},p,{categories:(p.categories||[]).filter(function(x){return x!==c;})}); }); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"white",borderRadius:16,width:460,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.18)",borderTop:"4px solid "+d.color}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"white",zIndex:1}}>
+          <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:d.color,letterSpacing:"0.06em"}}>PARAMÈTRES</span>
+          <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
+        </div>
+        <div style={{padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}}>
+          <div>
+            {_MODAL_LBL("Nom de la réunion")}
+            <input value={d.title} onChange={function(e){set("title",e.target.value);}} style={_MODAL_INP} />
+          </div>
+          <div>
+            {_MODAL_LBL("Couleur")}
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:4}}>
+              {MTG_COLORS.map(function(c){
+                return (
+                  <div key={c} onClick={function(){set("color",c);}} style={{width:26,height:26,borderRadius:"50%",background:c,cursor:"pointer",border:d.color===c?"3px solid #333":"2px solid transparent",boxSizing:"border-box",flexShrink:0}} />
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            {_MODAL_LBL("Récurrence")}
+            <select value={(d.recurrence&&d.recurrence.type)||"none"} onChange={function(e){set("recurrence",{type:e.target.value});}} style={_MODAL_INP}>
+              {MTG_REC.map(function(r){ return <option key={r.id} value={r.id}>{r.label}</option>; })}
+            </select>
+          </div>
+          <div>
+            {_MODAL_LBL("Catégories d'actions")}
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              {cats.map(function(c){
+                return (
+                  <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#EEF2FF",color:"#4F46E5",borderRadius:20,padding:"3px 10px",fontSize:11,fontFamily:_DM}}>
+                    {c}
+                    <button onClick={function(){delCat(c);}} style={{border:"none",background:"none",cursor:"pointer",color:"#4F46E5",fontSize:13,lineHeight:1,padding:0}}>×</button>
+                  </span>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={newCat} onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")addCat();}} style={Object.assign({},_MODAL_INP,{flex:1})} placeholder="Nouvelle catégorie…" />
+              <button onClick={addCat} style={S.btn("#102A63")}>+</button>
+            </div>
+          </div>
+        </div>
+        <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:10}}>
+          <button onClick={onClose} style={S.btn("#F0F0F0","#555")}>Annuler</button>
+          <button onClick={function(){onSave(d);}} disabled={!d.title.trim()} style={S.btn(d.color)}>Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── MeetingNewModal ── */
+function MeetingNewModal({ onSave, onClose, blank }) {
+  var [title, setTitle] = React.useState((blank&&blank.title)||"Nouvelle réunion");
+  var doSave = function(){ if(title.trim()) onSave(_mkMtg(title.trim())); };
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"white",borderRadius:16,width:420,maxWidth:"90vw",boxShadow:"0 24px 64px rgba(0,0,0,0.18)",borderTop:"4px solid #102A63"}}>
+        <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:"#102A63",letterSpacing:"0.06em"}}>NOUVELLE RÉUNION</span>
+          <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
+        </div>
+        <div style={{padding:"20px 24px"}}>
+          {_MODAL_LBL("Nom de la réunion")}
+          <input value={title} onChange={function(e){setTitle(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")doSave();}} style={_MODAL_INP} placeholder="Ex : COPIL Mensuel, Réunion d'équipe…" autoFocus />
+        </div>
+        <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:10}}>
+          <button onClick={onClose} style={S.btn("#F0F0F0","#555")}>Annuler</button>
+          <button onClick={doSave} disabled={!title.trim()} style={S.btn("#102A63")}>Créer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── MeetingPanel ── */
+function MeetingPanel({ reunion, sessionIdx, onSave, onDelete, onAddTask, onPrev, onNext, onAddSession, onOpenSettings }) {
+  var session = reunion.sessions[sessionIdx];
+  var totalSessions = reunion.sessions.length;
+  var [editAction, setEditAction] = React.useState(null);
+
+  var saveField = function(field, val) {
+    var updSessions = reunion.sessions.map(function(s,i){ return i===sessionIdx ? Object.assign({},s,{[field]:val}) : s; });
+    onSave(Object.assign({},reunion,{sessions:updSessions}));
+  };
+
+  var saveAction = function(act) {
+    var actions = session.actions.some(function(a){return a.id===act.id;})
+      ? session.actions.map(function(a){return a.id===act.id?act:a;})
+      : [...session.actions, act];
+    saveField("actions", actions);
+    setEditAction(null);
+  };
+
+  var delAction = function(id){ saveField("actions", session.actions.filter(function(a){return a.id!==id;})); };
+  var addAction = function(){ setEditAction(_mkAct()); };
+
+  var syncTask = function(act) {
+    if(!onAddTask) return;
+    var prioMap = {P1:"urgente",P2:"haute",P3:"normale",P4:"basse"};
+    onAddTask({
+      id:uid(), title:"[Réunion] "+act.title, completed:false,
+      status:"todo", priority:prioMap[act.priority]||"normale",
+      dueDate:act.dueDate||"", reminder:act.reminder||"none",
+      category:"", type:"Tâche",
+      notes:"Assigné à "+(act.assignee||"—")+" — séance du "+_fmtMtgDate(session.date),
+      createdAt:new Date().toISOString(), subtasks:[], recurrence:{type:"none"}, inMyDay:false, totalTime:0
+    });
+    saveAction(Object.assign({},act,{syncedTaskId:"synced"}));
+  };
+
+  var stData = function(id){ return MTG_ST.find(function(s){return s.id===id;})||MTG_ST[0]; };
+  var todayStr = new Date().toISOString().split("T")[0];
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+      <div style={{background:"white",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"flex",alignItems:"center",gap:12,flexShrink:0,flexWrap:"wrap"}}>
+        <div style={{width:10,height:10,borderRadius:"50%",background:reunion.color,flexShrink:0}} />
+        <span style={{fontFamily:_FL,fontWeight:700,fontSize:14,color:"#102A63",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reunion.title}</span>
+        <button onClick={onOpenSettings} title="Paramètres" style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:12,color:"#888",fontFamily:_DM,flexShrink:0}}>⚙</button>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <button onClick={onPrev} disabled={sessionIdx===0} style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 9px",cursor:sessionIdx===0?"not-allowed":"pointer",fontSize:12,color:sessionIdx===0?"#CCC":"#555",fontFamily:_DM}}>◀</button>
+          <span style={{fontFamily:_DM,fontSize:10,color:"#888",minWidth:130,textAlign:"center"}}>Séance {totalSessions-sessionIdx}/{totalSessions} — {_fmtMtgDate(session.date)}</span>
+          <button onClick={onNext} disabled={sessionIdx===totalSessions-1} style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 9px",cursor:sessionIdx===totalSessions-1?"not-allowed":"pointer",fontSize:12,color:sessionIdx===totalSessions-1?"#CCC":"#555",fontFamily:_DM}}>▶</button>
+        </div>
+        <button onClick={onAddSession} style={Object.assign({},S.btn(reunion.color),{padding:"4px 12px",fontSize:11,flexShrink:0})}>+ Séance</button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"20px 28px",display:"flex",flexDirection:"column",gap:22}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:"0 0 auto"}}>
+            {_MODAL_LBL("Date de la séance")}
+            <input type="date" value={session.date} onChange={function(e){saveField("date",e.target.value);}} style={Object.assign({},_MODAL_INP,{width:160})} />
+          </div>
+          <div style={{flex:1}} />
+          {totalSessions > 1 && (
+            <button onClick={onDelete} style={Object.assign({},S.btn("#FDEDEC","#C0392B"),{border:"1px solid #FDEDEC",fontSize:11,alignSelf:"flex-end",marginBottom:2})}>Supprimer séance</button>
+          )}
+        </div>
+
+        <div>
+          <div style={{fontFamily:_DM,fontSize:10,fontWeight:700,color:reunion.color,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>ORDRE DU JOUR</div>
+          <RichTextArea value={session.agenda} onChange={function(v){saveField("agenda",v);}} placeholder="Saisissez l'ordre du jour de cette séance…" rows={5} />
+        </div>
+
+        <div>
+          <div style={{fontFamily:_DM,fontSize:10,fontWeight:700,color:reunion.color,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>NOTES &amp; COMPTE-RENDU</div>
+          <RichTextArea value={session.notes} onChange={function(v){saveField("notes",v);}} placeholder="Notes, décisions, compte-rendu de séance…" rows={5} />
+        </div>
+
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
+            <div style={{fontFamily:_DM,fontSize:10,fontWeight:700,color:reunion.color,letterSpacing:"0.08em",textTransform:"uppercase"}}>
+              ACTIONS ({session.actions.length})
+            </div>
+            <button onClick={addAction} style={Object.assign({},S.btn(reunion.color),{padding:"4px 12px",fontSize:11})}>+ Action</button>
+          </div>
+          {session.actions.length===0 ? (
+            <div style={{padding:20,background:"#FAFAF8",borderRadius:10,border:"1px dashed #E0E0E0",textAlign:"center",fontFamily:_FL,fontSize:12,color:"#AAA",fontStyle:"italic"}}>Aucune action pour cette séance</div>
+          ) : (
+            <div style={{display:"flex",flexDirection:"column",gap:7}}>
+              {session.actions.map(function(act){
+                var p = MTG_PRIOS.find(function(x){return x.id===act.priority;})||MTG_PRIOS[2];
+                var s = stData(act.status);
+                var doneSubs = (act.subtasks||[]).filter(function(x){return x.done;}).length;
+                var totalSubs = (act.subtasks||[]).length;
+                var isLate = act.dueDate && act.dueDate<todayStr && act.status!=="done" && act.status!=="cancelled";
+                return (
+                  <div key={act.id} style={{background:"white",borderRadius:10,border:"1px solid #ECEAE5",borderLeft:"3px solid "+p.color,padding:"10px 14px",display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontFamily:_DM,fontSize:10,fontWeight:700,color:p.color,minWidth:22,flexShrink:0}}>{p.id}</span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontFamily:_FL,color:act.status==="done"?"#AAA":"#2C3E50",textDecoration:act.status==="done"?"line-through":"none",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {act.title || <em style={{color:"#CCC",fontWeight:400}}>Sans titre</em>}
+                      </div>
+                      <div style={{display:"flex",gap:8,marginTop:3,flexWrap:"wrap"}}>
+                        {act.assignee && <span style={{fontSize:10,fontFamily:_DM,color:"#888"}}>👤 {act.assignee}</span>}
+                        {act.category && <span style={{fontSize:10,fontFamily:_DM,color:"#4F46E5",background:"#EEF2FF",borderRadius:4,padding:"0 5px"}}>{act.category}</span>}
+                        {act.dueDate && <span style={{fontSize:10,fontFamily:_DM,color:isLate?"#C0392B":"#888"}}>{isLate?"⚠ ":""}{_fmtMtgDate(act.dueDate)}</span>}
+                        {totalSubs>0 && <span style={{fontSize:10,fontFamily:_DM,color:"#888"}}>☑ {doneSubs}/{totalSubs}</span>}
+                        {act.syncedTaskId && <span style={{fontSize:10,fontFamily:_DM,color:"#27AE60"}}>✓ Tâche</span>}
+                      </div>
+                    </div>
+                    <span style={{fontSize:10,fontFamily:_DM,background:s.bg,color:s.color,borderRadius:20,padding:"2px 8px",whiteSpace:"nowrap",flexShrink:0}}>{s.label}</span>
+                    <button onClick={function(){setEditAction(act);}} style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"#888",fontFamily:_DM,flexShrink:0}}>✏</button>
+                    {!act.syncedTaskId && onAddTask && (
+                      <button onClick={function(){syncTask(act);}} title="Envoyer dans Tâches" style={{border:"1px solid #27AE60",background:"#E8F8F5",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:11,color:"#27AE60",fontFamily:_DM,flexShrink:0}}>↗</button>
+                    )}
+                    <button onClick={function(){delAction(act.id);}} style={{border:"none",background:"none",cursor:"pointer",color:"#DDD",fontSize:16,lineHeight:1,padding:0,flexShrink:0}} onMouseEnter={function(e){e.currentTarget.style.color="#C0392B";}} onMouseLeave={function(e){e.currentTarget.style.color="#DDD";}}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {editAction && (
+        <MeetingActionPanel
+          action={editAction}
+          categories={reunion.categories||[]}
+          onSave={saveAction}
+          onClose={function(){setEditAction(null);}}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── MeetingsView ── */
+function MeetingsView({ onAddTask, settings }) {
+  var [meetings, setMeetings] = React.useState([]);
+  var [loaded, setLoaded] = React.useState(false);
+  var [error, setError] = React.useState(null);
+  var [selMtgId, setSelMtgId] = React.useState(null);
+  var [selSessIdx, setSelSessIdx] = React.useState(0);
+  var [showNew, setShowNew] = React.useState(false);
+  var [showSettings, setShowSettings] = React.useState(false);
+
+  React.useEffect(function(){
+    appDbGet(MTG_KEY)
+      .then(function(d){
+        var arr=Array.isArray(d)?d:[];
+        setMeetings(arr);
+        setLoaded(true);
+        if(arr.length>0) setSelMtgId(arr[0].id);
+      })
+      .catch(function(e){ setError(String(e)); setLoaded(true); });
+  },[]);
+
+  var saveMeetings = function(list){
+    setMeetings(list);
+    appDbSet(MTG_KEY, list).catch(function(){});
+  };
+
+  var selMtg = meetings.find(function(m){return m.id===selMtgId;})||null;
+
+  var selectMeeting = function(id){ setSelMtgId(id); setSelSessIdx(0); };
+
+  var handleNewMtg = function(mtg){
+    var list=[...meetings,mtg];
+    saveMeetings(list);
+    setSelMtgId(mtg.id);
+    setSelSessIdx(0);
+    setShowNew(false);
+  };
+
+  var handleSaveMtg = function(updated){
+    saveMeetings(meetings.map(function(m){return m.id===updated.id?updated:m;}));
+  };
+
+  var handleDelMtg = function(id){
+    var list=meetings.filter(function(m){return m.id!==id;});
+    saveMeetings(list);
+    if(selMtgId===id){ setSelMtgId(list.length>0?list[0].id:null); setSelSessIdx(0); }
+  };
+
+  var handleAddSession = function(){
+    if(!selMtg) return;
+    var newSess=_mkSess();
+    var updated=Object.assign({},selMtg,{sessions:[newSess,...selMtg.sessions]});
+    handleSaveMtg(updated);
+    setSelSessIdx(0);
+  };
+
+  var handleDeleteSession = function(){
+    if(!selMtg||selMtg.sessions.length<=1) return;
+    var sessions=selMtg.sessions.filter(function(_,i){return i!==selSessIdx;});
+    handleSaveMtg(Object.assign({},selMtg,{sessions:sessions}));
+    setSelSessIdx(function(i){return Math.min(i,sessions.length-1);});
+  };
+
+  var handleSaveSettings = function(updated){ handleSaveMtg(updated); setShowSettings(false); };
+
+  if(!loaded) return <div style={{padding:40,fontFamily:_FL,color:"#94A3B8"}}>Chargement…</div>;
+  if(error) return <div style={{padding:40,fontFamily:_FL,color:"#C0392B"}}>Erreur IDB : {error}</div>;
+
+  return (
+    <div style={{display:"flex",width:"100%",height:"100%",minHeight:"calc(100vh - 56px)",fontFamily:_FL,background:"#F7F6F3"}}>
+      <div style={{width:260,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",overflowY:"auto"}}>
+        <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #F0F0F0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <span style={{fontFamily:_DM,fontSize:11,fontWeight:700,color:"#102A63",letterSpacing:"0.06em"}}>RÉUNIONS</span>
+          <button onClick={function(){setShowNew(true);}} style={Object.assign({},S.btn("#102A63"),{padding:"3px 10px",fontSize:12})} title="Nouvelle réunion">+</button>
+        </div>
+        {meetings.length===0 ? (
+          <div style={{padding:"24px 16px",fontSize:12,color:"#AAA",fontStyle:"italic",textAlign:"center",lineHeight:1.6}}>
+            Aucune réunion.<br/>
+            <button onClick={function(){setShowNew(true);}} style={Object.assign({},S.ghost,{marginTop:12,fontSize:11})}>+ Créer une réunion</button>
+          </div>
+        ) : meetings.map(function(m){
+          var isActive=m.id===selMtgId;
+          var openActions=0;
+          m.sessions.forEach(function(s){ openActions+=s.actions.filter(function(a){return a.status!=="done"&&a.status!=="cancelled";}).length; });
+          return (
+            <div key={m.id}>
+              <div onClick={function(){selectMeeting(m.id);}} style={{padding:"10px 14px",cursor:"pointer",background:isActive?"#EEF2FF":"white",borderLeft:"3px solid "+(isActive?m.color:"transparent"),display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
+                <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+                {openActions>0 && <span style={{fontFamily:_DM,fontSize:9,background:m.color,color:"white",borderRadius:20,padding:"1px 6px"}}>{openActions}</span>}
+                {openActions===0 && <span style={{fontFamily:_DM,fontSize:9,color:"#CCC"}}>{m.sessions.length}</span>}
+              </div>
+              {isActive && m.sessions.map(function(s,i){
+                var sesOpenActs=s.actions.filter(function(a){return a.status!=="done"&&a.status!=="cancelled";}).length;
+                return (
+                  <div key={s.id} onClick={function(){setSelSessIdx(i);}} style={{padding:"5px 14px 5px 32px",cursor:"pointer",background:i===selSessIdx?"#F0F4FF":"#FAFAF8",borderLeft:"3px solid "+(i===selSessIdx?m.color:"transparent"),fontSize:11,fontFamily:_DM,color:i===selSessIdx?m.color:"#888",display:"flex",alignItems:"center",gap:4,transition:"background 0.1s"}}>
+                    <span style={{fontSize:9,flexShrink:0}}>{i===selSessIdx?"◉":"○"}</span>
+                    <span style={{flex:1}}>{_fmtMtgDate(s.date)}</span>
+                    {sesOpenActs>0 && <span style={{background:m.color,color:"white",borderRadius:20,padding:"0px 5px",fontSize:9}}>{sesOpenActs}</span>}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+
+      {!selMtg ? (
+        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:14,color:"#AAA"}}>
+          <div style={{fontSize:40}}>◷</div>
+          <div style={{fontSize:14,fontFamily:_FL,fontStyle:"italic",color:"#9CA3AF"}}>Sélectionnez ou créez une réunion</div>
+          <button onClick={function(){setShowNew(true);}} style={S.btn("#102A63")}>+ Nouvelle réunion</button>
+        </div>
+      ) : (
+        <MeetingPanel
+          reunion={selMtg}
+          sessionIdx={selSessIdx}
+          onSave={handleSaveMtg}
+          onDelete={handleDeleteSession}
+          onAddTask={onAddTask}
+          onPrev={function(){setSelSessIdx(function(i){return Math.max(0,i-1);});}}
+          onNext={function(){setSelSessIdx(function(i){return Math.min(selMtg.sessions.length-1,i+1);});}}
+          onAddSession={handleAddSession}
+          onOpenSettings={function(){setShowSettings(true);}}
+        />
+      )}
+
+      {showNew && <MeetingNewModal onSave={handleNewMtg} onClose={function(){setShowNew(false);}} />}
+      {showSettings && selMtg && (
+        <MeetingSettingsPanel
+          reunion={selMtg}
+          onSave={handleSaveSettings}
+          onClose={function(){setShowSettings(false);}}
+        />
+      )}
+    </div>
+  );
+}
 
 
 function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, onPin, settings }) {
