@@ -3449,8 +3449,25 @@ function _rcfAlertItems(now) {
   return items.sort((a, b) => a.date > b.date ? 1 : a.date < b.date ? -1 : 0);
 }
 
-function NotificationsView({ tasks, onUpdate, settings }) {
+function NotificationsView({ tasks, onUpdate, settings, meetings }) {
   const now = new Date().toISOString().split("T")[0];
+  // Rappels actions de réunion
+  const meetingReminders = React.useMemo(() => {
+    const t = now;
+    const result = [];
+    (meetings||[]).forEach(r => {
+      (r.actions||[]).filter(a => a.status!=="done" && a.status!=="cancelled" && a.reminder && a.reminder!=="none" && a.dueDate).forEach(a => {
+        const days = (new Date(a.dueDate) - new Date(t)) / 864e5;
+        const fired =
+          a.reminder==="same"  ? days>=0&&days<1 :
+          a.reminder==="1d"    ? days>=0&&days<=1 :
+          a.reminder==="2d"    ? days>=0&&days<=2 :
+          a.reminder==="1w"    ? days>=0&&days<=7 : false;
+        if (fired) result.push({ ...a, _type:"meeting", _reunionTitle: r.title });
+      });
+    });
+    return result;
+  }, [meetings, now]);
   const withReminder = tasks.filter(t => !t.completed && t.reminder && t.reminder !== "none" && t.dueDate);
   const triggered = withReminder.filter(t => {
     const diff = (new Date(t.dueDate) - new Date()) / 864e5;
@@ -3509,7 +3526,8 @@ function NotificationsView({ tasks, onUpdate, settings }) {
           {triggered.map(t => {
             const co = settings.categories.find(c => c.name === t.category);
             return (
-              <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #E8E8E8", borderLeft: `4px solid ${co?.accent || "#888"}`, padding: "14px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
+              </>
+            <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #E8E8E8", borderLeft: `4px solid ${co?.accent || "#888"}`, padding: "14px 18px", marginBottom: 8, display: "flex", gap: 12, alignItems: "center" }}>
                 <span style={{ fontSize: 22 }}>🔔</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 3 }}>{t.title}</div>
@@ -3546,6 +3564,22 @@ function NotificationsView({ tasks, onUpdate, settings }) {
           const co = settings.categories.find(c => c.name === t.category);
           const diff = Math.ceil((new Date(t.dueDate) - new Date()) / 864e5);
           return (
+            <>
+            {meetingReminders.map(a => (
+              <div key={"mtg-"+a.id} style={{ background:"white", borderRadius:12, border:"1px solid #FDE68A",
+                padding:"12px 16px", marginBottom:6, display:"flex", gap:10, alignItems:"center" }}>
+                <div style={{ width:36, height:36, borderRadius:10, background:"#FFFBEB",
+                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>◷</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:12, fontWeight:600, fontFamily:_FL, color:"#1E293B" }}>{a.title}</div>
+                  <div style={{ fontSize:11, color:"#94A3B8", fontFamily:_DM }}>
+                    Réunion : {a._reunionTitle}
+                    {a.assignedTo ? ` · 👤 ${a.assignedTo}` : ""}
+                    {a.dueDate ? ` · 📅 ${a.dueDate.split("-").reverse().join("/")}` : ""}
+                  </div>
+                </div>
+              </div>
+            ))}
             <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #ECEAE5", padding: "12px 16px", marginBottom: 6, display: "flex", gap: 10, alignItems: "center" }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: co?.bg || "#F0F0F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🔔</div>
               <div style={{ flex: 1 }}>
@@ -3565,138 +3599,793 @@ function NotificationsView({ tasks, onUpdate, settings }) {
     </div>
   );
 }
-
-/* ─── MEETINGS VIEW ─── */
-function MeetingsView({ onAddTask }) {
-  const [meetings, setMeetings] = useAppStore("meetings", []);
-  const [selected, setSelected] = useState(null);
-  const [showNew, setShowNew] = useState(false);
-  const [newM, setNewM] = useState(null);
-  const [recap, setRecap] = useState(null);
-  const [loadingRecap, setLoadingRecap] = useState(false);
-  useEffect(() => { try { localStorage.setItem(MEETING_STORAGE, JSON.stringify(meetings)); } catch {} }, [meetings]);
-  const saveMeeting = m => { const exists = meetings.find(x => x.id === m.id); if (exists) setMeetings(p => p.map(x => x.id === m.id ? m : x)); else setMeetings(p => [m, ...p]); setSelected(m); };
-  const delMeeting = id => { setMeetings(p => p.filter(x => x.id !== id)); if (selected?.id === id) setSelected(null); };
-  const generateRecap = async m => {
-    setLoadingRecap(true); setRecap(null);
-    if (!settings ) {
-      setResult("⚠️ Clé API manquante — configurez-la dans Paramètres ⚙");
-      setLoading(false);
-      return;
-    }
-    try {
-      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${(settings && settings.groqKey) || ""}` }, body: JSON.stringify({ model: "llama-3.3-70b-versatile", max_tokens: 1000, messages: [{ role: "user", content: `Tu es un assistant professionnel. Génère un compte-rendu structuré en français.\n\nRéunion : ${m.title}\nDate : ${m.date}${m.time ? " à " + m.time : ""}\nParticipants : ${m.participants || "Non renseignés"}\nOrdre du jour : ${m.agenda || "Non renseigné"}\nNotes :\n${m.notes || "Aucune note"}\n\nGénère un compte-rendu avec :\n1. Résumé (3-4 phrases)\n2. Points clés discutés\n3. Décisions prises\n4. Actions à mener (avec responsable si mentionné)\n5. Prochaines étapes\n\nSois concis et professionnel.` }] }) });
-      const data = await resp.json();
-      setRecap((data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "Erreur de génération.");
-    } catch { setRecap("Erreur de connexion."); }
-    setLoadingRecap(false);
-  };
-  const upcoming = meetings.filter(m => m.date >= today()).sort((a, b) => a.date.localeCompare(b.date));
-  const past = meetings.filter(m => m.date < today()).sort((a, b) => b.date.localeCompare(a.date));
-  const [tab, setTab] = useState("prep");
-  const Tab = ({ id, label }) => (
-    <button onClick={() => setTab(id)} style={{ border: "none", background: "none", padding: "8px 16px", fontSize: 12, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: tab === id ? "#102A63" : "#888", borderBottom: `2px solid ${tab === id ? "#102A63" : "transparent"}`, fontWeight: tab === id ? 700 : 400 }}>{label}</button>
+  </div>
   );
+}
+ VIEW ─── */
+
+/* ═══════════════════════════════════════════════════════════════
+   MODULE RÉUNIONS — MeetingsView + MeetingDossierPanel
+   ═══════════════════════════════════════════════════════════════ */
+
+const MTG_KEY = "meetings_v2";
+
+function MeetingsView({ onAddTask, settings }) {
+  const isMobile = useIsMobile();
+  const [reunions, setReunions, reunionsReady] = useAppStore(MTG_KEY, []);
+  const [selected, setSelected]   = React.useState(null);
+  const [showNew,  setShowNew]    = React.useState(false);
+  const [search,   setSearch]     = React.useState("");
+
+  const uid = () => Math.random().toString(36).substr(2,9);
+  const today = () => new Date().toISOString().split("T")[0];
+
+  const saveReunions = (list) => setReunions(list);
+
+  const handleSave = (r) => {
+    const exists = reunions.find(x => x.id === r.id);
+    const next = exists ? reunions.map(x => x.id === r.id ? r : x) : [...reunions, r];
+    saveReunions(next);
+    setSelected(r);
+  };
+
+  const handleDelete = (id) => {
+    saveReunions(reunions.filter(r => r.id !== id));
+    setSelected(null);
+  };
+
+  const filtered = reunions.filter(r =>
+    !search || r.title.toLowerCase().includes(search.toLowerCase()) ||
+    (r.participants||"").toLowerCase().includes(search.toLowerCase())
+  ).sort((a,b) => {
+    const lastA = (a.seances||[]).slice(-1)[0]?.date || "";
+    const lastB = (b.seances||[]).slice(-1)[0]?.date || "";
+    return lastB.localeCompare(lastA);
+  });
+
+  const countPendingActions = (r) =>
+    (r.actions||[]).filter(a => a.status !== "done" && a.status !== "cancelled").length;
+
+  const countOverdueActions = (r) => {
+    const t = today();
+    return (r.actions||[]).filter(a => a.status !== "done" && a.status !== "cancelled" && a.dueDate && a.dueDate < t).length;
+  };
+
+  const RECURRENCE_LABELS = {
+    none: "Ponctuelle", weekly: "Hebdomadaire", biweekly: "Bimensuelle",
+    monthly: "Mensuelle", quarterly: "Trimestrielle"
+  };
+
+  const newBlankReunion = () => ({
+    id: uid(), title: "", participants: "", recurrence: "weekly",
+    recurrenceDay: "1", color: "#102A63",
+    categories: [
+      { id: uid(), name: "Commerce",  color: "#1D4ED8", bg: "#EFF6FF" },
+      { id: uid(), name: "RH",        color: "#7C3AED", bg: "#F5F3FF" },
+      { id: uid(), name: "Opérations",color: "#065F46", bg: "#F0FDF4" },
+    ],
+    seances: [{ id: uid(), date: today(), agenda: "", notes: "" }],
+    actions: [],
+  });
+
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <div style={{ fontSize: 22, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Réunions</div>
-        <button onClick={() => { setNewM({ id: uid(), title: "", date: today(), time: "", participants: "", agenda: "", notes: "", docs: "" }); setShowNew(true); setSelected(null); }} style={{ ...S.btn("#102A63"), padding: "7px 16px", fontSize: 12 }}>+ Nouvelle réunion</button>
-      </div>
-      <div style={{ background: "#EEF2FF", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 11, color: "#4F46E5", fontFamily: "'DM Mono',monospace", lineHeight: 1.6 }}>
-        💡 <strong>Import Outlook :</strong> Exportez votre réunion depuis Outlook (Fichier → Enregistrer sous → .ics) puis renseignez manuellement. Une connexion directe Microsoft 365 nécessiterait une intégration OAuth.
-      </div>
-      <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>
-        <div style={{ width: 240, flexShrink: 0 }}>
-          {upcoming.length > 0 && <><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", marginBottom: 6 }}>À VENIR</div>
-            {upcoming.map(m => <div key={m.id} onClick={() => { setSelected(m); setShowNew(false); setRecap(null); }} style={{ background: selected?.id === m.id ? "#EEF2FF" : "white", border: `1px solid ${selected?.id === m.id ? "#C7D2FE" : "#ECEAE5"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer" }}>
-              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title || "Sans titre"}</div>
-              <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(m.date)}{m.time ? " · " + m.time : ""}</div>
-            </div>)}</>}
-          {past.length > 0 && <><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", letterSpacing: "0.08em", marginTop: 12, marginBottom: 6 }}>PASSÉES</div>
-            {past.map(m => <div key={m.id} onClick={() => { setSelected(m); setShowNew(false); setRecap(null); }} style={{ background: selected?.id === m.id ? "#EEF2FF" : "white", border: `1px solid ${selected?.id === m.id ? "#C7D2FE" : "#ECEAE5"}`, borderRadius: 10, padding: "10px 12px", marginBottom: 6, cursor: "pointer", opacity: 0.65 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, fontFamily: "'Lora',serif", color: "#2C3E50", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.title || "Sans titre"}</div>
-              <div style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(m.date)}</div>
-            </div>)}</>}
-          {meetings.length === 0 && !showNew && <div style={{ textAlign: "center", padding: "30px 0", color: "#CCC" }}><div style={{ fontSize: 28, marginBottom: 8 }}>◷</div><div style={{ fontFamily: "'Lora',serif", fontSize: 13 }}>Aucune réunion</div></div>}
+    <div style={{ display:"flex", height:"calc(100vh - 56px)", overflow:"hidden", background:"#F7F6F3" }}>
+
+      {/* ── Liste réunions ── */}
+      <div style={{ width:260, flexShrink:0, background:"white", borderRight:"1px solid #ECEAE5",
+        display:"flex", flexDirection:"column", height:"100%" }}>
+        <div style={{ padding:"12px 14px", borderBottom:"1px solid #ECEAE5", display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:15, fontWeight:700, color:"#102A63", fontFamily:_FL }}>Réunions</div>
+            <button onClick={() => { setShowNew(true); }}
+              style={{ ...S.btn("#102A63"), padding:"5px 10px", fontSize:11 }}>+ Nouvelle</button>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="🔍 Rechercher…"
+            style={{ ...S.input, fontSize:11, padding:"6px 10px" }} />
         </div>
-        <div style={{ flex: 1, minWidth: 300 }}>
-          {showNew && newM && (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "20px 24px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", marginBottom: 14 }}>Nouvelle réunion</div>
-              <input value={newM.title} onChange={e => setNewM({ ...newM, title: e.target.value })} placeholder="Titre…" style={{ ...S.input, fontSize: 14, marginBottom: 10 }} />
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>DATE</div><input type="date" value={newM.date} onChange={e => setNewM({ ...newM, date: e.target.value })} style={{ ...S.input, cursor: "pointer" }} /></div>
-                <div><div style={{ fontSize: 10, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 4 }}>HEURE</div><input type="time" value={newM.time} onChange={e => setNewM({ ...newM, time: e.target.value })} style={{ ...S.input, cursor: "pointer" }} /></div>
-              </div>
-              <input value={newM.participants} onChange={e => setNewM({ ...newM, participants: e.target.value })} placeholder="Participants…" style={{ ...S.input, marginBottom: 10 }} />
-              <textarea value={newM.agenda} onChange={e => setNewM({ ...newM, agenda: e.target.value })} rows={4} placeholder="Ordre du jour…" style={{ ...S.input, resize: "vertical", marginBottom: 10 }} />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
-                <button onClick={() => setShowNew(false)} style={{ ...S.btn("#F0F0F0", "#666"), fontFamily: 'Lora' }}>Annuler</button>
-                <button onClick={() => { saveMeeting({ ...newM, notes: "", docs: "" }); setShowNew(false); }} style={{ ...S.btn("#102A63") }}>Créer</button>
-              </div>
+
+        <div style={{ flex:1, overflowY:"auto", padding:"6px 0" }}>
+          {filtered.length === 0 && (
+            <div style={{ padding:"30px 16px", textAlign:"center", color:"#CCC", fontFamily:_FL, fontSize:12 }}>
+              {search ? "Aucune réunion trouvée" : "Aucune réunion — créez-en une !"}
             </div>
           )}
-          {selected && !showNew && (
-            <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", overflow: "hidden" }}>
-              <div style={{ padding: "16px 20px", borderBottom: "1px solid #F0F0F0", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <div style={{ flex: 1, marginRight: 8 }}>
-                  <input value={selected.title} onChange={e => { const m = { ...selected, title: e.target.value }; setSelected(m); saveMeeting(m); }} style={{ border: "none", outline: "none", fontSize: 16, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50", background: "transparent", width: "100%", marginBottom: 4 }} />
-                  <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", color: "#AAA" }}>{fmtDate(selected.date)}{selected.time ? " · " + selected.time : ""}{selected.participants ? " · " + selected.participants : ""}</div>
+          {filtered.map(r => {
+            const pending = countPendingActions(r);
+            const overdue = countOverdueActions(r);
+            const lastSeance = (r.seances||[]).slice(-1)[0];
+            return (
+              <div key={r.id} onClick={() => setSelected(r)}
+                style={{ padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #F5F5F5",
+                  background: selected?.id===r.id ? "#EFF6FF" : "white",
+                  borderLeft: selected?.id===r.id ? `3px solid ${r.color||"#102A63"}` : "3px solid transparent" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:3 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:"#1E293B", fontFamily:_FL,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{r.title||"Sans titre"}</div>
+                  {pending > 0 && (
+                    <span style={{ fontSize:9, fontWeight:700, color: overdue>0?"#C0392B":"#1D4ED8",
+                      background: overdue>0?"#FEE2E2":"#EFF6FF", borderRadius:10, padding:"1px 6px",
+                      marginLeft:4, flexShrink:0, fontFamily:_DM }}>
+                      {overdue>0 ? `⚠ ${overdue}` : `● ${pending}`}
+                    </span>
+                  )}
                 </div>
-                <button onClick={() => delMeeting(selected.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "#E8A0A0", fontSize: 18 }}>×</button>
-              </div>
-              <div style={{ borderBottom: "1px solid #F0F0F0", display: "flex", paddingLeft: 8 }}>
-                <Tab id="prep" label="📋 Préparation" /><Tab id="notes" label="✏️ Notes" /><Tab id="recap" label="📄 Récap IA" />
-              </div>
-              <div style={{ padding: "16px 20px", minHeight: 300 }}>
-                {tab === "prep" && <>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>ORDRE DU JOUR</div>
-                  <textarea value={selected.agenda || ""} onChange={e => { const m = { ...selected, agenda: e.target.value }; setSelected(m); saveMeeting(m); }} rows={5} placeholder="Points à aborder…" style={{ ...S.input, resize: "vertical", marginBottom: 12 }} />
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>PARTICIPANTS</div>
-                  <input value={selected.participants || ""} onChange={e => { const m = { ...selected, participants: e.target.value }; setSelected(m); saveMeeting(m); }} placeholder="Participants…" style={{ ...S.input, marginBottom: 12 }} />
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>DOCUMENTS / LIENS</div>
-                  <textarea value={selected.docs || ""} onChange={e => { const m = { ...selected, docs: e.target.value }; setSelected(m); saveMeeting(m); }} rows={2} placeholder="Fichiers, liens…" style={{ ...S.input, resize: "vertical" }} />
-                </>}
-                {tab === "notes" && <>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#AAA", fontFamily: "'DM Mono',monospace", marginBottom: 6 }}>NOTES EN SÉANCE</div>
-                  <textarea value={selected.notes || ""} onChange={e => { const m = { ...selected, notes: e.target.value }; setSelected(m); saveMeeting(m); }} rows={12} placeholder={"Prenez vos notes ici…\n\nAstuce : utilisez '-' pour les décisions et '→' pour les actions."} style={{ ...S.input, resize: "vertical", lineHeight: 1.7, fontSize: 13 }} />
-                  <AttachmentZone attachments={selected.attachments} onChange={v => { const m = { ...selected, attachments: v }; setSelected(m); saveMeeting(m); }} />
-                  <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-                    <button onClick={() => onAddTask({ id: uid(), title: `Actions — ${selected.title}`, category: "Equipe", type: "Réunion", dueDate: "", priority: "normale", status: "todo", notes: `Réunion du ${selected.date}\n${selected.notes || ""}`, completed: false, reminder: "none", recurrence: "none", subtasks: [], createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false })} style={{ ...S.btn("#F0F0F0", "#555"), fontSize: 11, padding: "6px 14px" }}>↗ Créer une tâche</button>
+                <div style={{ fontSize:10, color:"#94A3B8", fontFamily:_DM }}>
+                  {RECURRENCE_LABELS[r.recurrence]||"Ponctuelle"}
+                  {lastSeance?.date && ` · ${lastSeance.date.split("-").reverse().join("/")}`}
+                </div>
+                {r.participants && (
+                  <div style={{ fontSize:10, color:"#64748B", fontFamily:_FL, marginTop:2,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    👥 {r.participants}
                   </div>
-                </>}
-                {tab === "recap" && <>
-                  {!recap && !loadingRecap && <div style={{ textAlign: "center", padding: "30px 0" }}>
-                    <div style={{ fontSize: 32, marginBottom: 10 }}>🤖</div>
-                    <button onClick={() => generateRecap(selected)} disabled={!selected.notes} style={{ ...S.btn(selected.notes ? "#102A63" : "#CCC"), padding: "10px 24px", fontSize: 13 }}>✨ Générer le récap</button>
-                    {!selected.notes && <div style={{ fontSize: 11, color: "#AAA", fontFamily: "'DM Mono',monospace", marginTop: 10 }}>Ajoutez des notes d'abord</div>}
-                  </div>}
-                  {loadingRecap && <div style={{ textAlign: "center", padding: "40px 0" }}><div style={{ fontSize: 28, animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</div></div>}
-                  {recap && !loadingRecap && <>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                      <div style={{ fontSize: 13, fontWeight: 700, fontFamily: "'Lora',serif", color: "#2C3E50" }}>Compte-rendu</div>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button onClick={() => generateRecap(selected)} style={{ ...S.btn("#F0F0F0", "#666"), fontSize: 10, padding: "4px 10px" }}>↺ Régénérer</button>
-                        <button onClick={() => setRecap(null)} style={{ border: "1px solid #E0E0E0", background: "none", borderRadius: 6, padding: "4px 10px", fontSize: 10, color: "#AAA", cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>×</button>
-                      </div>
-                    </div>
-                    <div style={{ background: "#F8F9FC", borderRadius: 10, padding: 16, fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", lineHeight: 1.7, whiteSpace: "pre-wrap", border: "1px solid #ECEAE5" }}>{recap}</div>
-                    <button onClick={() => navigator.clipboard.writeText(recap)} style={{ ...S.btn("#102A63"), fontSize: 11, padding: "6px 14px", marginTop: 10 }}>📋 Copier</button>
-                  </>}
-                </>}
+                )}
               </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Contenu ── */}
+      {selected ? (
+        <MeetingDossierPanel key={selected.id}
+          reunion={reunions.find(r=>r.id===selected.id)||selected}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          onAddTask={onAddTask}
+          settings={settings} />
+      ) : (
+        <div style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:12 }}>
+          <span style={{ fontSize:48, opacity:0.15 }}>◷</span>
+          <div style={{ fontSize:14, color:"#CCC", fontFamily:_FL }}>Sélectionnez une réunion</div>
+        </div>
+      )}
+
+      {/* ── Modale nouvelle réunion ── */}
+      {showNew && (
+        <MeetingCreateModal
+          onSave={(r) => { handleSave(r); setShowNew(false); }}
+          onClose={() => setShowNew(false)}
+          defaultData={newBlankReunion()} />
+      )}
+    </div>
+  );
+}
+
+/* ── Modale création réunion ── */
+function MeetingCreateModal({ onSave, onClose, defaultData }) {
+  const [d, setD] = React.useState(defaultData);
+  const set = (k,v) => setD(p=>({...p, [k]:v}));
+  const uid = () => Math.random().toString(36).substr(2,9);
+
+  const DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+  const RECURRENCES = [
+    {id:"none",label:"Ponctuelle"},{id:"weekly",label:"Hebdomadaire"},
+    {id:"biweekly",label:"Bimensuelle"},{id:"monthly",label:"Mensuelle"},
+    {id:"quarterly",label:"Trimestrielle"}
+  ];
+  const COLORS = ["#102A63","#1D4ED8","#7C3AED","#065F46","#C0392B","#E67E22","#0F766E"];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:3000,
+      display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{background:"white",borderRadius:16,width:"min(520px,96vw)",
+        maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden",
+        boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+
+        <div style={{background:`linear-gradient(135deg,#102A63,#1a3d8f)`,padding:"18px 24px",
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:3}}>Réunions</div>
+            <div style={{fontSize:17,fontWeight:700,color:"white",fontFamily:_FL}}>Nouvelle réunion</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",borderRadius:8,padding:"4px 9px"}}>×</button>
+        </div>
+
+        <div style={{overflowY:"auto",padding:"20px 24px",flex:1,display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:5}}>Titre</div>
+            <input value={d.title} onChange={e=>set("title",e.target.value)}
+              placeholder="Ex: Point hebdo équipe…" autoFocus
+              style={{...S.input,fontSize:14,fontWeight:600}} />
+          </div>
+
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:5}}>Récurrence</div>
+              <select value={d.recurrence} onChange={e=>set("recurrence",e.target.value)} style={{...S.input,fontSize:11}}>
+                {RECURRENCES.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
             </div>
-          )}
-          {!selected && !showNew && <div style={{ textAlign: "center", padding: "60px 0", color: "#CCC" }}><div style={{ fontSize: 40, marginBottom: 12 }}>◷</div><div style={{ fontFamily: "'Lora',serif", fontSize: 15, color: "#AAA" }}>Sélectionnez ou créez une réunion</div></div>}
+            {d.recurrence==="weekly" && (
+              <div>
+                <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:5}}>Jour</div>
+                <select value={d.recurrenceDay} onChange={e=>set("recurrenceDay",e.target.value)} style={{...S.input,fontSize:11}}>
+                  {DAYS.map((day,i)=><option key={i} value={String(i+1)}>{day}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:5}}>Participants</div>
+            <input value={d.participants} onChange={e=>set("participants",e.target.value)}
+              placeholder="Arnaud, Sophie, Marc…"
+              style={{...S.input,fontSize:12}} />
+          </div>
+
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8}}>Couleur</div>
+            <div style={{display:"flex",gap:8}}>
+              {COLORS.map(c=>(
+                <div key={c} onClick={()=>set("color",c)}
+                  style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",
+                    border:d.color===c?"3px solid #1E293B":"3px solid transparent",
+                    boxSizing:"border-box"}} />
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8}}>
+              Catégories d'actions
+            </div>
+            {(d.categories||[]).map((cat,i)=>(
+              <div key={cat.id} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                <div style={{width:12,height:12,borderRadius:"50%",background:cat.color,flexShrink:0}} />
+                <input value={cat.name} onChange={e=>{
+                  const cats = d.categories.map((c,j)=>j===i?{...c,name:e.target.value}:c);
+                  set("categories",cats);
+                }} style={{...S.input,fontSize:11,flex:1,padding:"4px 8px"}} />
+                <button onClick={()=>set("categories",d.categories.filter((_,j)=>j!==i))}
+                  style={{border:"none",background:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16,padding:0}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>set("categories",[...(d.categories||[]),
+              {id:uid(),name:"Nouvelle catégorie",color:"#94A3B8",bg:"#F8FAFC"}])}
+              style={{...S.ghost,fontSize:11,padding:"4px 10px"}}>+ Catégorie</button>
+          </div>
+        </div>
+
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",
+          justifyContent:"flex-end",gap:8,background:"#FAFBFC",flexShrink:0}}>
+          <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+          <button onClick={()=>{ if(d.title.trim()) onSave(d); }}
+            style={{...S.btn("#102A63"),padding:"8px 18px",fontSize:11,opacity:d.title.trim()?1:0.5}}>
+            ✓ Créer
+          </button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── 7) CATEGORY TASKS VIEW ─── */
-const CAT_ORDER_KEY = "taskmanager_catorder_v1";
+/* ── Panel dossier réunion ── */
+function MeetingDossierPanel({ reunion, onSave, onDelete, onAddTask, settings }) {
+  const uid = () => Math.random().toString(36).substr(2,9);
+  const today = () => new Date().toISOString().split("T")[0];
+
+  const [r, setR] = React.useState(reunion);
+  const [seanceIdx, setSeanceIdx] = React.useState((reunion.seances||[]).length - 1);
+  const [showActionModal, setShowActionModal] = React.useState(null); // null | "new" | action
+  const [showSettings, setShowSettings] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
+
+  React.useEffect(() => { setR(reunion); }, [reunion.id]);
+
+  const save = (updated) => { setR(updated); onSave(updated); };
+
+  const seances = r.seances || [];
+  const seance = seances[seanceIdx] || {};
+  const actions = r.actions || [];
+
+  const pendingActions = actions.filter(a => a.status !== "done" && a.status !== "cancelled");
+  const seanceActions = actions.filter(a => {
+    if (a.status === "done" || a.status === "cancelled") return a.seanceId === seance.id;
+    return true; // actions ouvertes visibles dans toutes les séances
+  });
+
+  const updateSeance = (field, val) => {
+    const updated = { ...r, seances: seances.map((s,i) => i===seanceIdx ? {...s,[field]:val} : s) };
+    save(updated);
+  };
+
+  const addSeance = () => {
+    const newS = { id: uid(), date: today(), agenda: "", notes: "" };
+    const updated = { ...r, seances: [...seances, newS] };
+    save(updated);
+    setSeanceIdx(updated.seances.length - 1);
+  };
+
+  const saveAction = (action) => {
+    const exists = actions.find(a => a.id === action.id);
+    const nextActions = exists ? actions.map(a => a.id===action.id ? action : a) : [...actions, action];
+    save({ ...r, actions: nextActions });
+    setShowActionModal(null);
+    // Sync avec Tâches si assigné à moi
+    if (action.syncToTasks && onAddTask) {
+      onAddTask({
+        id: uid(), title: action.title, description: action.notes||"",
+        category: r.title, priority: action.priority||"normal",
+        dueDate: action.dueDate||"", status: "todo", completed: false,
+        reminder: action.reminder||"none",
+      });
+    }
+  };
+
+  const deleteAction = (id) => {
+    save({ ...r, actions: actions.filter(a => a.id !== id) });
+  };
+
+  const toggleActionStatus = (id) => {
+    const a = actions.find(x => x.id === id);
+    if (!a) return;
+    const next = a.status === "done" ? "todo" :
+                 a.status === "todo" ? "inprogress" :
+                 a.status === "inprogress" ? "done" : "todo";
+    save({ ...r, actions: actions.map(x => x.id===id ? {...x, status:next} : x) });
+  };
+
+  const ACTION_STATUSES = [
+    {id:"todo",      label:"À faire",   color:"#64748B", bg:"#F8FAFC"},
+    {id:"inprogress",label:"En cours",  color:"#D97706", bg:"#FFFBEB"},
+    {id:"done",      label:"Fait",      color:"#16A34A", bg:"#F0FDF4"},
+    {id:"cancelled", label:"Annulée",   color:"#9CA3AF", bg:"#F9FAFB"},
+  ];
+  const PRIOS = [
+    {id:"urgent",label:"⊛ P1",color:"#C0392B"},{id:"high",label:"▲ P2",color:"#E67E22"},
+    {id:"normal",label:"▬ P3",color:"#7F8C8D"},{id:"low",label:"▼ P4",color:"#27AE60"}
+  ];
+
+  const getStatusStyle = (statusId) => ACTION_STATUSES.find(s=>s.id===statusId)||ACTION_STATUSES[0];
+  const getCatStyle = (catId) => (r.categories||[]).find(c=>c.id===catId)||{color:"#94A3B8",bg:"#F8FAFC"};
+
+  const overdueCount = actions.filter(a => a.status!=="done" && a.status!=="cancelled" && a.dueDate && a.dueDate < today()).length;
+
+  return (
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+      {/* ── Header réunion ── */}
+      <div style={{background:"white",borderBottom:"1px solid #ECEAE5",padding:"12px 20px",
+        display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:6,height:32,borderRadius:3,background:r.color||"#102A63",flexShrink:0}} />
+          <div>
+            <div style={{fontSize:17,fontWeight:700,color:"#1E293B",fontFamily:_FL}}>{r.title}</div>
+            <div style={{fontSize:11,color:"#94A3B8",fontFamily:_DM}}>
+              {r.recurrence==="weekly"?"Hebdomadaire":r.recurrence==="monthly"?"Mensuelle":r.recurrence==="biweekly"?"Bimensuelle":r.recurrence==="quarterly"?"Trimestrielle":"Ponctuelle"}
+              {r.participants && ` · 👥 ${r.participants}`}
+              {overdueCount > 0 && <span style={{color:"#C0392B",marginLeft:8}}>⚠ {overdueCount} action{overdueCount>1?"s":""} en retard</span>}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowSettings(true)}
+            style={{...S.ghost,padding:"5px 10px",fontSize:11}}>⚙ Paramètres</button>
+          {confirmDel ? (
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{fontSize:11,color:"#C0392B",fontFamily:_FL}}>Supprimer ?</span>
+              <button onClick={()=>onDelete(r.id)} style={{...S.btn("#C0392B"),padding:"4px 10px",fontSize:10}}>Oui</button>
+              <button onClick={()=>setConfirmDel(false)} style={{...S.btn("#F0F0F0","#666"),padding:"4px 10px",fontSize:10}}>Non</button>
+            </div>
+          ) : (
+            <button onClick={()=>setConfirmDel(true)}
+              style={{...S.ghost,padding:"5px 10px",fontSize:11,color:"#C0392B"}}>🗑</button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Navigation séances ── */}
+      <div style={{background:"white",borderBottom:"1px solid #ECEAE5",padding:"8px 20px",
+        display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <span style={{fontSize:11,color:"#94A3B8",fontFamily:_DM,flexShrink:0}}>Séance :</span>
+        <div style={{display:"flex",alignItems:"center",gap:6,flex:1,overflowX:"auto"}}>
+          <button onClick={()=>setSeanceIdx(i=>Math.max(0,i-1))} disabled={seanceIdx===0}
+            style={{border:"none",background:"none",cursor:seanceIdx===0?"not-allowed":"pointer",color:seanceIdx===0?"#E2E8F0":"#102A63",fontSize:16,padding:"0 4px",lineHeight:1}}>‹</button>
+          {seances.map((s,i)=>(
+            <button key={s.id} onClick={()=>setSeanceIdx(i)}
+              style={{border:i===seanceIdx?"2px solid #102A63":"1px solid #E2E8F0",
+                borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:11,fontFamily:_DM,
+                color:i===seanceIdx?"white":"#64748B",background:i===seanceIdx?"#102A63":"white",
+                flexShrink:0}}>
+              {s.date ? s.date.split("-").reverse().join("/") : `Séance ${i+1}`}
+            </button>
+          ))}
+          <button onClick={()=>setSeanceIdx(i=>Math.min(seances.length-1,i+1))}
+            disabled={seanceIdx===seances.length-1}
+            style={{border:"none",background:"none",cursor:seanceIdx===seances.length-1?"not-allowed":"pointer",
+              color:seanceIdx===seances.length-1?"#E2E8F0":"#102A63",fontSize:16,padding:"0 4px",lineHeight:1}}>›</button>
+          <button onClick={addSeance}
+            style={{...S.ghost,padding:"3px 10px",fontSize:11,flexShrink:0}}>+ Séance</button>
+        </div>
+        {seance.id && (
+          <input type="date" value={seance.date||""} onChange={e=>updateSeance("date",e.target.value)}
+            style={{...S.input,fontSize:11,padding:"4px 8px",width:130,flexShrink:0}} />
+        )}
+      </div>
+
+      {/* ── Corps : 2 colonnes ── */}
+      <div style={{flex:1,display:"flex",overflow:"hidden"}}>
+
+        {/* Colonne gauche : Ordre du jour + Notes */}
+        <div style={{flex:"0 0 45%",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+          <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:16}}>
+
+            {/* Ordre du jour */}
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#94A3B8",fontFamily:_FL,letterSpacing:"0.08em",
+                textTransform:"uppercase",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #F1F5F9"}}>
+                Ordre du jour
+              </div>
+              <RichTextEditor
+                value={seance.agenda||""}
+                onChange={v=>updateSeance("agenda",v)}
+                placeholder="Points à aborder…"
+                minHeight={120} />
+            </div>
+
+            {/* Notes / CR */}
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:"#94A3B8",fontFamily:_FL,letterSpacing:"0.08em",
+                textTransform:"uppercase",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #F1F5F9"}}>
+                Notes / Compte-rendu
+              </div>
+              <RichTextEditor
+                value={seance.notes||""}
+                onChange={v=>updateSeance("notes",v)}
+                placeholder="Notes de séance…"
+                minHeight={160} />
+            </div>
+
+          </div>
+        </div>
+
+        {/* Colonne droite : Actions */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+          <div style={{padding:"10px 16px",borderBottom:"1px solid #F1F5F9",
+            display:"flex",justifyContent:"space-between",alignItems:"center",background:"#FAFBFC",flexShrink:0}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#1E293B",fontFamily:_FL}}>
+              Actions
+              {pendingActions.length > 0 && (
+                <span style={{marginLeft:6,fontSize:9,color:"#1D4ED8",background:"#EFF6FF",
+                  borderRadius:10,padding:"1px 6px",fontFamily:_DM}}>{pendingActions.length} ouvertes</span>
+              )}
+            </div>
+            <button onClick={()=>setShowActionModal("new")}
+              style={{...S.btn("#102A63"),padding:"4px 12px",fontSize:11}}>+ Action</button>
+          </div>
+
+          <div style={{flex:1,overflowY:"auto",padding:"8px 0"}}>
+            {seanceActions.length === 0 && (
+              <div style={{padding:"30px",textAlign:"center",color:"#CCC",fontFamily:_FL,fontSize:12}}>
+                Aucune action — cliquez sur "+ Action"
+              </div>
+            )}
+            {seanceActions.map(a => {
+              const st = getStatusStyle(a.status);
+              const cat = getCatStyle(a.categoryId);
+              const prio = PRIOS.find(p=>p.id===a.priority)||PRIOS[2];
+              const isOverdue = a.dueDate && a.dueDate < today() && a.status !== "done" && a.status !== "cancelled";
+              return (
+                <div key={a.id} style={{padding:"8px 16px",borderBottom:"1px solid #F8FAFC",
+                  background:"white",cursor:"pointer"}}
+                  onClick={()=>setShowActionModal(a)}>
+                  <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                    <button onClick={e=>{e.stopPropagation();toggleActionStatus(a.id);}}
+                      style={{width:18,height:18,borderRadius:"50%",border:`2px solid ${st.color}`,
+                        background:a.status==="done"?st.color:"white",cursor:"pointer",
+                        flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",
+                        fontSize:9,color:"white"}}>
+                      {a.status==="done"?"✓":""}
+                    </button>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:600,color:a.status==="done"?"#94A3B8":"#1E293B",
+                        fontFamily:_FL,textDecoration:a.status==="done"?"line-through":"none",
+                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {a.title||"Sans titre"}
+                      </div>
+                      <div style={{display:"flex",gap:6,marginTop:3,flexWrap:"wrap",alignItems:"center"}}>
+                        {a.assignedTo && <span style={{fontSize:10,color:"#64748B",fontFamily:_FL}}>👤 {a.assignedTo}</span>}
+                        {a.dueDate && (
+                          <span style={{fontSize:10,color:isOverdue?"#C0392B":"#94A3B8",fontFamily:_DM}}>
+                            📅 {a.dueDate.split("-").reverse().join("/")}
+                          </span>
+                        )}
+                        <span style={{fontSize:9,color:prio.color,fontFamily:_DM}}>{prio.label}</span>
+                        {a.categoryId && (
+                          <span style={{fontSize:9,color:cat.color,background:cat.bg,
+                            borderRadius:10,padding:"1px 6px",fontFamily:_DM}}>{cat.name}</span>
+                        )}
+                        <span style={{fontSize:9,color:st.color,background:st.bg,
+                          borderRadius:10,padding:"1px 6px",fontFamily:_DM}}>{st.label}</span>
+                      </div>
+                      {(a.subtasks||[]).length > 0 && (
+                        <div style={{fontSize:10,color:"#94A3B8",fontFamily:_DM,marginTop:2}}>
+                          {(a.subtasks||[]).filter(s=>s.done).length}/{(a.subtasks||[]).length} sous-tâches
+                        </div>
+                      )}
+                    </div>
+                    <button onClick={e=>{e.stopPropagation();deleteAction(a.id);}}
+                      style={{border:"none",background:"none",color:"#CBD5E1",cursor:"pointer",
+                        fontSize:14,padding:"0 2px",flexShrink:0}}>×</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Modal Action ── */}
+      {showActionModal && (
+        <MeetingActionModal
+          action={showActionModal==="new" ? {
+            id:uid(), title:"", assignedTo:"", dueDate:"", priority:"normal",
+            status:"todo", categoryId:"", notes:"", subtasks:[], reminder:"none",
+            syncToTasks:false, seanceId: seance.id
+          } : showActionModal}
+          categories={r.categories||[]}
+          onSave={saveAction}
+          onClose={()=>setShowActionModal(null)} />
+      )}
+
+      {/* ── Modal Paramètres réunion ── */}
+      {showSettings && (
+        <MeetingSettingsModal
+          reunion={r}
+          onSave={(updated)=>{ save(updated); setShowSettings(false); }}
+          onClose={()=>setShowSettings(false)} />
+      )}
+    </div>
+  );
+}
+
+/* ── Modal Action de réunion ── */
+function MeetingActionModal({ action, categories, onSave, onClose }) {
+  const [d, setD] = React.useState(action);
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uid = () => Math.random().toString(36).substr(2,9);
+  const isNew = !action.title;
+
+  const PRIOS = [
+    {id:"urgent",label:"⊛ P1 Urgente",color:"#C0392B"},{id:"high",label:"▲ P2 Haute",color:"#E67E22"},
+    {id:"normal",label:"▬ P3 Normale",color:"#7F8C8D"},{id:"low",label:"▼ P4 Basse",color:"#27AE60"}
+  ];
+  const STATUSES = [
+    {id:"todo",label:"À faire"},{id:"inprogress",label:"En cours"},
+    {id:"done",label:"Fait"},{id:"cancelled",label:"Annulée"}
+  ];
+  const REMINDERS = [
+    {id:"none",label:"Aucun"},{id:"same",label:"Le jour même"},{id:"1d",label:"1 jour avant"},
+    {id:"2d",label:"2 jours avant"},{id:"1w",label:"1 semaine avant"}
+  ];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,
+      display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{background:"white",borderRadius:16,width:"min(580px,96vw)",maxHeight:"92vh",
+        display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+
+        {/* Header */}
+        <div style={{background:"linear-gradient(135deg,#102A63,#1a3d8f)",padding:"18px 24px",
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)",fontFamily:_FL,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:3}}>Action de réunion</div>
+            <div style={{fontSize:16,fontWeight:700,color:"white",fontFamily:_FL}}>{isNew?"Nouvelle action":"Modifier l'action"}</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",borderRadius:8,padding:"4px 9px"}}>×</button>
+        </div>
+
+        <div style={{overflowY:"auto",flex:1,padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
+
+          <ModalSection title="Titre">
+            <input value={d.title} onChange={e=>set("title",e.target.value)}
+              placeholder="Titre de l'action…" autoFocus style={{...S.input,fontSize:14,fontWeight:600}} />
+          </ModalSection>
+
+          <ModalSection title="Assignation & priorité">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                {_MODAL_LBL("Assigné à")}
+                <input value={d.assignedTo} onChange={e=>set("assignedTo",e.target.value)}
+                  placeholder="Prénom…" style={{..._MODAL_INP}} />
+              </div>
+              <div>
+                {_MODAL_LBL("Priorité")}
+                <select value={d.priority} onChange={e=>set("priority",e.target.value)} style={{..._MODAL_INP}}>
+                  {PRIOS.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+              </div>
+            </div>
+          </ModalSection>
+
+          <ModalSection title="Statut & catégorie">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                {_MODAL_LBL("Statut")}
+                <select value={d.status} onChange={e=>set("status",e.target.value)} style={{..._MODAL_INP}}>
+                  {STATUSES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                </select>
+              </div>
+              <div>
+                {_MODAL_LBL("Catégorie")}
+                <select value={d.categoryId} onChange={e=>set("categoryId",e.target.value)} style={{..._MODAL_INP}}>
+                  <option value="">— Aucune —</option>
+                  {categories.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </ModalSection>
+
+          <ModalSection title="Échéance & rappel">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                {_MODAL_LBL("Date limite")}
+                <input type="date" value={d.dueDate} onChange={e=>set("dueDate",e.target.value)}
+                  style={{..._MODAL_INP}} />
+              </div>
+              <div>
+                {_MODAL_LBL("Rappel")}
+                <select value={d.reminder} onChange={e=>set("reminder",e.target.value)} style={{..._MODAL_INP}}>
+                  {REMINDERS.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+                </select>
+              </div>
+            </div>
+          </ModalSection>
+
+          <ModalSection title="Notes">
+            <RichTextEditor value={d.notes||""} onChange={v=>set("notes",v)}
+              placeholder="Notes sur cette action…" minHeight={80} />
+          </ModalSection>
+
+          <ModalSection title="Sous-tâches">
+            {(d.subtasks||[]).map((sub,i)=>(
+              <div key={sub.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <button onClick={()=>set("subtasks",d.subtasks.map((s,j)=>j===i?{...s,done:!s.done}:s))}
+                  style={{width:16,height:16,borderRadius:"50%",border:`2px solid ${sub.done?"#27AE60":"#CCC"}`,
+                    background:sub.done?"#27AE60":"white",cursor:"pointer",flexShrink:0,
+                    display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white"}}>
+                  {sub.done?"✓":""}
+                </button>
+                <input value={sub.text} onChange={e=>set("subtasks",d.subtasks.map((s,j)=>j===i?{...s,text:e.target.value}:s))}
+                  placeholder="Sous-tâche…" style={{..._MODAL_INP,flex:1,padding:"4px 8px"}} />
+                <button onClick={()=>set("subtasks",d.subtasks.filter((_,j)=>j!==i))}
+                  style={{border:"none",background:"none",color:"#CBD5E1",cursor:"pointer",fontSize:14}}>×</button>
+              </div>
+            ))}
+            <button onClick={()=>set("subtasks",[...(d.subtasks||[]),{id:uid(),text:"",done:false}])}
+              style={{...S.ghost,fontSize:11,padding:"4px 10px"}}>+ Sous-tâche</button>
+          </ModalSection>
+
+          <ModalSection title="Synchronisation">
+            <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}>
+              <input type="checkbox" checked={d.syncToTasks||false}
+                onChange={e=>set("syncToTasks",e.target.checked)}
+                style={{width:16,height:16,cursor:"pointer"}} />
+              <span style={{fontSize:12,fontFamily:_FL,color:"#1E293B"}}>
+                Ajouter à Mes tâches (module Tâches)
+              </span>
+            </label>
+          </ModalSection>
+
+        </div>
+
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",
+          justifyContent:"flex-end",gap:8,background:"#FAFBFC",flexShrink:0}}>
+          <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+          <button onClick={()=>{ if(d.title.trim()) onSave(d); }}
+            style={{...S.btn("#102A63"),padding:"8px 18px",fontSize:11,opacity:d.title.trim()?1:0.5}}>
+            ✓ Enregistrer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal Paramètres réunion ── */
+function MeetingSettingsModal({ reunion, onSave, onClose }) {
+  const [d, setD] = React.useState(reunion);
+  const set = (k,v) => setD(p=>({...p,[k]:v}));
+  const uid = () => Math.random().toString(36).substr(2,9);
+
+  const DAYS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi","Dimanche"];
+  const RECURRENCES = [
+    {id:"none",label:"Ponctuelle"},{id:"weekly",label:"Hebdomadaire"},
+    {id:"biweekly",label:"Bimensuelle"},{id:"monthly",label:"Mensuelle"},
+    {id:"quarterly",label:"Trimestrielle"}
+  ];
+  const COLORS = ["#102A63","#1D4ED8","#7C3AED","#065F46","#C0392B","#E67E22","#0F766E"];
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:4000,
+      display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}
+      onMouseDown={e=>{if(e.target===e.currentTarget)e.currentTarget._md=true;}}
+      onMouseUp={e=>{if(e.target===e.currentTarget&&e.currentTarget._md){e.currentTarget._md=false;onClose();}}}>
+      <div style={{background:"white",borderRadius:16,width:"min(500px,96vw)",maxHeight:"90vh",
+        display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 32px 80px rgba(0,0,0,0.25)"}}>
+
+        <div style={{background:"linear-gradient(135deg,#102A63,#1a3d8f)",padding:"18px 24px",
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div style={{fontSize:16,fontWeight:700,color:"white",fontFamily:_FL}}>Paramètres de la réunion</div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",fontSize:20,cursor:"pointer",borderRadius:8,padding:"4px 9px"}}>×</button>
+        </div>
+
+        <div style={{overflowY:"auto",flex:1,padding:"20px 24px",display:"flex",flexDirection:"column",gap:14}}>
+          <div>
+            {_MODAL_LBL("Titre")}
+            <input value={d.title} onChange={e=>set("title",e.target.value)} style={{..._MODAL_INP,fontSize:14,fontWeight:600}} />
+          </div>
+          <div>
+            {_MODAL_LBL("Participants")}
+            <input value={d.participants||""} onChange={e=>set("participants",e.target.value)}
+              placeholder="Arnaud, Sophie, Marc…" style={{..._MODAL_INP}} />
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              {_MODAL_LBL("Récurrence")}
+              <select value={d.recurrence} onChange={e=>set("recurrence",e.target.value)} style={{..._MODAL_INP}}>
+                {RECURRENCES.map(r=><option key={r.id} value={r.id}>{r.label}</option>)}
+              </select>
+            </div>
+            {d.recurrence==="weekly" && (
+              <div>
+                {_MODAL_LBL("Jour")}
+                <select value={d.recurrenceDay} onChange={e=>set("recurrenceDay",e.target.value)} style={{..._MODAL_INP}}>
+                  {DAYS.map((day,i)=><option key={i} value={String(i+1)}>{day}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+          <div>
+            {_MODAL_LBL("Couleur")}
+            <div style={{display:"flex",gap:8,marginTop:4}}>
+              {COLORS.map(c=>(
+                <div key={c} onClick={()=>set("color",c)}
+                  style={{width:24,height:24,borderRadius:"50%",background:c,cursor:"pointer",
+                    border:d.color===c?"3px solid #1E293B":"3px solid transparent",boxSizing:"border-box"}} />
+              ))}
+            </div>
+          </div>
+          <div>
+            {_MODAL_LBL("Catégories d'actions")}
+            <div style={{marginTop:6}}>
+              {(d.categories||[]).map((cat,i)=>(
+                <div key={cat.id} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:cat.color,flexShrink:0}} />
+                  <input value={cat.name} onChange={e=>{
+                    const cats = d.categories.map((c,j)=>j===i?{...c,name:e.target.value}:c);
+                    set("categories",cats);
+                  }} style={{..._MODAL_INP,flex:1,padding:"4px 8px"}} />
+                  <button onClick={()=>set("categories",d.categories.filter((_,j)=>j!==i))}
+                    style={{border:"none",background:"none",color:"#CBD5E1",cursor:"pointer",fontSize:16,padding:0}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>set("categories",[...(d.categories||[]),
+                {id:uid(),name:"Nouvelle catégorie",color:"#94A3B8",bg:"#F8FAFC"}])}
+                style={{...S.ghost,fontSize:11,padding:"4px 10px"}}>+ Catégorie</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{padding:"14px 24px",borderTop:"1px solid #F1F5F9",display:"flex",
+          justifyContent:"flex-end",gap:8,background:"#FAFBFC",flexShrink:0}}>
+          <button onClick={onClose} style={{...S.btn("#F0F0F0","#666"),padding:"8px 18px",fontSize:11}}>Annuler</button>
+          <button onClick={()=>onSave(d)}
+            style={{...S.btn("#102A63"),padding:"8px 18px",fontSize:11}}>✓ Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 
 function CategoryTasksView({ tasks, onDelete, onToggle, onEdit, onAdd, onSaveComment, onPin, settings }) {
   const isMobile = useIsMobile();
@@ -14223,6 +14912,8 @@ function App() {
   const [tasks, setTasks, tasksReady] = useAppStore("tasks", sampleTasks(settings.categories));
   const [appReady, setAppReady] = useState(false); // IDB migration done
   const [showSearch, setShowSearch] = React.useState(false);
+  const [reunionsForNotifs, setReunionsForNotifs] = React.useState([]);
+  React.useEffect(() => { appDbGet(MTG_KEY).then(d=>setReunionsForNotifs(d||[])).catch(()=>{}); }, [view]);
   const [view, setView] = useState("dashboard");
   const [fullscreen, setFullscreen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -14630,7 +15321,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.578{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.579{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -14723,9 +15414,9 @@ function App() {
           {view === "dashboard"     && <Dashboard      tasks={tasks} onNavigate={setView} settings={settings} />}
           {view === "kanban"        && <KanbanView tasks={tasks} onEdit={openEdit} onToggle={togTask} onUpdate={updTask} settings={settings} />}
           {view === "myday"         && <MyDayView       tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
-          {view === "meetings"      && <MeetingsView    onAddTask={addTask} />}
+          {view === "meetings"      && <MeetingsView    onAddTask={addTask} settings={settings} />}
           {/* calendar moved to full-width block */}
-          {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} />}
+          {view === "notifications" && <NotificationsView tasks={tasks} onUpdate={updTask} settings={settings} meetings={reunionsForNotifs} />}
           {view === "reporting"     && <ReportingView   tasks={tasks} onEdit={openEdit} onToggle={togTask} onSaveComment={saveComment} settings={settings} />}
           {view === "rcf"           && <RCFView settings={settings} />}
           {view === "payments"      && <PaymentsView settings={settings} />}
