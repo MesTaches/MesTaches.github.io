@@ -3607,7 +3607,7 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
    MODULE RÉUNIONS — MeetingsView + MeetingDossierPanel
    ═══════════════════════════════════════════════════════════════ */
 
-const MTG_KEY = "meetings_v2";
+const MTG_KEY = "meetings";
 
 function MeetingsView({ onAddTask, settings }) {
   const isMobile = useIsMobile();
@@ -4020,11 +4020,11 @@ function MeetingDossierPanel({ reunion, onSave, onDelete, onAddTask, settings })
                 textTransform:"uppercase",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #F1F5F9"}}>
                 Ordre du jour
               </div>
-              <RichTextEditor
+              <RichTextArea
                 value={seance.agenda||""}
                 onChange={v=>updateSeance("agenda",v)}
                 placeholder="Points à aborder…"
-                minHeight={120} />
+                rows={4} />
             </div>
 
             {/* Notes / CR */}
@@ -4033,11 +4033,11 @@ function MeetingDossierPanel({ reunion, onSave, onDelete, onAddTask, settings })
                 textTransform:"uppercase",marginBottom:8,paddingBottom:5,borderBottom:"1px solid #F1F5F9"}}>
                 Notes / Compte-rendu
               </div>
-              <RichTextEditor
+              <RichTextArea
                 value={seance.notes||""}
                 onChange={v=>updateSeance("notes",v)}
                 placeholder="Notes de séance…"
-                minHeight={160} />
+                rows={6} />
             </div>
 
           </div>
@@ -4239,8 +4239,8 @@ function MeetingActionModal({ action, categories, onSave, onClose }) {
           </ModalSection>
 
           <ModalSection title="Notes">
-            <RichTextEditor value={d.notes||""} onChange={v=>set("notes",v)}
-              placeholder="Notes sur cette action…" minHeight={80} />
+            <RichTextArea value={d.notes||""} onChange={v=>set("notes",v)}
+              placeholder="Notes sur cette action…" rows={3} />
           </ModalSection>
 
           <ModalSection title="Sous-tâches">
@@ -15333,7 +15333,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.585{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.586{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
