@@ -606,7 +606,7 @@ function useIsMobile() {
    APP_DB  —  couche IndexedDB universelle (tous modules)
    ════════════════════════════════════════════════════════ */
 const APP_DB_NAME    = "app_main_db";
-const APP_DB_VERSION = 1;
+const APP_DB_VERSION = 2;
 
 const APP_STORES = [
   "tasks",          // Tâches principales (STORAGE_KEY)
@@ -15057,7 +15057,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.590{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.591{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
