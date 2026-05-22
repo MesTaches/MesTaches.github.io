@@ -3618,7 +3618,15 @@ const MTG_KEY = "meetings";
 
 function MeetingsView({ onAddTask, settings }) {
   const isMobile = useIsMobile();
-  const [reunions, setReunions, reunionsReady] = useAppStore(MTG_KEY, []);
+  const [reunionsRaw, setReunions, reunionsReady] = useAppStore(MTG_KEY, []);
+  // Normaliser les données pour compatibilité avec l'ancien format
+  const reunions = React.useMemo(() => (reunionsRaw||[]).map(r => ({
+    ...r,
+    seances: r.seances || (r.date ? [{id:r.id+'_s',date:r.date,agenda:r.agenda||'',notes:r.notes||''}] : [{id:'s1',date:new Date().toISOString().split('T')[0],agenda:'',notes:''}]),
+    actions: r.actions || [],
+    categories: r.categories || [],
+    recurrence: r.recurrence || 'none',
+  })), [reunionsRaw]);
   const [selected, setSelected]   = React.useState(null);
   const [showNew,  setShowNew]    = React.useState(false);
   const [search,   setSearch]     = React.useState("");
@@ -15340,7 +15348,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.588{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.589{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
