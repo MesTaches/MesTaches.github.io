@@ -3519,6 +3519,26 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
         </div>
       )}
 
+      {/* ── Rappels actions de réunion ── */}
+      {(meetingReminders||[]).length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#D97706", letterSpacing: "0.08em", fontFamily: "'Lora',serif", marginBottom: 10, textTransform: "uppercase" }}>◷ Réunions</div>
+          {meetingReminders.map(a => (
+            <div key={"mtg-"+a.id} style={{ background:"white", borderRadius:12, border:"1px solid #FDE68A",
+              padding:"12px 16px", marginBottom:6, display:"flex", gap:10, alignItems:"center" }}>
+              <div style={{ width:36, height:36, borderRadius:10, background:"#FFFBEB",
+                display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>◷</div>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:12, fontWeight:600, fontFamily:_FL, color:"#1E293B" }}>{a.title}</div>
+                <div style={{ fontSize:11, color:"#94A3B8", fontFamily:_DM }}>
+                  {a._reunionTitle}{a.assignedTo?` · 👤 ${a.assignedTo}`:""}{a.dueDate?` · 📅 ${a.dueDate.split("-").reverse().join("/")}`: ""}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Rappels tâches actifs ── */}
       {triggered.length > 0 && (
         <div style={{ marginBottom: 24 }}>
@@ -3541,7 +3561,6 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
           })}
         </div>
       )}
-      </>
 
       {/* ── Alertes RCF J-60 (avertissements) ── */}
       {rcfWarn.length > 0 && (
@@ -3564,22 +3583,6 @@ function NotificationsView({ tasks, onUpdate, settings, meetings }) {
           const co = settings.categories.find(c => c.name === t.category);
           const diff = Math.ceil((new Date(t.dueDate) - new Date()) / 864e5);
           return (
-            <>
-            {meetingReminders.map(a => (
-              <div key={"mtg-"+a.id} style={{ background:"white", borderRadius:12, border:"1px solid #FDE68A",
-                padding:"12px 16px", marginBottom:6, display:"flex", gap:10, alignItems:"center" }}>
-                <div style={{ width:36, height:36, borderRadius:10, background:"#FFFBEB",
-                  display:"flex", alignItems:"center", justifyContent:"center", fontSize:16, flexShrink:0 }}>◷</div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:12, fontWeight:600, fontFamily:_FL, color:"#1E293B" }}>{a.title}</div>
-                  <div style={{ fontSize:11, color:"#94A3B8", fontFamily:_DM }}>
-                    Réunion : {a._reunionTitle}
-                    {a.assignedTo ? ` · 👤 ${a.assignedTo}` : ""}
-                    {a.dueDate ? ` · 📅 ${a.dueDate.split("-").reverse().join("/")}` : ""}
-                  </div>
-                </div>
-              </div>
-            ))}
             <div key={t.id} style={{ background: "white", borderRadius: 12, border: "1px solid #ECEAE5", padding: "12px 16px", marginBottom: 6, display: "flex", gap: 10, alignItems: "center" }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: co?.bg || "#F0F0F0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🔔</div>
               <div style={{ flex: 1 }}>
@@ -15321,7 +15324,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.580{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.581{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
