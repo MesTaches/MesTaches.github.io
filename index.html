@@ -1412,6 +1412,7 @@ const DEFAULT_SETTINGS = {
     { id: "litige", name: "Litige", color: "#2980B9", bg: "#EBF5FB" },
     { id: "cotation", name: "Cotation", color: "#27AE60", bg: "#E8F8F5" },
   ],
+  meetingCategories: ["Équipe", "Direction", "Client", "Projet"],
 };
 
 function loadSettings() {
@@ -1432,6 +1433,7 @@ function loadSettings() {
       labels: [...mergedLabels, ...extraLabels],
       groqKey: (parsed.groqKey || "").trim(),
       suiviTypes: parsed.suiviTypes || DEFAULT_SETTINGS.suiviTypes,
+      meetingCategories: parsed.meetingCategories || DEFAULT_SETTINGS.meetingCategories,
     };
   } catch { return DEFAULT_SETTINGS; }
 }
@@ -3649,7 +3651,7 @@ const MTG_REMINDERS = [
 function _mkMtg(title) {
   return {
     id:uid(), title:title||"Nouvelle réunion", color:"#102A63",
-    recurrence:{type:"none"}, categories:["Suivi","Action","Info"],
+    recurrence:{type:"none"}, category:"",
     content:"", createdAt:new Date().toISOString()
   };
 }
@@ -3757,21 +3759,30 @@ function MeetingActionPanel({ action, categories, onSave, onClose }) {
 }
 
 /* ── MeetingSettingsPanel ── */
-function MeetingSettingsPanel({ reunion, onSave, onClose }) {
+function MeetingSettingsPanel({ reunion, onSave, onClose, settings, onSaveSettings }) {
   var [d, setD] = React.useState(Object.assign({},reunion));
   var set = function(k,v){ setD(function(p){ var n=Object.assign({},p); n[k]=v; return n; }); };
   var [newCat, setNewCat] = React.useState("");
-  var cats = d.categories||[];
-  var addCat = function(){
-    var t=newCat.trim();
-    if(!t) return;
-    setD(function(p){ return Object.assign({},p,{categories:[...(p.categories||[]),t]}); });
+  var availableCats = (settings && settings.meetingCategories) || [];
+
+  var addGlobalCat = function(){
+    var t = newCat.trim();
+    if (!t) return;
+    if (availableCats.indexOf(t) === -1 && onSaveSettings) {
+      onSaveSettings(Object.assign({}, settings, { meetingCategories: [...availableCats, t] }));
+    }
+    set("category", t);
     setNewCat("");
   };
-  var delCat = function(c){ setD(function(p){ return Object.assign({},p,{categories:(p.categories||[]).filter(function(x){return x!==c;})}); }); };
+  var delGlobalCat = function(c){
+    if (!onSaveSettings) return;
+    onSaveSettings(Object.assign({}, settings, { meetingCategories: availableCats.filter(function(x){return x!==c;}) }));
+    if (d.category === c) set("category", "");
+  };
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"white",borderRadius:16,width:460,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.18)",borderTop:"4px solid "+d.color}}>
+      <div style={{background:"white",borderRadius:16,width:480,maxWidth:"92vw",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 24px 64px rgba(0,0,0,0.18)",borderTop:"4px solid "+d.color}}>
         <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:"white",zIndex:1}}>
           <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:d.color,letterSpacing:"0.06em"}}>PARAMÈTRES</span>
           <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
@@ -3780,6 +3791,25 @@ function MeetingSettingsPanel({ reunion, onSave, onClose }) {
           <div>
             {_MODAL_LBL("Nom de la réunion")}
             <input value={d.title} onChange={function(e){set("title",e.target.value);}} style={_MODAL_INP} />
+          </div>
+          <div>
+            {_MODAL_LBL("Catégorie")}
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
+              <span onClick={function(){set("category","");}} style={{display:"inline-flex",alignItems:"center",gap:4,background:d.category===""?d.color:"transparent",color:d.category===""?"white":"#888",border:"1px solid "+(d.category===""?d.color:"#E0E0E0"),borderRadius:20,padding:"3px 10px",fontSize:11,fontFamily:_DM,cursor:"pointer",fontWeight:d.category===""?700:400}}>—  Aucune</span>
+              {availableCats.map(function(c){
+                var selected = d.category === c;
+                return (
+                  <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:selected?d.color:"#EEF2FF",color:selected?"white":"#4F46E5",border:"1px solid "+(selected?d.color:"transparent"),borderRadius:20,padding:"3px 10px",fontSize:11,fontFamily:_DM,fontWeight:selected?700:400}}>
+                    <span onClick={function(){set("category",c);}} style={{cursor:"pointer"}}>{c}</span>
+                    <button onClick={function(){delGlobalCat(c);}} title="Retirer cette catégorie de la liste globale" style={{border:"none",background:"none",cursor:"pointer",color:selected?"white":"#4F46E5",fontSize:13,lineHeight:1,padding:0,opacity:0.7}}>×</button>
+                  </span>
+                );
+              })}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <input value={newCat} onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")addGlobalCat();}} style={Object.assign({},_MODAL_INP,{flex:1})} placeholder="Nouvelle catégorie (ex: Comité de pilotage)…" />
+              <button onClick={addGlobalCat} disabled={!newCat.trim()} style={S.btn("#102A63")}>+ Ajouter</button>
+            </div>
           </div>
           <div>
             {_MODAL_LBL("Couleur")}
@@ -3796,23 +3826,6 @@ function MeetingSettingsPanel({ reunion, onSave, onClose }) {
             <select value={(d.recurrence&&d.recurrence.type)||"none"} onChange={function(e){set("recurrence",{type:e.target.value});}} style={_MODAL_INP}>
               {MTG_REC.map(function(r){ return <option key={r.id} value={r.id}>{r.label}</option>; })}
             </select>
-          </div>
-          <div>
-            {_MODAL_LBL("Catégories d'actions")}
-            <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}>
-              {cats.map(function(c){
-                return (
-                  <span key={c} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#EEF2FF",color:"#4F46E5",borderRadius:20,padding:"3px 10px",fontSize:11,fontFamily:_DM}}>
-                    {c}
-                    <button onClick={function(){delCat(c);}} style={{border:"none",background:"none",cursor:"pointer",color:"#4F46E5",fontSize:13,lineHeight:1,padding:0}}>×</button>
-                  </span>
-                );
-              })}
-            </div>
-            <div style={{display:"flex",gap:8}}>
-              <input value={newCat} onChange={function(e){setNewCat(e.target.value);}} onKeyDown={function(e){if(e.key==="Enter")addCat();}} style={Object.assign({},_MODAL_INP,{flex:1})} placeholder="Nouvelle catégorie…" />
-              <button onClick={addCat} style={S.btn("#102A63")}>+</button>
-            </div>
           </div>
         </div>
         <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:10}}>
@@ -3886,7 +3899,7 @@ function MeetingPanel({ reunion, onSave, onOpenSettings }) {
 }
 
 /* ── MeetingsView ── */
-function MeetingsView({ onAddTask, settings }) {
+function MeetingsView({ onAddTask, settings, onSaveSettings }) {
   var [meetings, setMeetings] = React.useState([]);
   var [loaded, setLoaded] = React.useState(false);
   var [error, setError] = React.useState(null);
@@ -3970,7 +3983,10 @@ function MeetingsView({ onAddTask, settings }) {
           return (
             <div key={m.id} onClick={function(){selectMeeting(m.id);}} style={{padding:"10px 14px",cursor:"pointer",background:isActive?"#EEF2FF":"white",borderLeft:"3px solid "+(isActive?m.color:"transparent"),display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
-              <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+              <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
+                <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+                {m.category && <span style={{fontFamily:_DM,fontSize:9,color:m.color,background:m.color+"15",borderRadius:3,padding:"1px 6px",alignSelf:"flex-start",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{m.category}</span>}
+              </div>
             </div>
           );
         })}
@@ -3996,6 +4012,8 @@ function MeetingsView({ onAddTask, settings }) {
           reunion={selMtg}
           onSave={handleSaveSettings}
           onClose={function(){setShowSettings(false);}}
+          settings={settings}
+          onSaveSettings={onSaveSettings}
         />
       )}
     </div>
@@ -14950,7 +14968,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.593{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.594{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -15037,7 +15055,7 @@ function App() {
           {view === "echeancier" && (
             <EcheancierView tasks={tasks} settings={settings} />
           )}
-          {view === "meetings"      && <MeetingsView    onAddTask={addTask} settings={settings} />}
+          {view === "meetings"      && <MeetingsView    onAddTask={addTask} settings={settings} onSaveSettings={saveSettingsFn} />}
         </div>
       ) : (
         <div style={{ maxWidth: view === "payments" ? 1200 : view === "rcf" ? 1100 : view === "cotation" ? 1400 : view === "reporting" ? "100%" : view === "dashboard" ? "100%" : view === "meetings" ? "100%" : 960, margin: "0 auto", padding: view === "cotation" ? "20px 0px" : view === "payments" ? "20px 10px" : view === "reporting" ? "20px 12px" : view === "dashboard" ? "24px 24px" : view === "meetings" ? "0px" : "24px" }}>
