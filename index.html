@@ -3978,18 +3978,40 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
             Aucune réunion.<br/>
             <button onClick={function(){setShowNew(true);}} style={Object.assign({},S.ghost,{marginTop:12,fontSize:11})}>+ Créer une réunion</button>
           </div>
-        ) : meetings.map(function(m){
-          var isActive=m.id===selMtgId;
-          return (
-            <div key={m.id} onClick={function(){selectMeeting(m.id);}} style={{padding:"10px 14px",cursor:"pointer",background:isActive?"#EEF2FF":"white",borderLeft:"3px solid "+(isActive?m.color:"transparent"),display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}>
-              <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
-              <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
-                <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
-                {m.category && <span style={{fontFamily:_DM,fontSize:9,color:m.color,background:m.color+"15",borderRadius:3,padding:"1px 6px",alignSelf:"flex-start",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}>{m.category}</span>}
+        ) : (function(){
+          var availableCats = (settings && settings.meetingCategories) || [];
+          // Ordre : catégories dans l'ordre des settings (qui en ont au moins une réunion), puis orphelines, puis "Sans catégorie"
+          var orderedCats = [];
+          availableCats.forEach(function(c){
+            if (meetings.some(function(m){return m.category===c;})) orderedCats.push(c);
+          });
+          meetings.forEach(function(m){
+            if (m.category && orderedCats.indexOf(m.category)===-1) orderedCats.push(m.category);
+          });
+          var groups = orderedCats.map(function(c){
+            return { cat:c, items: meetings.filter(function(m){return m.category===c;}) };
+          });
+          var uncat = meetings.filter(function(m){ return !m.category; });
+          if (uncat.length>0) groups.push({ cat:"", items:uncat });
+          return groups.map(function(g, gi){
+            return (
+              <div key={g.cat || "_none_"+gi}>
+                <div style={{fontFamily:_DM,fontSize:9,fontWeight:700,color:"#888",letterSpacing:"0.08em",textTransform:"uppercase",padding:"12px 14px 5px",background:"#FAFAF8",borderTop: gi>0 ? "1px solid #F0F0F0" : "none"}}>
+                  {g.cat || "Sans catégorie"} <span style={{color:"#CCC",fontWeight:400}}>· {g.items.length}</span>
+                </div>
+                {g.items.map(function(m){
+                  var isActive = m.id===selMtgId;
+                  return (
+                    <div key={m.id} onClick={function(){selectMeeting(m.id);}} style={{padding:"9px 14px",cursor:"pointer",background:isActive?"#EEF2FF":"white",borderLeft:"3px solid "+(isActive?m.color:"transparent"),display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}>
+                      <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
+                      <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-          );
-        })}
+            );
+          });
+        })()}
       </div>
 
       {!selMtg ? (
@@ -14968,7 +14990,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.594{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.595{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
