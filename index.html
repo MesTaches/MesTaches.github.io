@@ -14574,6 +14574,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
   var [extracting, setExtracting] = React.useState(false);
   var [autoAI, setAutoAI] = React.useState(true);
   var [sourceLabel, setSourceLabel] = React.useState("");
+  var [extractedImages, setExtractedImages] = React.useState([]);
   var taRef = React.useRef(null);
   var dragCounterRef = React.useRef(0);
 
@@ -14735,9 +14736,84 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     return result.trim();
   };
 
+  // ── Conversion Uint8Array → data URI base64 ──
+  var bytesToDataUrl = function(bytes, mime) {
+    var binary = "";
+    var chunkSize = 8192;
+    for (var i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
+    }
+    return "data:" + mime + ";base64," + btoa(binary);
+  };
+
+  // ── Extraction des images PNG/JPEG embarquées dans le binaire d'un .msg ──
+  // Scan pur des signatures sans dépendre du format CFB. Robuste pour les images
+  // dans les pièces jointes ET dans les blobs TNEF (winmail.dat).
+  var extractImagesFromBinary = function(arrayBuffer) {
+    var bytes = new Uint8Array(arrayBuffer);
+    var images = [];
+    var MAX_IMAGES = 3;
+    var MAX_IMG_SIZE = 300 * 1024; // 300 KB par image
+    var MIN_PNG = 200, MIN_JPG = 800;
+
+    var i = 0;
+    while (i < bytes.length - 8 && images.length < MAX_IMAGES) {
+      // PNG : 89 50 4E 47 0D 0A 1A 0A ... 49 45 4E 44 (IEND) + 4 CRC
+      if (bytes[i] === 0x89 && bytes[i+1] === 0x50 && bytes[i+2] === 0x4E && bytes[i+3] === 0x47
+          && bytes[i+4] === 0x0D && bytes[i+5] === 0x0A && bytes[i+6] === 0x1A && bytes[i+7] === 0x0A) {
+        var found = false;
+        var scanEnd = Math.min(i + MAX_IMG_SIZE, bytes.length - 7);
+        for (var j = i + 8; j < scanEnd; j++) {
+          if (bytes[j] === 0x49 && bytes[j+1] === 0x45 && bytes[j+2] === 0x4E && bytes[j+3] === 0x44) {
+            var endPos = Math.min(j + 8, bytes.length);
+            if (endPos - i >= MIN_PNG) {
+              images.push({ type: "image/png", bytes: bytes.slice(i, endPos) });
+            }
+            i = endPos;
+            found = true;
+            break;
+          }
+        }
+        if (!found) i++;
+        continue;
+      }
+      // JPEG : FF D8 FF ... FF D9
+      if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
+        var found2 = false;
+        var scanEnd2 = Math.min(i + MAX_IMG_SIZE, bytes.length - 1);
+        for (var k = i + 4; k < scanEnd2; k++) {
+          if (bytes[k] === 0xFF && bytes[k+1] === 0xD9) {
+            var endPos2 = k + 2;
+            if (endPos2 - i >= MIN_JPG) {
+              images.push({ type: "image/jpeg", bytes: bytes.slice(i, endPos2) });
+            }
+            i = endPos2;
+            found2 = true;
+            break;
+          }
+        }
+        if (!found2) i++;
+        continue;
+      }
+      i++;
+    }
+
+    // Convertit en data URLs et déduplique par taille (souvent la même image
+    // apparaît plusieurs fois dans le CFB)
+    var seenSizes = {};
+    return images.filter(function(im){
+      if (seenSizes[im.bytes.length]) return false;
+      seenSizes[im.bytes.length] = 1;
+      return true;
+    }).map(function(im){
+      return { type: im.type, dataUrl: bytesToDataUrl(im.bytes, im.type), size: im.bytes.length };
+    });
+  };
+
   // ── Extraction depuis le dataTransfer d'un drop ──
   var extractFromDataTransfer = async function(dt) {
     var pieces = [];
+    var images = [];
     var label = "";
     // 1. Fichiers (cas idéal : .eml depuis Outlook Web / .msg depuis Explorateur)
     if (dt.files && dt.files.length > 0) {
@@ -14748,6 +14824,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
           if (name.endsWith(".msg")) {
             var buf = await file.arrayBuffer();
             pieces.push(extractMsgText(buf));
+            images = images.concat(extractImagesFromBinary(buf));
             label = file.name + " (.msg)";
           } else {
             pieces.push(await file.text());
@@ -14771,6 +14848,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       if (plain && pieces.length === 0) { pieces.push(plain); label = "Texte glissé"; }
     }
     return {
+      images: images,
       content: pieces.filter(function(p){ return p && p.trim(); }).join("\n\n---\n\n"),
       label: label
     };
@@ -14807,10 +14885,11 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
         return;
       }
       setText(res.content);
+      setExtractedImages(res.images || []);
       setSourceLabel(res.label || "Email importé");
       setExtracting(false);
       if (autoAI && settings && settings.groqKey) {
-        setTimeout(function(){ createTaskViaAI(res.content); }, 80);
+        setTimeout(function(){ createTaskViaAI(res.content, res.images || []); }, 80);
       }
     } catch (err) {
       setExtracting(false);
@@ -14818,11 +14897,11 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     }
   };
 
-  var createTaskFromParsing = function(contentOverride) {
+  var createTaskFromParsing = function(contentOverride, imagesOverride) {
     var content = contentOverride != null ? contentOverride : text;
+    var images = imagesOverride != null ? imagesOverride : extractedImages;
     if (!content.trim()) return;
     var p = parseLocal(content);
-    // Construction d'un base prefill puis application des règles métier
     var prefill = {
       title: p.subject,
       responsable: p.from,
@@ -14837,28 +14916,35 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     var headerHtml = (p.from || p.date)
       ? "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(p.from||"—") + "</strong>" + (p.date?" — "+esc(p.date):"") + "</p><hr/>"
       : "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Capture email</p><hr/>";
+    var imagesHtml = "";
+    if (images && images.length > 0) {
+      imagesHtml = "<hr/><div style=\"font-size:10px;font-weight:700;color:#888;letter-spacing:0.04em;margin:8px 0 6px\">📎 IMAGES DÉTECTÉES</div>"
+        + images.map(function(img){
+            return '<img src="' + img.dataUrl + '" style="max-width:100%;max-height:380px;border-radius:6px;margin:6px 0;border:1px solid #E0E0E0;display:block" alt="Image extraite" />';
+          }).join("");
+    }
     onCapture({
       title: prefill.title,
       responsable: "",
       dueDate: prefill.dueDate,
       priority: prefill.priority,
       category: prefill.category,
-      notes: headerHtml + bodyHtml,
+      notes: headerHtml + bodyHtml + imagesHtml,
       type: "Tâche"
     });
   };
 
-  var createTaskViaAI = async function(contentOverride) {
+  var createTaskViaAI = async function(contentOverride, imagesOverride) {
     var content = contentOverride != null ? contentOverride : text;
+    var images = imagesOverride != null ? imagesOverride : extractedImages;
     if (!content.trim() || !settings || !settings.groqKey) return;
     setAiLoading(true); setAiError("");
-    // Cap dur : si malgré tout le filtre on a trop de contenu (gros .msg), on tronque pour rester sous la limite payload Groq
     var GROQ_MAX = 12000;
     var contentForAI = content.length > GROQ_MAX
       ? content.substring(0, GROQ_MAX) + "\n\n[…contenu tronqué — total " + content.length + " caractères]"
       : content;
     var todayStr = new Date().toISOString().split("T")[0];
-    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu brut d'un email Outlook (peut contenir des en-têtes MIME comme Received:, X-MS-*, Authentication-Results:, Content-Type:, ou du texte mal formaté extrait d'un .msg binaire). IGNORE TOTALEMENT les en-têtes techniques. Identifie l'action à faire et extrais :\n- title : titre court de la tâche en français (action à accomplir, à l'impératif si possible)\n- responsable : nom de l'expéditeur (sans son adresse email)\n- dueDate : YYYY-MM-DD si une échéance est mentionnée, sinon \"\"\n- priority : urgente|haute|normale|basse selon le ton et la nature\n- category : si l'email correspond à un domaine métier identifiable (Crédit clients, Trésorerie, Recouvrement, Administratif, Equipe), retourne ce nom EXACT. Sinon \"\".\n- notes : résumé en 2-3 phrases du contexte essentiel et de ce qu'il faut faire\n- bodyExtract : le contenu réellement utile du corps de l'email (sans aucun en-tête technique), reformaté en français lisible, max 500 caractères. Si tu ne trouves pas de corps lisible, mets \"\".\n\nRÈGLE SPÉCIALE (priorité maximale, applique si pattern reconnu) :\nSi l'expéditeur contient 'BAL_G2A' ET le contenu contient 'ALERTE' :\n  - title doit être au format strict : '[JJ/MM/AA] Alerte encours / <code_client>'\n    où JJ/MM/AA = date d'envoi (en-tête Date: ou Received: au format JJ/MM/AA, ex 22/05/26)\n    et <code_client> = code au format C_xxxx (ex C_0504) ou numérique présent dans le sujet entre 'ALERTE -' et '- Commande'\n  - category = 'Crédit clients'\n  - priority = 'normale'\n\nRéponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(contentForAI);
+    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu brut d'un email Outlook (peut contenir des en-têtes MIME comme Received:, X-MS-*, Authentication-Results:, Content-Type:, ou du texte mal formaté extrait d'un .msg binaire). IGNORE TOTALEMENT les en-têtes techniques. Identifie l'action à faire et extrais :\n- title : titre court de la tâche en français (action à accomplir, à l'impératif si possible)\n- responsable : nom de l'expéditeur (sans son adresse email)\n- dueDate : YYYY-MM-DD si une échéance est mentionnée, sinon \"\"\n- priority : urgente|haute|normale|basse selon le ton et la nature\n- category : si l'email correspond à un domaine métier identifiable (Crédit clients, Trésorerie, Recouvrement, Administratif, Equipe), retourne ce nom EXACT. Sinon \"\".\n- notes : résumé en 2-3 phrases du contexte essentiel et de ce qu'il faut faire\n- bodyExtract : le contenu réellement utile du corps de l'email (sans aucun en-tête technique), reformaté en français lisible, max 500 caractères. Si tu ne trouves pas de corps lisible, mets \"\".\n- encoursAutorise : montant de l'encours autorisé en € (nombre uniquement, ex 200000), sinon \"\".\n- encoursActuel : montant de l'encours actuel ou PIC d'encours en € (nombre uniquement), sinon \"\".\n- depassement : montant du dépassement d'encours en € (nombre uniquement), sinon \"\". Calcule encoursActuel - encoursAutorise si les deux sont présents.\n- retard : montant du retard de paiement en € (nombre uniquement), sinon \"\".\n\nRÈGLE SPÉCIALE (priorité maximale, applique si pattern reconnu) :\nSi l'expéditeur contient 'BAL_G2A' ET le contenu contient 'ALERTE' :\n  - title doit être au format strict : '[JJ/MM/AA] Alerte encours / <code_client>'\n    où JJ/MM/AA = date d'envoi (en-tête Date: ou Received: au format JJ/MM/AA, ex 22/05/26)\n    et <code_client> = code au format C_xxxx (ex C_0504) ou numérique présent dans le sujet entre 'ALERTE -' et '- Commande'\n  - category = 'Crédit clients'\n  - priority = 'normale'\n  - Cherche dans le texte les montants : PIC d'encours, encours autorisé, retard de paiement (formats type '300 k€', '200 K€', '27 000 €', etc.)\n\nRéponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(contentForAI);
     try {
       var resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -14883,9 +14969,33 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       parsed = applyEmailRules(parsed, content, p.from);
       var summary = parsed.notes || "";
       var bodyExtract = parsed.bodyExtract || "";
+      // Bloc financier (encours / dépassement / retard)
+      var fmtAmt = function(v){ if (v===""||v==null) return ""; var n=parseFloat(String(v).replace(/\s/g,"")); return isNaN(n)?String(v):n.toLocaleString("fr-FR")+" €"; };
+      var hasFin = parsed.encoursAutorise || parsed.encoursActuel || parsed.depassement || parsed.retard;
+      var finHtml = "";
+      if (hasFin) {
+        finHtml = "<div style=\"background:#FEF2F2;border-left:4px solid #C0392B;padding:10px 14px;margin:10px 0;border-radius:6px\">"
+          + "<div style=\"font-weight:700;color:#C0392B;font-size:11px;letter-spacing:0.04em;margin-bottom:6px\">💰 SITUATION FINANCIÈRE</div>"
+          + "<table style=\"font-size:12px;border-collapse:collapse\">"
+          + (parsed.encoursAutorise ? "<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Encours autorisé</td><td style=\"font-weight:700;color:#102A63\">" + esc(fmtAmt(parsed.encoursAutorise)) + "</td></tr>" : "")
+          + (parsed.encoursActuel ? "<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Encours actuel / PIC</td><td style=\"font-weight:700;color:#C0392B\">" + esc(fmtAmt(parsed.encoursActuel)) + "</td></tr>" : "")
+          + (parsed.depassement ? "<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Dépassement</td><td style=\"font-weight:700;color:#C0392B\">" + esc(fmtAmt(parsed.depassement)) + "</td></tr>" : "")
+          + (parsed.retard ? "<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Retard de paiement</td><td style=\"font-weight:700;color:#E67E22\">" + esc(fmtAmt(parsed.retard)) + "</td></tr>" : "")
+          + "</table></div>";
+      }
+      // Images embarquées
+      var imagesHtml = "";
+      if (images && images.length > 0) {
+        imagesHtml = "<hr/><div style=\"font-size:10px;font-weight:700;color:#888;letter-spacing:0.04em;margin:8px 0 6px\">📎 IMAGES DÉTECTÉES</div>"
+          + images.map(function(img){
+              return '<img src="' + img.dataUrl + '" style="max-width:100%;max-height:380px;border-radius:6px;margin:6px 0;border:1px solid #E0E0E0;display:block" alt="Image extraite" />';
+            }).join("");
+      }
       var notesHtml = "<p><strong>✦ Résumé IA :</strong> " + esc(summary) + "</p>"
         + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||p.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
-        + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "");
+        + finHtml
+        + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "")
+        + imagesHtml;
       onCapture({
         title: parsed.title || p.subject || "",
         responsable: "",
@@ -14938,6 +15048,16 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
             {aiLoading && <div style={{marginTop:10,fontSize:11,color:"#7C3AED",fontFamily:_DM,fontWeight:700}}>✦ Analyse IA en cours…</div>}
             {sourceLabel && !extracting && !aiLoading && (
               <div style={{marginTop:10,fontSize:10,color:"#065F46",background:"#D1FAE5",borderRadius:4,padding:"3px 8px",display:"inline-block",fontFamily:_DM}}>✓ {sourceLabel}</div>
+            )}
+            {extractedImages.length > 0 && (
+              <div style={{marginTop:10,paddingTop:10,borderTop:"1px dashed #C7D2FE"}}>
+                <div style={{fontSize:9,fontFamily:_DM,fontWeight:700,color:"#102A63",letterSpacing:"0.06em",marginBottom:6}}>📎 {extractedImages.length} IMAGE{extractedImages.length>1?"S":""} DÉTECTÉE{extractedImages.length>1?"S":""}</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"center"}}>
+                  {extractedImages.map(function(img, idx){
+                    return <img key={idx} src={img.dataUrl} alt="" style={{maxWidth:140,maxHeight:90,borderRadius:4,border:"1px solid #E0E0E0",objectFit:"contain"}} />;
+                  })}
+                </div>
+              </div>
             )}
           </div>
 
@@ -15463,7 +15583,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.602{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.603{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
