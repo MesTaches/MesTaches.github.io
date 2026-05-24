@@ -14563,11 +14563,197 @@ function PaymentsView({ settings }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   EMAIL CAPTURE MODAL — colle un email pour créer une tâche
+   ═══════════════════════════════════════════════════════════════ */
+function EmailCaptureModal({ onCapture, onClose, settings }) {
+  var [text, setText] = React.useState("");
+  var [aiLoading, setAiLoading] = React.useState(false);
+  var [aiError, setAiError] = React.useState("");
+  var taRef = React.useRef(null);
+
+  React.useEffect(function(){
+    if (taRef.current) setTimeout(function(){ taRef.current && taRef.current.focus(); }, 50);
+  }, []);
+
+  // Parser local : détecte les en-têtes d'email (Outlook FR + EN)
+  var parseLocal = function(t) {
+    var lines = t.split(/\r?\n/);
+    var subject = "", from = "", dateStr = "";
+    var headerEndIdx = -1;
+    for (var i = 0; i < Math.min(25, lines.length); i++) {
+      var ln = lines[i].trim();
+      var m;
+      if (!from && (m = ln.match(/^(?:De|From|Expéditeur)\s*[:：]\s*(.+)$/i))) {
+        from = m[1].replace(/<[^>]+>/g, "").replace(/\[mailto:.+\]/i,"").trim();
+        headerEndIdx = i;
+      } else if (!dateStr && (m = ln.match(/^(?:Envoyé|Envoye|Sent|Date|Reçu|Recu)\s*[:：]\s*(.+)$/i))) {
+        dateStr = m[1].trim();
+        headerEndIdx = i;
+      } else if (!subject && (m = ln.match(/^(?:Objet|Subject)\s*[:：]\s*(.+)$/i))) {
+        subject = m[1].trim();
+        headerEndIdx = i;
+      }
+    }
+    var bodyStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
+    while (bodyStart < lines.length && /^(?:À|A|To|Cc|Cci|Bcc|Importance|Priorité)\s*[:：]/i.test(lines[bodyStart].trim())) bodyStart++;
+    while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++;
+    var body = lines.slice(bodyStart).join("\n").trim();
+    if (!subject && body) {
+      var firstLine = lines.slice(bodyStart).find(function(l){return l.trim();}) || "";
+      subject = firstLine.length > 80 ? firstLine.substring(0,80) + "…" : firstLine;
+    }
+    return { subject: subject, from: from, date: dateStr, body: body };
+  };
+
+  // Détection de date dans le corps (FR + ISO)
+  var detectDueDate = function(s) {
+    var m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    if (m) return m[1]+"-"+m[2]+"-"+m[3];
+    m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+    if (m) return m[3]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");
+    return "";
+  };
+
+  var preview = React.useMemo(function(){ return parseLocal(text); }, [text]);
+
+  var esc = function(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); };
+
+  var createTaskFromParsing = function() {
+    if (!text.trim()) return;
+    var bodyHtml = preview.body
+      ? "<p>" + esc(preview.body).replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>") + "</p>"
+      : "";
+    var headerHtml = (preview.from || preview.date)
+      ? "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(preview.from||"—") + "</strong>" + (preview.date?" — "+esc(preview.date):"") + "</p><hr/>"
+      : "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Capture email</p><hr/>";
+    onCapture({
+      title: preview.subject,
+      responsable: preview.from,
+      dueDate: detectDueDate(preview.body),
+      notes: headerHtml + bodyHtml,
+      type: "Tâche"
+    });
+  };
+
+  var createTaskViaAI = async function() {
+    if (!text.trim() || !settings || !settings.groqKey) return;
+    setAiLoading(true); setAiError("");
+    var todayStr = new Date().toISOString().split("T")[0];
+    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu copié-collé d'un email. Identifie l'action à faire et extrais : title (titre court de la tâche en français, action à accomplir), responsable (nom expéditeur sans email), dueDate (au format YYYY-MM-DD si une échéance est mentionnée, sinon \"\"), priority (urgente|haute|normale|basse selon le ton), notes (résumé en 2-3 phrases du contexte essentiel). Réponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(text);
+    try {
+      var resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + settings.groqKey },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile", max_tokens: 700, temperature: 0.1,
+          messages: [
+            { role: "system", content: "Tu réponds uniquement avec du JSON valide, sans markdown." },
+            { role: "user", content: promptText }
+          ]
+        })
+      });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      var data = await resp.json();
+      var raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim();
+      var parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim());
+      var summary = parsed.notes || "";
+      var notesHtml = "<p><strong>✦ Résumé IA :</strong> " + esc(summary) + "</p>"
+        + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||preview.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
+        + "<hr/><div style=\"font-size:11px;color:#555;white-space:pre-wrap\">" + esc(text.substring(0,2500)) + (text.length>2500?"\n[…tronqué]":"") + "</div>";
+      onCapture({
+        title: parsed.title || preview.subject || "",
+        responsable: parsed.responsable || preview.from || "",
+        dueDate: parsed.dueDate || "",
+        priority: parsed.priority || "normale",
+        notes: notesHtml,
+        type: "Tâche"
+      });
+    } catch(e) {
+      setAiError("Erreur IA : " + (e.message||e));
+      setAiLoading(false);
+    }
+  };
+
+  var hasAI = !!(settings && settings.groqKey);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(3px)"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"white",borderRadius:14,width:620,maxWidth:"96vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.22)",borderTop:"4px solid #102A63"}}>
+        <div style={{padding:"14px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:"#102A63",letterSpacing:"0.06em"}}>📧 CAPTURE DEPUIS UN EMAIL</span>
+          <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
+        </div>
+
+        <div style={{padding:"14px 20px",overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:12}}>
+          <div style={{fontSize:11,color:"#666",fontFamily:_FL,lineHeight:1.5}}>
+            Dans Outlook : <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+A</kbd> dans le mail (ou la zone de lecture) puis <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+C</kbd>. Ici, collez avec <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+V</kbd>.
+          </div>
+
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={function(e){ setText(e.target.value); setAiError(""); }}
+            placeholder="Collez le contenu de l'email ici (Ctrl+V)…"
+            style={{
+              minHeight: 180, maxHeight: 320,
+              padding:"10px 12px", border:"1px solid #E8E8E8",
+              borderRadius:8, fontSize:12, fontFamily:_FL,
+              outline:"none", resize:"vertical", boxSizing:"border-box",
+              background:"#FAFAFA", lineHeight:1.5, color:"#2C3E50"
+            }}
+          />
+
+          {text.trim() && (
+            <div style={{background:"#F0F5FF",border:"1px solid #C7D2FE",borderRadius:8,padding:"10px 12px",fontSize:11,fontFamily:_FL}}>
+              <div style={{fontWeight:700,color:"#102A63",marginBottom:6,fontSize:9,letterSpacing:"0.08em",fontFamily:_DM}}>APERÇU DU PARSING AUTO</div>
+              <div style={{display:"grid",gridTemplateColumns:"90px 1fr",gap:"4px 10px",lineHeight:1.6}}>
+                <span style={{color:"#888",fontWeight:600}}>Titre</span>
+                <span style={{color:"#2C3E50"}}>{preview.subject || <em style={{color:"#CCC"}}>(non détecté — la 1ère ligne sera utilisée)</em>}</span>
+                <span style={{color:"#888",fontWeight:600}}>Expéditeur</span>
+                <span style={{color:"#2C3E50"}}>{preview.from || <em style={{color:"#CCC"}}>—</em>}</span>
+                <span style={{color:"#888",fontWeight:600}}>Date email</span>
+                <span style={{color:"#2C3E50"}}>{preview.date || <em style={{color:"#CCC"}}>—</em>}</span>
+                <span style={{color:"#888",fontWeight:600}}>Corps</span>
+                <span style={{color:"#2C3E50",overflow:"hidden",textOverflow:"ellipsis",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
+                  {preview.body ? preview.body.substring(0,160) + (preview.body.length>160?"…":"") : <em style={{color:"#CCC"}}>—</em>}
+                </span>
+              </div>
+              {hasAI && (
+                <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #C7D2FE",fontSize:10,color:"#6D28D9"}}>
+                  ✦ Le bouton <strong>IA</strong> envoie le contenu à Groq pour une extraction plus intelligente (titre reformulé, priorité, échéance auto, résumé).
+                </div>
+              )}
+            </div>
+          )}
+
+          {aiError && (
+            <div style={{padding:"8px 12px",background:"#FEE2E2",color:"#991B1B",borderRadius:8,fontSize:11,fontFamily:_FL}}>{aiError}</div>
+          )}
+        </div>
+
+        <div style={{padding:"12px 20px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC"}}>
+          <button onClick={onClose} style={Object.assign({},S.btn("#F0F0F0","#666"),{fontSize:11,padding:"7px 14px"})}>Annuler</button>
+          {hasAI && (
+            <button onClick={createTaskViaAI} disabled={!text.trim()||aiLoading} style={Object.assign({},S.btn("#7C3AED"),{fontSize:11,padding:"7px 14px",opacity:(!text.trim()||aiLoading)?0.5:1})}>
+              {aiLoading ? "⟳ Analyse IA…" : "✦ Créer (IA)"}
+            </button>
+          )}
+          <button onClick={createTaskFromParsing} disabled={!text.trim()} style={Object.assign({},S.btn("#102A63"),{fontSize:11,padding:"7px 14px",opacity:!text.trim()?0.5:1})}>
+            Créer la tâche
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [settings, setSettings] = useState(() => loadSettings());
   const [tasks, setTasks, tasksReady] = useAppStore("tasks", sampleTasks(settings.categories));
   const [appReady, setAppReady] = useState(false); // IDB migration done
   const [showSearch, setShowSearch] = React.useState(false);
+  const [showEmailCapture, setShowEmailCapture] = React.useState(false);
   const [view, setView] = useState("dashboard");
   const [reunionsForNotifs, setReunionsForNotifs] = React.useState([]);
   React.useEffect(() => { appDbGet(MTG_KEY).then(d=>setReunionsForNotifs(d||[])).catch(()=>{}); }, [view]);
@@ -15018,7 +15204,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.596{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.597{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -15049,6 +15235,12 @@ function App() {
           {/* Bouton + adapté selon la vue */}
           {view !== "dev" && (
             <>
+            <button onClick={() => setShowEmailCapture(true)} title="Créer une tâche depuis un email (coller)"
+              style={{ border:"1px solid #E8E8E8", background:"white", borderRadius:8, padding:"6px 11px",
+                display:"flex", alignItems:"center", gap:5, cursor:"pointer", color:"#102A63",
+                fontSize:13, fontFamily:_FL, flexShrink:0, minHeight:32 }}>
+              📧 {!isMobile && <span style={{fontSize:10,fontFamily:_DM,marginLeft:2}}>Email</span>}
+            </button>
             <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
               + {isMobile ? "" : "Nouvelle tâche"}
             </button>
@@ -15189,6 +15381,18 @@ function App() {
 
       {/* ── Global Search ── */}
       {showSearch && <GlobalSearch onClose={() => setShowSearch(false)} onNavigate={(v) => { setView(v); setSidebarOpen(false); }} />}
+
+      {/* ── Capture depuis un email collé ── */}
+      {showEmailCapture && (
+        <EmailCaptureModal
+          settings={settings}
+          onClose={() => setShowEmailCapture(false)}
+          onCapture={(prefill) => {
+            setShowEmailCapture(false);
+            openNew(prefill);
+          }}
+        />
+      )}
 
       {/* ── Bottom Navigation Bar (iPhone) ── */}
       {isMobile && (
