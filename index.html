@@ -14805,7 +14805,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       ? content.substring(0, GROQ_MAX) + "\n\n[…contenu tronqué — total " + content.length + " caractères]"
       : content;
     var todayStr = new Date().toISOString().split("T")[0];
-    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu brut d'un email Outlook (peut contenir des en-têtes, du texte mal formaté, ou des fragments extraits d'un .msg binaire). Identifie l'action à faire et extrais : title (titre court de la tâche en français, action à accomplir), responsable (nom expéditeur sans email), dueDate (au format YYYY-MM-DD si une échéance est mentionnée, sinon \"\"), priority (urgente|haute|normale|basse selon le ton), notes (résumé en 2-3 phrases du contexte essentiel). Réponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(contentForAI);
+    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu brut d'un email Outlook (peut contenir des en-têtes MIME comme Received:, X-MS-*, Authentication-Results:, Content-Type:, ou du texte mal formaté extrait d'un .msg binaire). IGNORE TOTALEMENT les en-têtes techniques. Identifie l'action à faire et extrais :\n- title : titre court de la tâche en français (action à accomplir, à l'impératif si possible)\n- responsable : nom de l'expéditeur (sans son adresse email)\n- dueDate : YYYY-MM-DD si une échéance est mentionnée, sinon \"\"\n- priority : urgente|haute|normale|basse selon le ton et la nature\n- notes : résumé en 2-3 phrases du contexte essentiel et de ce qu'il faut faire\n- bodyExtract : le contenu réellement utile du corps de l'email (sans aucun en-tête technique), reformaté en français lisible, max 500 caractères. Si tu ne trouves pas de corps lisible, mets \"\".\n\nRéponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(contentForAI);
     try {
       var resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
@@ -14827,9 +14827,10 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       var parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim());
       var p = parseLocal(content);
       var summary = parsed.notes || "";
+      var bodyExtract = parsed.bodyExtract || "";
       var notesHtml = "<p><strong>✦ Résumé IA :</strong> " + esc(summary) + "</p>"
         + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||p.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
-        + "<hr/><div style=\"font-size:11px;color:#555;white-space:pre-wrap\">" + esc(content.substring(0,2500)) + (content.length>2500?"\n[…tronqué]":"") + "</div>";
+        + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "");
       onCapture({
         title: parsed.title || p.subject || "",
         responsable: parsed.responsable || p.from || "",
@@ -15406,7 +15407,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.599{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.600{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
