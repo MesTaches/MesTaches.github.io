@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <title>MesTaches — Capture email</title>
+    <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; padding: 18px; background: #F7F6F3; color: #2C3E50; line-height: 1.5; }
+        h1 { font-size: 15px; color: #102A63; margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+        .info { font-size: 12px; color: #555; margin-bottom: 14px; }
+        .status { padding: 10px 14px; border-radius: 8px; font-size: 12px; margin-bottom: 14px; line-height: 1.4; }
+        .status.loading { background: #DBEAFE; color: #1E40AF; }
+        .status.ok { background: #D1FAE5; color: #065F46; }
+        .status.err { background: #FEE2E2; color: #991B1B; }
+        .preview { background: white; border: 1px solid #ECEAE5; border-radius: 8px; padding: 10px 12px; font-size: 12px; margin-bottom: 14px; }
+        .preview .label { font-size: 9px; font-weight: 700; color: #888; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 3px; }
+        .preview .subject { font-weight: 600; color: #102A63; word-break: break-word; }
+        .preview .from { color: #666; font-size: 11px; margin-top: 4px; }
+        button { background: #102A63; color: white; border: none; border-radius: 8px; padding: 11px 18px; font-size: 13px; cursor: pointer; font-weight: 700; width: 100%; }
+        button:hover { background: #1a3d8f; }
+        button:disabled { background: #CCC; cursor: not-allowed; }
+        .footer { margin-top: 14px; font-size: 10px; color: #AAA; text-align: center; }
+    </style>
+</head>
+<body>
+    <h1><span>📧</span> Créer une tâche MesTaches</h1>
+    <div class="info">Cet email va être transformé en tâche dans MesTaches.</div>
+    <div id="status" class="status loading">Lecture de l'email…</div>
+    <div id="preview" class="preview" style="display:none">
+        <div class="label">SUJET</div>
+        <div class="subject" id="prevSubject">—</div>
+        <div class="from" id="prevFrom">—</div>
+    </div>
+    <button id="goBtn" disabled>Ouvrir dans MesTaches</button>
+    <div class="footer">v.0.595</div>
+
+    <script>
+        // En prod : https://mestaches.github.io/
+        // En dev local : tu peux changer ici, mais Outlook exige HTTPS donc impossible en local sans tunnel
+        var APP_URL = "https://mestaches.github.io/";
+        var MAX_NOTES_LEN = 1500;
+        var prefillUrl = null;
+
+        function setStatus(cls, html) {
+            var el = document.getElementById("status");
+            el.className = "status " + cls;
+            el.innerHTML = html;
+        }
+        function showPreview(subject, from) {
+            document.getElementById("prevSubject").textContent = subject || "(sans sujet)";
+            document.getElementById("prevFrom").textContent = from ? ("De : " + from) : "";
+            document.getElementById("preview").style.display = "block";
+        }
+        function buildUrl(item, bodyText) {
+            var truncated = (bodyText || "").length > MAX_NOTES_LEN
+                ? bodyText.substring(0, MAX_NOTES_LEN) + "\n\n[…tronqué]"
+                : (bodyText || "");
+            var from = "";
+            if (item.from) {
+                from = item.from.displayName || item.from.emailAddress || "";
+            } else if (item.organizer) {
+                from = item.organizer.displayName || item.organizer.emailAddress || "";
+            }
+            var dateStr = "";
+            try {
+                if (item.dateTimeCreated) {
+                    dateStr = new Date(item.dateTimeCreated).toISOString().split("T")[0];
+                }
+            } catch(e) {}
+            var params = new URLSearchParams({
+                newTask: "1",
+                title: item.subject || "",
+                from: from,
+                date: dateStr,
+                notes: truncated
+            });
+            return APP_URL + "?" + params.toString();
+        }
+
+        Office.onReady(function(info) {
+            if (info.host !== Office.HostType.Outlook) {
+                setStatus("err", "Cet add-in ne fonctionne que dans Outlook.");
+                return;
+            }
+            var item = Office.context.mailbox.item;
+            if (!item) {
+                setStatus("err", "Aucun email sélectionné.");
+                return;
+            }
+            try {
+                item.body.getAsync(Office.CoercionType.Text, function(result) {
+                    var bodyText = (result && result.status === Office.AsyncResultStatus.Succeeded && result.value) ? result.value : "";
+                    prefillUrl = buildUrl(item, bodyText);
+                    var subj = item.subject || "";
+                    var from = "";
+                    if (item.from) from = item.from.displayName || item.from.emailAddress || "";
+                    showPreview(subj, from);
+
+                    // Tentative d'ouverture auto
+                    var win = null;
+                    try { win = window.open(prefillUrl, "_blank"); } catch(e) {}
+                    if (win) {
+                        setStatus("ok", "<strong>✓ MesTaches ouvert</strong><br>La tâche est pré-remplie dans l'onglet du navigateur. Vous pouvez fermer cette fenêtre.");
+                    } else {
+                        setStatus("ok", "<strong>Email lu.</strong> Cliquez ci-dessous pour ouvrir MesTaches.");
+                    }
+                    var btn = document.getElementById("goBtn");
+                    btn.disabled = false;
+                    btn.onclick = function() { window.open(prefillUrl, "_blank"); };
+                });
+            } catch (e) {
+                setStatus("err", "Erreur de lecture : " + (e.message || e));
+            }
+        });
+    </script>
+</body>
+</html>

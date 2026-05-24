@@ -14660,6 +14660,34 @@ function App() {
     })();
   }, [appReady]);
 
+  // Capture depuis Outlook : si l'URL contient ?newTask=1&title=...&from=...&date=...&notes=...
+  // (généralement appelé par l'add-in Outlook), on ouvre la modale Nouvelle tâche pré-remplie.
+  useEffect(() => {
+    if (!appReady) return;
+    try {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("newTask") !== "1") return;
+      const subject = params.get("title") || "";
+      const from    = params.get("from")  || "";
+      const date    = params.get("date")  || "";
+      const body    = params.get("notes") || "";
+      const esc = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      const bodyHtml = body
+        ? "<p>" + esc(body).replace(/\r?\n\r?\n/g,"</p><p>").replace(/\r?\n/g,"<br/>") + "</p>"
+        : "";
+      const header = "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Reçu de <strong>" + esc(from||"—") + "</strong>" + (date?" — "+esc(date):"") + "</p><hr/>";
+      const notesHtml = body ? header + bodyHtml : header;
+      openNew({
+        title: subject,
+        responsable: from,
+        notes: notesHtml,
+        type: "Tâche",
+      });
+      // Nettoie l'URL pour éviter de réouvrir la modale au refresh
+      window.history.replaceState({}, "", window.location.pathname);
+    } catch(e) { console.warn("URL newTask params:", e); }
+  }, [appReady]);
+
   useEffect(() => {
     const todayStr = new Date().toISOString().split("T")[0];
     setTasks(p => p.map(t => {
@@ -14990,7 +15018,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.595{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.596{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 

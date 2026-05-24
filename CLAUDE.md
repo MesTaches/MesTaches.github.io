@@ -96,6 +96,25 @@ Pas de router : `const [view, setView] = useState("dashboard")` dans `App`. La s
 
 **Si un nouvel onglet ne s'affiche pas** (écran blanc côté droit) : vérifier qu'il est rendu **dans le bon bloc** ET que sa valeur `view` apparaît dans la condition du ternaire. Ce bug est arrivé sur Réunions (cf. git log).
 
+### Outlook Add-in
+
+Le repo héberge un add-in Office :
+- `manifest.xml` — le manifeste sideloadé dans Outlook
+- `outlook-addin.html` — la page qui s'exécute dans le task pane Outlook
+- `icon-16.png`, `icon-32.png`, `icon-80.png` — icônes du bouton ribbon
+
+Flux :
+1. Utilisateur clique le bouton **→ MesTaches** dans Outlook (mode lecture d'un email)
+2. Office.js lit `subject`, `body` (texte plat), `from`, `dateTimeCreated` de l'email courant
+3. La page ouvre `https://mestaches.github.io/?newTask=1&title=…&from=…&date=…&notes=…`
+4. Dans `App` (`index.html`), un `useEffect([appReady])` détecte le paramètre `newTask=1`, appelle `openNew({title, responsable, notes})` et nettoie l'URL via `history.replaceState`
+
+Le `notes` est tronqué à 1500 caractères côté add-in pour rester sous la limite de longueur URL.
+
+**Modifier l'URL cible** : si tu changes de domaine, met à jour les `https://mestaches.github.io/` dans `manifest.xml` ET dans `outlook-addin.html` (constante `APP_URL`).
+
+**Sideload du manifest** : Outlook → ⋯ → Get Add-ins → My add-ins → Custom Addins → "Add from URL" → `https://mestaches.github.io/manifest.xml`.
+
 ### PWA / Service Worker
 
 `sw.js` est minimal — désinstallation auto au chargement (`<head>` script). Pas de cache offline. Si on en ajoute un, attention : il devra invalider à chaque nouvelle version.
