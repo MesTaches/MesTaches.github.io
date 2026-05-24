@@ -14839,7 +14839,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       : "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Capture email</p><hr/>";
     onCapture({
       title: prefill.title,
-      responsable: prefill.responsable,
+      responsable: "",
       dueDate: prefill.dueDate,
       priority: prefill.priority,
       category: prefill.category,
@@ -14888,7 +14888,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
         + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "");
       onCapture({
         title: parsed.title || p.subject || "",
-        responsable: parsed.responsable || p.from || "",
+        responsable: "",
         dueDate: parsed.dueDate || "",
         priority: parsed.priority || "normale",
         category: parsed.category || "",
@@ -15124,7 +15124,7 @@ function App() {
       const notesHtml = body ? header + bodyHtml : header;
       openNew({
         title: subject,
-        responsable: from,
+        responsable: "",
         notes: notesHtml,
         type: "Tâche",
       });
@@ -15463,7 +15463,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.601{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.602{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
