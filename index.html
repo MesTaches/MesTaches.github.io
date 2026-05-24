@@ -14570,18 +14570,19 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
   var [text, setText] = React.useState("");
   var [aiLoading, setAiLoading] = React.useState(false);
   var [aiError, setAiError] = React.useState("");
+  var [isDragOver, setIsDragOver] = React.useState(false);
+  var [extracting, setExtracting] = React.useState(false);
+  var [autoAI, setAutoAI] = React.useState(true);
+  var [sourceLabel, setSourceLabel] = React.useState("");
   var taRef = React.useRef(null);
-
-  React.useEffect(function(){
-    if (taRef.current) setTimeout(function(){ taRef.current && taRef.current.focus(); }, 50);
-  }, []);
+  var dragCounterRef = React.useRef(0);
 
   // Parser local : détecte les en-têtes d'email (Outlook FR + EN)
   var parseLocal = function(t) {
-    var lines = t.split(/\r?\n/);
+    var lines = String(t||"").split(/\r?\n/);
     var subject = "", from = "", dateStr = "";
     var headerEndIdx = -1;
-    for (var i = 0; i < Math.min(25, lines.length); i++) {
+    for (var i = 0; i < Math.min(30, lines.length); i++) {
       var ln = lines[i].trim();
       var m;
       if (!from && (m = ln.match(/^(?:De|From|Expéditeur)\s*[:：]\s*(.+)$/i))) {
@@ -14596,7 +14597,7 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       }
     }
     var bodyStart = headerEndIdx >= 0 ? headerEndIdx + 1 : 0;
-    while (bodyStart < lines.length && /^(?:À|A|To|Cc|Cci|Bcc|Importance|Priorité)\s*[:：]/i.test(lines[bodyStart].trim())) bodyStart++;
+    while (bodyStart < lines.length && /^(?:À|A|To|Cc|Cci|Bcc|Importance|Priorité|Pour)\s*[:：]/i.test(lines[bodyStart].trim())) bodyStart++;
     while (bodyStart < lines.length && !lines[bodyStart].trim()) bodyStart++;
     var body = lines.slice(bodyStart).join("\n").trim();
     if (!subject && body) {
@@ -14606,47 +14607,160 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     return { subject: subject, from: from, date: dateStr, body: body };
   };
 
-  // Détection de date dans le corps (FR + ISO)
   var detectDueDate = function(s) {
-    var m = s.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+    var m = String(s||"").match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
     if (m) return m[1]+"-"+m[2]+"-"+m[3];
-    m = s.match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
+    m = String(s||"").match(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/);
     if (m) return m[3]+"-"+String(m[2]).padStart(2,"0")+"-"+String(m[1]).padStart(2,"0");
     return "";
   };
 
   var preview = React.useMemo(function(){ return parseLocal(text); }, [text]);
-
   var esc = function(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); };
 
-  var createTaskFromParsing = function() {
-    if (!text.trim()) return;
-    var bodyHtml = preview.body
-      ? "<p>" + esc(preview.body).replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>") + "</p>"
+  // ── Extraction d'un .msg (CFB binaire Outlook) — best effort ──
+  // On lit les chaînes UTF-16 LE lisibles ≥ 8 caractères puis on dédoublonne.
+  // Groq se débrouille très bien avec ce contenu un peu sale.
+  var extractMsgText = function(arrayBuffer) {
+    var bytes = new Uint8Array(arrayBuffer);
+    var runs = [];
+    var current = "";
+    for (var i = 0; i < bytes.length - 1; i += 2) {
+      var code = bytes[i] | (bytes[i+1] << 8);
+      var printable = (code >= 32 && code < 127) || code === 9 || code === 10 || code === 13 || (code >= 160 && code < 65000);
+      if (printable) {
+        current += String.fromCharCode(code);
+      } else {
+        if (current.length >= 8 && /[a-zA-ZÀ-ÿ]{3}/.test(current)) {
+          runs.push(current);
+        }
+        current = "";
+      }
+    }
+    if (current.length >= 8 && /[a-zA-ZÀ-ÿ]{3}/.test(current)) runs.push(current);
+    var seen = {};
+    var unique = [];
+    for (var j = 0; j < runs.length; j++) {
+      var key = runs[j].trim().substring(0, 80);
+      if (!seen[key]) { seen[key] = 1; unique.push(runs[j]); }
+    }
+    return unique.join("\n");
+  };
+
+  // ── Extraction depuis le dataTransfer d'un drop ──
+  var extractFromDataTransfer = async function(dt) {
+    var pieces = [];
+    var label = "";
+    // 1. Fichiers (cas idéal : .eml depuis Outlook Web / .msg depuis Explorateur)
+    if (dt.files && dt.files.length > 0) {
+      for (var i = 0; i < dt.files.length; i++) {
+        var file = dt.files[i];
+        var name = (file.name || "").toLowerCase();
+        try {
+          if (name.endsWith(".msg")) {
+            var buf = await file.arrayBuffer();
+            pieces.push(extractMsgText(buf));
+            label = file.name + " (.msg)";
+          } else {
+            pieces.push(await file.text());
+            label = file.name + (name.endsWith(".eml") ? " (.eml)" : "");
+          }
+        } catch (err) {
+          console.warn("Lecture fichier échouée:", err);
+        }
+      }
+    }
+    // 2. Fallback : texte/html depuis le drag (Outlook Desktop sans fichier)
+    if (pieces.length === 0) {
+      var html = dt.getData && dt.getData("text/html");
+      var plain = dt.getData && dt.getData("text/plain");
+      if (html) {
+        var tmp = document.createElement("div");
+        tmp.innerHTML = html;
+        var fromHtml = tmp.textContent || tmp.innerText || "";
+        if (fromHtml.trim()) { pieces.push(fromHtml); label = "Texte glissé (HTML)"; }
+      }
+      if (plain && pieces.length === 0) { pieces.push(plain); label = "Texte glissé"; }
+    }
+    return {
+      content: pieces.filter(function(p){ return p && p.trim(); }).join("\n\n---\n\n"),
+      label: label
+    };
+  };
+
+  var handleDragEnter = function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dragCounterRef.current++;
+    setIsDragOver(true);
+  };
+  var handleDragLeave = function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dragCounterRef.current--;
+    if (dragCounterRef.current <= 0) {
+      setIsDragOver(false);
+      dragCounterRef.current = 0;
+    }
+  };
+  var handleDragOver = function(e) {
+    e.preventDefault(); e.stopPropagation();
+    if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
+  };
+  var handleDrop = async function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dragCounterRef.current = 0;
+    setIsDragOver(false);
+    setExtracting(true);
+    setAiError("");
+    try {
+      var res = await extractFromDataTransfer(e.dataTransfer);
+      if (!res.content || !res.content.trim()) {
+        setAiError("Aucun contenu n'a pu être extrait. Essayez de glisser un fichier .eml (Outlook Web) ou .msg (Outlook Desktop, glissez d'abord vers l'Explorateur).");
+        setExtracting(false);
+        return;
+      }
+      setText(res.content);
+      setSourceLabel(res.label || "Email importé");
+      setExtracting(false);
+      if (autoAI && settings && settings.groqKey) {
+        setTimeout(function(){ createTaskViaAI(res.content); }, 80);
+      }
+    } catch (err) {
+      setExtracting(false);
+      setAiError("Erreur d'extraction : " + (err.message || err));
+    }
+  };
+
+  var createTaskFromParsing = function(contentOverride) {
+    var content = contentOverride != null ? contentOverride : text;
+    if (!content.trim()) return;
+    var p = parseLocal(content);
+    var bodyHtml = p.body
+      ? "<p>" + esc(p.body).replace(/\r?\n\r?\n/g, "</p><p>").replace(/\r?\n/g, "<br/>") + "</p>"
       : "";
-    var headerHtml = (preview.from || preview.date)
-      ? "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(preview.from||"—") + "</strong>" + (preview.date?" — "+esc(preview.date):"") + "</p><hr/>"
+    var headerHtml = (p.from || p.date)
+      ? "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(p.from||"—") + "</strong>" + (p.date?" — "+esc(p.date):"") + "</p><hr/>"
       : "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Capture email</p><hr/>";
     onCapture({
-      title: preview.subject,
-      responsable: preview.from,
-      dueDate: detectDueDate(preview.body),
+      title: p.subject,
+      responsable: p.from,
+      dueDate: detectDueDate(p.body),
       notes: headerHtml + bodyHtml,
       type: "Tâche"
     });
   };
 
-  var createTaskViaAI = async function() {
-    if (!text.trim() || !settings || !settings.groqKey) return;
+  var createTaskViaAI = async function(contentOverride) {
+    var content = contentOverride != null ? contentOverride : text;
+    if (!content.trim() || !settings || !settings.groqKey) return;
     setAiLoading(true); setAiError("");
     var todayStr = new Date().toISOString().split("T")[0];
-    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu copié-collé d'un email. Identifie l'action à faire et extrais : title (titre court de la tâche en français, action à accomplir), responsable (nom expéditeur sans email), dueDate (au format YYYY-MM-DD si une échéance est mentionnée, sinon \"\"), priority (urgente|haute|normale|basse selon le ton), notes (résumé en 2-3 phrases du contexte essentiel). Réponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(text);
+    var promptText = "Aujourd'hui c'est " + todayStr + ". Tu reçois le contenu brut d'un email Outlook (peut contenir des en-têtes, du texte mal formaté, ou des fragments extraits d'un .msg binaire). Identifie l'action à faire et extrais : title (titre court de la tâche en français, action à accomplir), responsable (nom expéditeur sans email), dueDate (au format YYYY-MM-DD si une échéance est mentionnée, sinon \"\"), priority (urgente|haute|normale|basse selon le ton), notes (résumé en 2-3 phrases du contexte essentiel). Réponds UNIQUEMENT avec un JSON valide sans markdown ni backticks.\n\nEmail:\n" + JSON.stringify(content);
     try {
       var resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": "Bearer " + settings.groqKey },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile", max_tokens: 700, temperature: 0.1,
+          model: "llama-3.3-70b-versatile", max_tokens: 800, temperature: 0.1,
           messages: [
             { role: "system", content: "Tu réponds uniquement avec du JSON valide, sans markdown." },
             { role: "user", content: promptText }
@@ -14657,13 +14771,14 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       var data = await resp.json();
       var raw = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim();
       var parsed = JSON.parse(raw.replace(/^```[a-z]*/i,"").replace(/```/g,"").trim());
+      var p = parseLocal(content);
       var summary = parsed.notes || "";
       var notesHtml = "<p><strong>✦ Résumé IA :</strong> " + esc(summary) + "</p>"
-        + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||preview.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
-        + "<hr/><div style=\"font-size:11px;color:#555;white-space:pre-wrap\">" + esc(text.substring(0,2500)) + (text.length>2500?"\n[…tronqué]":"") + "</div>";
+        + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||p.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
+        + "<hr/><div style=\"font-size:11px;color:#555;white-space:pre-wrap\">" + esc(content.substring(0,2500)) + (content.length>2500?"\n[…tronqué]":"") + "</div>";
       onCapture({
-        title: parsed.title || preview.subject || "",
-        responsable: parsed.responsable || preview.from || "",
+        title: parsed.title || p.subject || "",
+        responsable: parsed.responsable || p.from || "",
         dueDate: parsed.dueDate || "",
         priority: parsed.priority || "normale",
         notes: notesHtml,
@@ -14679,24 +14794,62 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
 
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center",padding:20,backdropFilter:"blur(3px)"}} onClick={function(e){if(e.target===e.currentTarget)onClose();}}>
-      <div style={{background:"white",borderRadius:14,width:620,maxWidth:"96vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.22)",borderTop:"4px solid #102A63"}}>
+      <div style={{background:"white",borderRadius:14,width:640,maxWidth:"96vw",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.22)",borderTop:"4px solid #102A63"}}
+           onDragEnter={handleDragEnter}
+           onDragLeave={handleDragLeave}
+           onDragOver={handleDragOver}
+           onDrop={handleDrop}>
         <div style={{padding:"14px 20px 12px",borderBottom:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <span style={{fontFamily:_DM,fontSize:12,fontWeight:700,color:"#102A63",letterSpacing:"0.06em"}}>📧 CAPTURE DEPUIS UN EMAIL</span>
           <button onClick={onClose} style={{border:"none",background:"none",cursor:"pointer",fontSize:18,color:"#888"}}>×</button>
         </div>
 
         <div style={{padding:"14px 20px",overflowY:"auto",flex:1,display:"flex",flexDirection:"column",gap:12}}>
-          <div style={{fontSize:11,color:"#666",fontFamily:_FL,lineHeight:1.5}}>
-            Dans Outlook : <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+A</kbd> dans le mail (ou la zone de lecture) puis <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+C</kbd>. Ici, collez avec <kbd style={{background:"#F0F0F0",borderRadius:3,padding:"1px 5px",fontSize:10,fontFamily:_DM}}>Ctrl+V</kbd>.
+
+          {/* Drop zone visuelle */}
+          <div style={{
+            border: "2px dashed " + (isDragOver ? "#102A63" : "#C7D2FE"),
+            background: isDragOver ? "#EFF6FF" : "#FAFAFA",
+            borderRadius: 10,
+            padding: "22px 16px",
+            textAlign: "center",
+            transition: "all 0.15s"
+          }}>
+            <div style={{fontSize:30, marginBottom:6, opacity: isDragOver ? 1 : 0.55}}>{isDragOver ? "⬇" : "📥"}</div>
+            <div style={{fontSize:13, fontFamily:_FL, color: isDragOver ? "#102A63" : "#555", fontWeight: isDragOver ? 700 : 600}}>
+              {isDragOver ? "Déposez l'email ici" : "Glissez un email depuis Outlook"}
+            </div>
+            <div style={{fontSize:10, color:"#888", marginTop:4, fontFamily:_FL}}>
+              <strong>Outlook Web</strong> : glissez l'email directement (télécharge un .eml).<br/>
+              <strong>Outlook Desktop</strong> : glissez d'abord vers le Bureau / Explorateur, puis ici (.msg).
+            </div>
+            {extracting && <div style={{marginTop:10,fontSize:11,color:"#1D4ED8",fontFamily:_DM,fontWeight:700}}>⟳ Extraction en cours…</div>}
+            {aiLoading && <div style={{marginTop:10,fontSize:11,color:"#7C3AED",fontFamily:_DM,fontWeight:700}}>✦ Analyse IA en cours…</div>}
+            {sourceLabel && !extracting && !aiLoading && (
+              <div style={{marginTop:10,fontSize:10,color:"#065F46",background:"#D1FAE5",borderRadius:4,padding:"3px 8px",display:"inline-block",fontFamily:_DM}}>✓ {sourceLabel}</div>
+            )}
+          </div>
+
+          {hasAI && (
+            <label style={{display:"flex",alignItems:"center",gap:8,fontSize:11,fontFamily:_FL,color:"#555",cursor:"pointer",userSelect:"none",padding:"4px 0"}}>
+              <input type="checkbox" checked={autoAI} onChange={function(e){setAutoAI(e.target.checked);}} style={{cursor:"pointer",width:14,height:14,accentColor:"#7C3AED"}} />
+              <span>Envoyer automatiquement à l'<strong style={{color:"#7C3AED"}}>IA Groq</strong> après dépôt (recommandé, surtout pour les .msg binaires)</span>
+            </label>
+          )}
+
+          <div style={{display:"flex",alignItems:"center",gap:8,fontSize:9,color:"#AAA",fontFamily:_DM,letterSpacing:"0.06em"}}>
+            <div style={{flex:1,height:1,background:"#ECEAE5"}}/>
+            OU COLLEZ DIRECTEMENT LE CONTENU
+            <div style={{flex:1,height:1,background:"#ECEAE5"}}/>
           </div>
 
           <textarea
             ref={taRef}
             value={text}
-            onChange={function(e){ setText(e.target.value); setAiError(""); }}
-            placeholder="Collez le contenu de l'email ici (Ctrl+V)…"
+            onChange={function(e){ setText(e.target.value); setAiError(""); setSourceLabel(""); }}
+            placeholder="Ou collez le contenu de l'email ici (Ctrl+V)…"
             style={{
-              minHeight: 180, maxHeight: 320,
+              minHeight: 120, maxHeight: 240,
               padding:"10px 12px", border:"1px solid #E8E8E8",
               borderRadius:8, fontSize:12, fontFamily:_FL,
               outline:"none", resize:"vertical", boxSizing:"border-box",
@@ -14706,10 +14859,10 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
 
           {text.trim() && (
             <div style={{background:"#F0F5FF",border:"1px solid #C7D2FE",borderRadius:8,padding:"10px 12px",fontSize:11,fontFamily:_FL}}>
-              <div style={{fontWeight:700,color:"#102A63",marginBottom:6,fontSize:9,letterSpacing:"0.08em",fontFamily:_DM}}>APERÇU DU PARSING AUTO</div>
+              <div style={{fontWeight:700,color:"#102A63",marginBottom:6,fontSize:9,letterSpacing:"0.08em",fontFamily:_DM}}>APERÇU PARSING RÈGLES</div>
               <div style={{display:"grid",gridTemplateColumns:"90px 1fr",gap:"4px 10px",lineHeight:1.6}}>
                 <span style={{color:"#888",fontWeight:600}}>Titre</span>
-                <span style={{color:"#2C3E50"}}>{preview.subject || <em style={{color:"#CCC"}}>(non détecté — la 1ère ligne sera utilisée)</em>}</span>
+                <span style={{color:"#2C3E50"}}>{preview.subject || <em style={{color:"#CCC"}}>(non détecté — 1ère ligne utilisée)</em>}</span>
                 <span style={{color:"#888",fontWeight:600}}>Expéditeur</span>
                 <span style={{color:"#2C3E50"}}>{preview.from || <em style={{color:"#CCC"}}>—</em>}</span>
                 <span style={{color:"#888",fontWeight:600}}>Date email</span>
@@ -14719,27 +14872,22 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
                   {preview.body ? preview.body.substring(0,160) + (preview.body.length>160?"…":"") : <em style={{color:"#CCC"}}>—</em>}
                 </span>
               </div>
-              {hasAI && (
-                <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #C7D2FE",fontSize:10,color:"#6D28D9"}}>
-                  ✦ Le bouton <strong>IA</strong> envoie le contenu à Groq pour une extraction plus intelligente (titre reformulé, priorité, échéance auto, résumé).
-                </div>
-              )}
             </div>
           )}
 
           {aiError && (
-            <div style={{padding:"8px 12px",background:"#FEE2E2",color:"#991B1B",borderRadius:8,fontSize:11,fontFamily:_FL}}>{aiError}</div>
+            <div style={{padding:"8px 12px",background:"#FEE2E2",color:"#991B1B",borderRadius:8,fontSize:11,fontFamily:_FL,lineHeight:1.4}}>{aiError}</div>
           )}
         </div>
 
         <div style={{padding:"12px 20px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0,background:"#FAFBFC"}}>
           <button onClick={onClose} style={Object.assign({},S.btn("#F0F0F0","#666"),{fontSize:11,padding:"7px 14px"})}>Annuler</button>
           {hasAI && (
-            <button onClick={createTaskViaAI} disabled={!text.trim()||aiLoading} style={Object.assign({},S.btn("#7C3AED"),{fontSize:11,padding:"7px 14px",opacity:(!text.trim()||aiLoading)?0.5:1})}>
+            <button onClick={function(){createTaskViaAI();}} disabled={!text.trim()||aiLoading||extracting} style={Object.assign({},S.btn("#7C3AED"),{fontSize:11,padding:"7px 14px",opacity:(!text.trim()||aiLoading||extracting)?0.5:1})}>
               {aiLoading ? "⟳ Analyse IA…" : "✦ Créer (IA)"}
             </button>
           )}
-          <button onClick={createTaskFromParsing} disabled={!text.trim()} style={Object.assign({},S.btn("#102A63"),{fontSize:11,padding:"7px 14px",opacity:!text.trim()?0.5:1})}>
+          <button onClick={function(){createTaskFromParsing();}} disabled={!text.trim()||extracting||aiLoading} style={Object.assign({},S.btn("#102A63"),{fontSize:11,padding:"7px 14px",opacity:(!text.trim()||extracting||aiLoading)?0.5:1})}>
             Créer la tâche
           </button>
         </div>
@@ -15204,7 +15352,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.597{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.598{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
