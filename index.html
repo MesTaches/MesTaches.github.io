@@ -14574,7 +14574,6 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
   var [extracting, setExtracting] = React.useState(false);
   var [autoAI, setAutoAI] = React.useState(true);
   var [sourceLabel, setSourceLabel] = React.useState("");
-  var [extractedImages, setExtractedImages] = React.useState([]);
   var taRef = React.useRef(null);
   var dragCounterRef = React.useRef(0);
 
@@ -14736,125 +14735,10 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     return result.trim();
   };
 
-  // ── Conversion Uint8Array → data URI base64 ──
-  var bytesToDataUrl = function(bytes, mime) {
-    var binary = "";
-    var chunkSize = 8192;
-    for (var i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + chunkSize, bytes.length)));
-    }
-    return "data:" + mime + ";base64," + btoa(binary);
-  };
-
-  // ── Extraction des images PNG/JPEG embarquées dans le binaire d'un .msg ──
-  // Scan pur des signatures sans dépendre du format CFB. Robuste pour les images
-  // dans les pièces jointes ET dans les blobs TNEF (winmail.dat).
-  // Stratégie : on collecte TOUTES les images du fichier (jusqu'à un cap),
-  // on déduplique par taille, on trie par taille décroissante, on garde top N.
-  // → Les gros graphiques/charts (50+ KB) passent devant les petits logos (< 10 KB).
-  var extractImagesFromBinary = function(arrayBuffer) {
-    var bytes = new Uint8Array(arrayBuffer);
-    var images = [];
-    var SCAN_CAP = 30;
-    var KEEP_TOP = 5;
-    var MAX_IMG_SIZE = 1024 * 1024;     // 1 MB par image (cap haut pour gros charts)
-    var MIN_PNG = 200, MIN_JPG = 800;
-
-    // ── Passe 1 : scan binaire des signatures PNG/JPEG ──
-    var i = 0;
-    while (i < bytes.length - 8 && images.length < SCAN_CAP) {
-      if (bytes[i] === 0x89 && bytes[i+1] === 0x50 && bytes[i+2] === 0x4E && bytes[i+3] === 0x47
-          && bytes[i+4] === 0x0D && bytes[i+5] === 0x0A && bytes[i+6] === 0x1A && bytes[i+7] === 0x0A) {
-        var found = false;
-        var scanEnd = Math.min(i + MAX_IMG_SIZE, bytes.length - 7);
-        for (var j = i + 8; j < scanEnd; j++) {
-          if (bytes[j] === 0x49 && bytes[j+1] === 0x45 && bytes[j+2] === 0x4E && bytes[j+3] === 0x44) {
-            var endPos = Math.min(j + 8, bytes.length);
-            if (endPos - i >= MIN_PNG) {
-              images.push({ type: "image/png", bytes: bytes.slice(i, endPos) });
-            }
-            i = endPos;
-            found = true;
-            break;
-          }
-        }
-        if (!found) i++;
-        continue;
-      }
-      if (bytes[i] === 0xFF && bytes[i+1] === 0xD8 && bytes[i+2] === 0xFF) {
-        var found2 = false;
-        var scanEnd2 = Math.min(i + MAX_IMG_SIZE, bytes.length - 1);
-        for (var k = i + 4; k < scanEnd2; k++) {
-          if (bytes[k] === 0xFF && bytes[k+1] === 0xD9) {
-            var endPos2 = k + 2;
-            if (endPos2 - i >= MIN_JPG) {
-              images.push({ type: "image/jpeg", bytes: bytes.slice(i, endPos2) });
-            }
-            i = endPos2;
-            found2 = true;
-            break;
-          }
-        }
-        if (!found2) i++;
-        continue;
-      }
-      i++;
-    }
-
-    // ── Passe 2 : scan base64 (certains .msg/.eml embarquent les images en base64 dans le texte) ──
-    // PNG en base64 commence par "iVBORw0KGgo", JPEG par "/9j/"
-    try {
-      var asciiBuf = "";
-      for (var b = 0; b < bytes.length; b++) {
-        var c = bytes[b];
-        asciiBuf += (c >= 32 && c < 127) ? String.fromCharCode(c) : " ";
-      }
-      var b64Patterns = [
-        { re: /iVBORw0KGgo[A-Za-z0-9+/]{200,}={0,2}/g, mime: "image/png", min: MIN_PNG },
-        { re: /\/9j\/[A-Za-z0-9+/]{200,}={0,2}/g, mime: "image/jpeg", min: MIN_JPG }
-      ];
-      b64Patterns.forEach(function(pat){
-        var matches = asciiBuf.match(pat.re) || [];
-        matches.forEach(function(b64){
-          if (images.length >= SCAN_CAP) return;
-          try {
-            var clean = b64.replace(/\s/g, "");
-            var binStr = atob(clean);
-            var imgBytes = new Uint8Array(binStr.length);
-            for (var bi = 0; bi < binStr.length; bi++) imgBytes[bi] = binStr.charCodeAt(bi);
-            if (imgBytes.length >= pat.min) {
-              images.push({ type: pat.mime, bytes: imgBytes });
-            }
-          } catch(e) { /* base64 invalide, on ignore */ }
-        });
-      });
-    } catch(e) { /* fallback silencieux */ }
-
-    // Dédup par signature (taille + 16 premiers octets) — plus robuste que la taille seule
-    var seenKeys = {};
-    var unique = images.filter(function(im){
-      var prefix = "";
-      for (var ki = 0; ki < Math.min(16, im.bytes.length); ki++) prefix += im.bytes[ki] + ",";
-      var key = im.bytes.length + "_" + prefix;
-      if (seenKeys[key]) return false;
-      seenKeys[key] = 1;
-      return true;
-    });
-
-    // Tri par taille décroissante : le plus volumineux d'abord
-    // (un chart financier ≫ un logo)
-    unique.sort(function(a, b) { return b.bytes.length - a.bytes.length; });
-
-    // Top N, conversion data URL, selected=true par défaut
-    return unique.slice(0, KEEP_TOP).map(function(im){
-      return { type: im.type, dataUrl: bytesToDataUrl(im.bytes, im.type), size: im.bytes.length, selected: true };
-    });
-  };
 
   // ── Extraction depuis le dataTransfer d'un drop ──
   var extractFromDataTransfer = async function(dt) {
     var pieces = [];
-    var images = [];
     var label = "";
     // 1. Fichiers (cas idéal : .eml depuis Outlook Web / .msg depuis Explorateur)
     if (dt.files && dt.files.length > 0) {
@@ -14865,7 +14749,6 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
           if (name.endsWith(".msg")) {
             var buf = await file.arrayBuffer();
             pieces.push(extractMsgText(buf));
-            images = images.concat(extractImagesFromBinary(buf));
             label = file.name + " (.msg)";
           } else {
             pieces.push(await file.text());
@@ -14889,7 +14772,6 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
       if (plain && pieces.length === 0) { pieces.push(plain); label = "Texte glissé"; }
     }
     return {
-      images: images,
       content: pieces.filter(function(p){ return p && p.trim(); }).join("\n\n---\n\n"),
       label: label
     };
@@ -14926,19 +14808,10 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
         return;
       }
       setText(res.content);
-      setExtractedImages(res.images || []);
       setSourceLabel(res.label || "Email importé");
       setExtracting(false);
-      var imgCount = (res.images || []).length;
       if (autoAI && settings && settings.groqKey) {
-        if (imgCount > 0) {
-          // Dès qu'il y a des images, on met l'auto-IA en pause pour laisser le
-          // temps à l'utilisateur de désélectionner les logos / vérifier que
-          // l'image attendue est bien là.
-          setAiError("⏸ " + imgCount + " image" + (imgCount>1?"s":"") + " détectée" + (imgCount>1?"s":"") + ". Vérifiez la sélection (clic = activer/désactiver) puis cliquez '✦ Créer (IA)'.");
-        } else {
-          setTimeout(function(){ createTaskViaAI(res.content, []); }, 80);
-        }
+        setTimeout(function(){ createTaskViaAI(res.content); }, 80);
       }
     } catch (err) {
       setExtracting(false);
@@ -14946,9 +14819,8 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     }
   };
 
-  var createTaskFromParsing = function(contentOverride, imagesOverride) {
+  var createTaskFromParsing = function(contentOverride) {
     var content = contentOverride != null ? contentOverride : text;
-    var images = imagesOverride != null ? imagesOverride : extractedImages;
     if (!content.trim()) return;
     var p = parseLocal(content);
     var prefill = {
@@ -14965,28 +14837,19 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
     var headerHtml = (p.from || p.date)
       ? "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(p.from||"—") + "</strong>" + (p.date?" — "+esc(p.date):"") + "</p><hr/>"
       : "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 Capture email</p><hr/>";
-    var keptImages = (images || []).filter(function(img){ return img.selected !== false; });
-    var imagesHtml = "";
-    if (keptImages.length > 0) {
-      imagesHtml = "<hr/><div style=\"font-size:10px;font-weight:700;color:#888;letter-spacing:0.04em;margin:8px 0 6px\">📎 IMAGES JOINTES</div>"
-        + keptImages.map(function(img){
-            return '<img src="' + img.dataUrl + '" style="max-width:100%;max-height:380px;border-radius:6px;margin:6px 0;border:1px solid #E0E0E0;display:block" alt="Image extraite" />';
-          }).join("");
-    }
     onCapture({
       title: prefill.title,
       responsable: "",
       dueDate: prefill.dueDate,
       priority: prefill.priority,
       category: prefill.category,
-      notes: headerHtml + bodyHtml + imagesHtml,
+      notes: headerHtml + bodyHtml,
       type: "Tâche"
     });
   };
 
-  var createTaskViaAI = async function(contentOverride, imagesOverride) {
+  var createTaskViaAI = async function(contentOverride) {
     var content = contentOverride != null ? contentOverride : text;
-    var images = imagesOverride != null ? imagesOverride : extractedImages;
     if (!content.trim() || !settings || !settings.groqKey) return;
     setAiLoading(true); setAiError("");
     var GROQ_MAX = 12000;
@@ -15033,19 +14896,10 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
           + (parsed.retard ? "<tr><td style=\"padding:2px 12px 2px 0;color:#666\">Retard de paiement</td><td style=\"font-weight:700;color:#E67E22\">" + esc(fmtAmt(parsed.retard)) + "</td></tr>" : "")
           + "</table></div>";
       }
-      // Images embarquées
-      var imagesHtml = "";
-      if (images && images.length > 0) {
-        imagesHtml = "<hr/><div style=\"font-size:10px;font-weight:700;color:#888;letter-spacing:0.04em;margin:8px 0 6px\">📎 IMAGES DÉTECTÉES</div>"
-          + images.map(function(img){
-              return '<img src="' + img.dataUrl + '" style="max-width:100%;max-height:380px;border-radius:6px;margin:6px 0;border:1px solid #E0E0E0;display:block" alt="Image extraite" />';
-            }).join("");
-      }
       var notesHtml = "<p><strong>✦ Résumé IA :</strong> " + esc(summary) + "</p>"
         + "<p style=\"color:#888;font-size:11px;font-style:italic\">📧 De <strong>" + esc(parsed.responsable||p.from||"—") + "</strong>" + (parsed.dueDate ? " — Échéance détectée : " + esc(parsed.dueDate) : "") + "</p>"
         + finHtml
-        + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "")
-        + imagesHtml;
+        + (bodyExtract ? "<hr/><div style=\"font-size:12px;color:#444;white-space:pre-wrap;line-height:1.5\">" + esc(bodyExtract) + "</div>" : "");
       onCapture({
         title: parsed.title || p.subject || "",
         responsable: "",
@@ -15098,44 +14952,6 @@ function EmailCaptureModal({ onCapture, onClose, settings }) {
             {aiLoading && <div style={{marginTop:10,fontSize:11,color:"#7C3AED",fontFamily:_DM,fontWeight:700}}>✦ Analyse IA en cours…</div>}
             {sourceLabel && !extracting && !aiLoading && (
               <div style={{marginTop:10,fontSize:10,color:"#065F46",background:"#D1FAE5",borderRadius:4,padding:"3px 8px",display:"inline-block",fontFamily:_DM}}>✓ {sourceLabel}</div>
-            )}
-            {extractedImages.length > 0 && (
-              <div style={{marginTop:10,paddingTop:10,borderTop:"1px dashed #C7D2FE"}}>
-                <div style={{fontSize:9,fontFamily:_DM,fontWeight:700,color:"#102A63",letterSpacing:"0.06em",marginBottom:6}}>
-                  📎 {extractedImages.length} IMAGE{extractedImages.length>1?"S":""} (triées par taille) — cliquez pour activer / désactiver
-                </div>
-                <div style={{display:"flex",gap:8,flexWrap:"wrap",justifyContent:"center"}}>
-                  {extractedImages.map(function(img, idx){
-                    var sel = img.selected !== false;
-                    return (
-                      <div key={idx}
-                        onClick={function(e){
-                          e.stopPropagation();
-                          setExtractedImages(function(prev){
-                            return prev.map(function(x, i){ return i===idx ? Object.assign({}, x, {selected: !sel}) : x; });
-                          });
-                        }}
-                        style={{
-                          cursor:"pointer",
-                          border: sel ? "2px solid #102A63" : "2px dashed #BBB",
-                          borderRadius:6, padding:3, position:"relative",
-                          background: sel ? "white" : "#F5F5F5",
-                          opacity: sel ? 1 : 0.45,
-                          transition:"all 0.15s"
-                        }}>
-                        <img src={img.dataUrl} alt="" style={{maxWidth:160,maxHeight:100,objectFit:"contain",display:"block"}} />
-                        <div style={{position:"absolute",top:5,right:5,background:sel?"#102A63":"#999",color:"white",borderRadius:"50%",width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700}}>
-                          {sel ? "✓" : "×"}
-                        </div>
-                        <div style={{position:"absolute",bottom:5,left:5,background:"rgba(255,255,255,0.92)",color:"#555",fontSize:9,fontFamily:_DM,borderRadius:3,padding:"1px 5px",fontWeight:600}}>
-                          {Math.round(img.size/1024)} KB
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{fontSize:9,color:"#888",fontFamily:_FL,marginTop:6,textAlign:"center",fontStyle:"italic"}}>Astuce : les logos/signatures sont souvent petits (&lt; 10 KB), les graphiques importants sont plus volumineux.</div>
-              </div>
             )}
           </div>
 
@@ -15664,7 +15480,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.605{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.606{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
