@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v609-1779107496"/>
+  <meta name="app-version" content="v610-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1078,6 +1078,9 @@ function CotationView({ settings }) {
   const totAuth = displayed.reduce((s,c)=>s+(parseFloat(String(c.authorizedAmount||0).replace(",","."))||0),0);
   const totNeed = displayed.reduce((s,c)=>s+(parseFloat(String(c.need||0).replace(",","."))||0),0);
   const totObt  = displayed.reduce((s,c)=>s+(parseFloat(String(c.obtainedAmount||0).replace(",","."))||0),0);
+  const totalPages = Math.max(1, Math.ceil(displayed.length / PAGE_SIZE));
+  const safePage   = Math.min(page, totalPages);
+  const paginated  = displayed.slice((safePage-1)*PAGE_SIZE, safePage*PAGE_SIZE);
 
   const colOrder = ["clientName","clientCode","requestDate","requester","status","authorizedAmount","need","obtainedAmount","label","closeDate"];
   const gridTpl = "20px 44px 40px " + colOrder.map(k=>colWidths[k]+"px").join(" ") + " 30px 30px";
@@ -1184,7 +1187,7 @@ function CotationView({ settings }) {
         {/* Lignes */}
         {displayed.length===0 ? (
           <div style={{ fontFamily:_FL, textAlign:"center", padding:"30px 0", color:"#BBB", fontSize:13 }}>Aucune demande</div>
-        ) : displayed.map((c,i)=>{
+        ) : paginated.map((c,i)=>{
           const st=COT_STATUSES.find(s=>s.id===c.status)||COT_STATUSES[0];
           const lb=COT_LABELS.find(l=>l.id===c.label)||COT_LABELS[0];
           const pr=COT_PRIOS.find(p=>p.id===(c.priority||"normal"))||COT_PRIOS[2];
@@ -15848,7 +15851,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.609{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.610{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
