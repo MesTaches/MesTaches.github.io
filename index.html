@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v616-1779107496"/>
+  <meta name="app-version" content="v617-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -78,14 +78,14 @@ const _fbApp = firebase.initializeApp({
 const _db = firebase.firestore();
 const _auth = firebase.auth();
 
-const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1"];
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1", "taskmanager_payments", "taskmanager_cotations"];
 let _uid = null;
 let _debounce = {};
 let _reactMounted = false;
 let _remoteCheckInterval = null;
-// Timestamp of the LAST time THIS device wrote to Firestore
-// Remote check only reloads if Firestore ts > this value + 10s buffer
-let _myLastWriteTs = 0;
+// Timestamp of the LAST time THIS device wrote to Firestore, per key.
+// Remote check only reloads if Firestore ts > this value + 15s buffer
+let _myLastWriteTs = {};
 
 const _origSetItem = Storage.prototype.setItem;
 const _origGetItem = Storage.prototype.getItem;
@@ -97,7 +97,7 @@ Storage.prototype.setItem = function(key, value) {
     clearTimeout(_debounce[key]);
     _debounce[key] = setTimeout(() => {
       const ts = Date.now();
-      _myLastWriteTs = ts; // Record when WE wrote
+      _myLastWriteTs[key] = ts; // Record when WE wrote this specific key
       const docKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
       _db.collection('users').doc(_uid).collection('ls').doc(docKey)
         .set({ value: value, ts: ts })
@@ -119,42 +119,46 @@ function mountReact() {
   else window._pendingMount = true;
 }
 
-// Check for remote changes every 10s
+// Check for remote changes every 10s on ALL synced keys
 // Silently update localStorage and notify React instead of reloading the page
 function startRemoteCheck(uid) {
   if (_remoteCheckInterval) clearInterval(_remoteCheckInterval);
   _remoteCheckInterval = setInterval(async () => {
     if (!_reactMounted || !_uid) return;
     try {
-      const key = 'taskmanager_v4';
-      const docKey = key.replace(/[^a-zA-Z0-9_]/g, '_');
-      const snap = await _db.collection('users').doc(uid).collection('ls').doc(docKey).get();
-      if (snap.exists && snap.data() && snap.data().ts) {
-        const remoteTs = snap.data().ts;
-        const now = Date.now();
-        // Only sync if:
-        // - remote is newer than our last write by more than 15 seconds
-        // - remote is not from the future (sanity check)
-        if (remoteTs > _myLastWriteTs + 15000 && remoteTs <= now + 5000) {
+      // Pull all ls docs at once (1 Firestore read instead of N)
+      const snap = await _db.collection('users').doc(uid).collection('ls').get();
+      const now = Date.now();
+      snap.forEach(doc => {
+        const docKey = doc.id;
+        // Reverse mapping: docKey is the sanitized key. For our SYNC_KEYS (alphanum + _),
+        // the docKey equals the key itself.
+        const key = SYNC_KEYS.find(k => k.replace(/[^a-zA-Z0-9_]/g, '_') === docKey);
+        if (!key) return;
+        const data = doc.data();
+        if (!data || !data.ts) return;
+        const remoteTs = data.ts;
+        const lastMine = _myLastWriteTs[key] || 0;
+        // Only sync if remote is newer than our last write by >15s, and not from the future
+        if (remoteTs > lastMine + 15000 && remoteTs <= now + 5000) {
           const localVal = _origGetItem.call(localStorage, key);
-          const remoteVal = snap.data().value;
+          const remoteVal = data.value;
           if (localVal !== remoteVal) {
-            console.log('Remote change from another device - silent sync');
-            // Update localStorage silently without page reload
+            console.log('Remote sync:', key);
             _origSetItem.call(localStorage, key, remoteVal);
-            _myLastWriteTs = remoteTs; // prevent re-trigger
-            // Notify React app to re-read from localStorage
+            _myLastWriteTs[key] = remoteTs; // prevent re-trigger
             window.dispatchEvent(new CustomEvent('remoteDataUpdated', { detail: { key } }));
           }
         }
-      }
+      });
     } catch(e) {}
   }, 10000);
 }
 
 async function loadAndMount(uid) {
   _uid = uid;
-  _myLastWriteTs = Date.now(); // Treat load as a "write" to avoid immediate reload
+  const now = Date.now();
+  SYNC_KEYS.forEach(k => { _myLastWriteTs[k] = now; }); // Treat load as a "write" to avoid immediate re-sync
   showScreen('fb-loading');
   try {
     for (const key of SYNC_KEYS) {
@@ -682,21 +686,67 @@ async function appDbGet(store) {
   } catch(e) { console.error(`AppDB get(${store}):`, e); return null; }
 }
 
-async function appDbSet(store, data) {
+// IDB stores that should be replicated to localStorage so the Firebase sync
+// monkey-patch (in the auth script) picks them up and replicates to Firestore.
+// Stores NOT listed here (creditbail, echeancier) stay local-only — they can be
+// too large for Firestore's 1 MiB doc limit.
+const STORE_TO_SYNC_KEY = {
+  "tasks":       "taskmanager_v4",
+  "settings":    "taskmanager_settings_v1",
+  "meetings":    "taskmanager_meetings_v1",
+  "dev":         "devtracker_tasks_v1",
+  "contentieux": "contentieux_dossiers_v1",
+  "payments":    "taskmanager_payments",
+  "cotations":   "taskmanager_cotations",
+};
+
+// Core: IDB-only write (no LS bridge, no Firestore trigger).
+async function _appDbSetCore(store, data) {
   try {
     const db = await openAppDB();
     const tx = db.transaction(store, "readwrite");
     tx.objectStore(store).put(data, "data");
     return new Promise((res, rej) => {
-      tx.oncomplete = () => {
-        if (store==="tasks" && Array.isArray(data) && data.length>0) {
-          try{localStorage.setItem("tasks_backup",JSON.stringify(data));}catch{}
-        }
-        res(true);
-      };
+      tx.oncomplete = () => res(true);
       tx.onerror = e => rej(e.target.error);
     });
-  } catch(e) { console.error("AppDB set:", e); return false; }
+  } catch(e) { console.error("AppDB set core:", e); return false; }
+}
+
+// Public: writes IDB AND localStorage (for synced stores).
+// The localStorage write triggers the Firebase sync monkey-patch → Firestore.
+async function appDbSet(store, data) {
+  const ok = await _appDbSetCore(store, data);
+  // Bridge to localStorage for stores meant to sync across devices
+  const lsKey = STORE_TO_SYNC_KEY[store];
+  if (lsKey) {
+    try { localStorage.setItem(lsKey, JSON.stringify(data)); }
+    catch(e) { console.warn("LS bridge write failed for", store, e && e.message); }
+  }
+  // Legacy: extra defensive backup for tasks
+  if (store === "tasks" && Array.isArray(data) && data.length > 0) {
+    try { localStorage.setItem("tasks_backup", JSON.stringify(data)); } catch {}
+  }
+  return ok;
+}
+
+// Bridge: push localStorage values (freshly loaded from Firestore) into IDB.
+// Called on app mount and on every remote update so components that read IDB
+// directly see the latest data.
+async function bridgeSyncToIDB() {
+  for (const store of Object.keys(STORE_TO_SYNC_KEY)) {
+    const lsKey = STORE_TO_SYNC_KEY[store];
+    try {
+      const raw = localStorage.getItem(lsKey);
+      if (!raw) continue;
+      const val = JSON.parse(raw);
+      if (val == null) continue;
+      // Skip if IDB already matches (avoid unnecessary writes)
+      const cur = await appDbGet(store);
+      if (JSON.stringify(cur) === raw) continue;
+      await _appDbSetCore(store, val);
+    } catch(e) { console.warn("bridgeSyncToIDB", store, e && e.message); }
+  }
 }
 
 async function appDbGetAll() {
@@ -972,7 +1022,28 @@ function CotationView({ settings }) {
   const isMobile = useIsMobile();
   const [cotations, setCotations] = React.useState([]);
   const [cotReady, setCotReady] = React.useState(false);
-  React.useEffect(()=>{ appDbGet("cotations").then(v=>{if(v&&Array.isArray(v))setCotations(v);setCotReady(true);}).catch(()=>setCotReady(true)); },[]);
+  const reloadCotations = React.useCallback(async () => {
+    try {
+      let v = await appDbGet("cotations");
+      if (!v || (Array.isArray(v) && v.length === 0)) {
+        const raw = localStorage.getItem("taskmanager_cotations");
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) { v = parsed; await _appDbSetCore("cotations", v); }
+          } catch {}
+        }
+      }
+      if (v && Array.isArray(v)) setCotations(v);
+    } catch(e) {}
+    setCotReady(true);
+  }, []);
+  React.useEffect(() => { reloadCotations(); }, [reloadCotations]);
+  React.useEffect(() => {
+    const handler = (e) => { if (e && e.detail && e.detail.key === "taskmanager_cotations") reloadCotations(); };
+    window.addEventListener("idbStoreUpdated", handler);
+    return () => window.removeEventListener("idbStoreUpdated", handler);
+  }, [reloadCotations]);
   const [modal, setModal]         = React.useState(null);
   React.useEffect(() => { window._cotations = cotations; }, [cotations]);
   const [noteModal, setNoteModal] = React.useState(null);
@@ -4547,10 +4618,39 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
     setTrashTick(function(t){ return t+1; });
   };
 
+  var _loadMeetings = React.useCallback(function(){
+    return appDbGet(MTG_KEY).then(function(d){
+      var arr = Array.isArray(d) ? d : [];
+      // Fallback to localStorage (Firestore-synced) if IDB is empty
+      if (arr.length === 0) {
+        try {
+          var raw = localStorage.getItem("taskmanager_meetings_v1");
+          if (raw) {
+            var parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              arr = parsed;
+              _appDbSetCore(MTG_KEY, arr).catch(function(){});
+            }
+          }
+        } catch(e) {}
+      }
+      return arr;
+    });
+  }, []);
+
   React.useEffect(function(){
-    appDbGet(MTG_KEY)
-      .then(function(d){
-        var arr = Array.isArray(d) ? d : [];
+    var handler = function(e) {
+      if (e && e.detail && e.detail.key === "taskmanager_meetings_v1") {
+        _loadMeetings().then(function(arr){ setMeetings(arr); }).catch(function(){});
+      }
+    };
+    window.addEventListener("idbStoreUpdated", handler);
+    return function(){ window.removeEventListener("idbStoreUpdated", handler); };
+  }, [_loadMeetings]);
+
+  React.useEffect(function(){
+    _loadMeetings()
+      .then(function(arr){
         // Migration anciennes données: sessions[] → content (HTML concaténé)
         var needsSave = false;
         arr = arr.map(function(m){
@@ -15284,7 +15384,38 @@ function PaymentsView({ settings }) {
   const isMobile = useIsMobile();
   const [payments, setPayments] = React.useState([]);
   const [payReady, setPayReady] = React.useState(false);
-  React.useEffect(()=>{ appDbGet("payments").then(v=>{if(v&&Array.isArray(v))setPayments(v);setPayReady(true);}).catch(()=>setPayReady(true)); },[]);
+
+  // Load: IDB first, fallback to localStorage (Firestore-synced) if IDB is empty
+  const reloadPayments = React.useCallback(async () => {
+    try {
+      let v = await appDbGet("payments");
+      if (!v || (Array.isArray(v) && v.length === 0)) {
+        const raw = localStorage.getItem("taskmanager_payments");
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              v = parsed;
+              await _appDbSetCore("payments", v); // restore to IDB without re-triggering sync
+            }
+          } catch {}
+        }
+      }
+      if (v && Array.isArray(v)) setPayments(v);
+    } catch(e) {}
+    setPayReady(true);
+  }, []);
+
+  React.useEffect(() => { reloadPayments(); }, [reloadPayments]);
+
+  // Listen for remote sync updates → reload from IDB
+  React.useEffect(() => {
+    const handler = (e) => {
+      if (e && e.detail && e.detail.key === "taskmanager_payments") reloadPayments();
+    };
+    window.addEventListener("idbStoreUpdated", handler);
+    return () => window.removeEventListener("idbStoreUpdated", handler);
+  }, [reloadPayments]);
   const [selectedIds, setSelectedIds] = React.useState([]);
   const [bulkStatus, setBulkStatus] = React.useState("");
   const [modal, setModal] = React.useState(null);
@@ -16065,6 +16196,9 @@ function App() {
   useEffect(() => {
     (async () => {
       await migrateAllToIDB();
+      // Bridge Firestore-loaded localStorage values into IDB so views that
+      // read IDB directly (Payments, Cotation, Meetings, etc.) see them.
+      await bridgeSyncToIDB();
       const savedSettings = await appDbGet("settings");
       if (savedSettings) setSettings(savedSettings);
       setAppReady(true);
@@ -16188,13 +16322,23 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const handleRemoteUpdate = () => {
+    const handleRemoteUpdate = async (e) => {
+      const key = e && e.detail && e.detail.key;
       try {
-        const s = localStorage.getItem(STORAGE_KEY);
-        if (s) setTasks(JSON.parse(s));
-        const newSettings = loadSettings();
-        setSettings(newSettings);
-      } catch(e) {}
+        // 1) Push any updated localStorage value into IDB so views that read
+        //    IDB directly see the change.
+        await bridgeSyncToIDB();
+        // 2) Refresh React state for the local view-specific data.
+        if (!key || key === STORAGE_KEY) {
+          const s = localStorage.getItem(STORAGE_KEY);
+          if (s) setTasks(JSON.parse(s));
+        }
+        if (!key || key === "taskmanager_settings_v1") {
+          setSettings(loadSettings());
+        }
+        // 3) Notify view-specific listeners (PaymentsView, CotationView, MeetingsView…)
+        if (key) window.dispatchEvent(new CustomEvent('idbStoreUpdated', { detail: { key } }));
+      } catch(err) {}
     };
     window.addEventListener('remoteDataUpdated', handleRemoteUpdate);
     return () => window.removeEventListener('remoteDataUpdated', handleRemoteUpdate);
@@ -16483,7 +16627,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.616{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.617{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
