@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v613-1779107496"/>
+  <meta name="app-version" content="v614-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2286,6 +2286,59 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
   const [subDetail, setSubDetail] = useState(null);
   const [showAI, setShowAI] = useState(false);
   const [stopwatch, setStopwatch] = useState(false); // 7)
+  const [aiSuggesting, setAiSuggesting] = useState(false);
+
+  // ─── Auto-suggestion IA depuis le titre (catégorie, type, priorité) ───
+  const aiSuggestFromTitle = async () => {
+    const groqKey = (settings && settings.groqKey || "").trim();
+    if (!groqKey) { alert("Configure ta clé Groq dans Paramètres pour utiliser la suggestion IA."); return; }
+    const title = (d.title || "").trim();
+    if (!title) return;
+    setAiSuggesting(true);
+    try {
+      const cats = (settings.categories || []).map(c => c.name).filter(Boolean);
+      const types = (settings.types || []).map(t => t.name || t).filter(Boolean);
+      const sys = "Tu es un assistant qui classifie les tâches d'un cadre francophone. Tu réponds UNIQUEMENT en JSON valide compact, sans markdown, sans backticks, sans commentaire.";
+      const usr = "Titre de la tâche : \"" + title + "\"\n\n"
+        + "Catégories disponibles : " + JSON.stringify(cats) + "\n"
+        + "Types disponibles : " + JSON.stringify(types) + "\n\n"
+        + "Renvoie un JSON {\"category\":\"...\",\"type\":\"...\",\"priority\":\"...\"} où :\n"
+        + "- category = une valeur exacte de la liste ou \"\" si aucune ne convient\n"
+        + "- type = une valeur exacte de la liste ou \"\" si aucune ne convient\n"
+        + "- priority = \"urgente\" | \"haute\" | \"normale\" | \"basse\" selon l'urgence apparente du titre.";
+      const resp = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + groqKey },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.1,
+          max_tokens: 200,
+          response_format: { type: "json_object" },
+          messages: [{ role: "system", content: sys }, { role: "user", content: usr }]
+        })
+      });
+      if (!resp.ok) throw new Error("HTTP "+resp.status);
+      const data = await resp.json();
+      const content = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim();
+      let parsed = null;
+      try { parsed = JSON.parse(content); } catch(e) {
+        const m = content.match(/\{[\s\S]*\}/);
+        if (m) try { parsed = JSON.parse(m[0]); } catch(e2) {}
+      }
+      if (!parsed) throw new Error("Réponse non parseable");
+      setD(p => ({
+        ...p,
+        category: (parsed.category && cats.includes(parsed.category)) ? parsed.category : p.category,
+        type:     (parsed.type     && types.includes(parsed.type))     ? parsed.type     : p.type,
+        priority: ["urgente","haute","normale","basse"].includes(parsed.priority) ? parsed.priority : p.priority,
+      }));
+    } catch(e) {
+      console.error("AI suggest:", e);
+      alert("Suggestion IA indisponible : " + (e.message || e));
+    } finally {
+      setAiSuggesting(false);
+    }
+  };
 
   const catObj   = settings.categories.find(c => c.name === d.category);
   const catAccent = catObj?.accent || "#102A63";
@@ -2340,7 +2393,16 @@ function TaskModal({ task, onSave, onClose, onAddTask, settings }) {
             </div>
           )}
 
-          <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 10, marginBottom: 12 }} />
+          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 12 }}>
+            <input value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Titre de la tâche…" autoFocus style={{ ...S.input, fontSize: 10, flex: 1, marginBottom: 0 }} />
+            {settings && settings.groqKey && (
+              <button type="button" onClick={aiSuggestFromTitle} disabled={aiSuggesting || !d.title.trim()}
+                title="Suggérer catégorie / type / priorité depuis le titre"
+                style={{ border: "1px solid #102A63", background: aiSuggesting ? "#EEF4FF" : "white", borderRadius: 6, padding: "5px 10px", fontSize: 11, cursor: aiSuggesting || !d.title.trim() ? "not-allowed" : "pointer", fontFamily: "'DM Mono',monospace", color: "#102A63", fontWeight: 700, opacity: !d.title.trim() ? 0.4 : 1, flexShrink: 0 }}>
+                {aiSuggesting ? "⟳" : "✦ Auto"}
+              </button>
+            )}
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
             <select value={d.category} onChange={(e) => setD({ ...d, category: e.target.value })} style={{ ...S.input, fontSize: 10, cursor: "pointer", color: d.category ? "#2C3E50" : "#999" }}>
@@ -4123,9 +4185,10 @@ function MeetingPanel({ reunion, onSave, onOpenSettings, onDelete, onAddTask, se
   var [remountKey, setRemountKey] = React.useState(0);
   var [confirmDel, setConfirmDel] = React.useState(false);
   var [quickTask, setQuickTask] = React.useState(null); // {title, category, priority, dueDate}
+  var [aiSummary, setAiSummary] = React.useState(null); // { loading, error, html }
 
-  // Reset la confirmation si on change de réunion
-  React.useEffect(function(){ setConfirmDel(false); }, [reunion.id]);
+  // Reset les états transitoires si on change de réunion
+  React.useEffect(function(){ setConfirmDel(false); setAiSummary(null); setQuickTask(null); }, [reunion.id]);
 
   var saveContent = function(html) {
     onSave(Object.assign({}, reunion, { content: html }));
@@ -4188,6 +4251,69 @@ function MeetingPanel({ reunion, onSave, onOpenSettings, onDelete, onAddTask, se
     setQuickTask(null);
   };
 
+  // ─── Résumé IA de la réunion ───
+  var runAiSummary = function() {
+    var groqKey = (settings && settings.groqKey || "").trim();
+    if (!groqKey) { alert("Configure ta clé Groq dans Paramètres pour utiliser le résumé IA."); return; }
+    // Extrait du texte brut depuis le contenu HTML
+    var tmp = document.createElement("div");
+    tmp.innerHTML = reunion.content || "";
+    var plain = (tmp.innerText || "").trim();
+    if (!plain) { alert("La réunion est vide — rien à résumer."); return; }
+    if (plain.length > 12000) plain = plain.slice(0, 12000) + "\n[…tronqué]";
+    setAiSummary({ loading: true, error: null, html: null });
+    var sys = "Tu es un assistant qui synthétise les comptes-rendus de réunion d'un cadre francophone. Tu réponds UNIQUEMENT en HTML simple (h3, p, ul, li, strong) sans markdown ni backticks.";
+    var usr = "Voici le contenu d'une réunion intitulée « " + (reunion.title || "Réunion") + " ». Produis un résumé structuré avec les sections suivantes (toutes obligatoires, écris '(aucun)' si vide) :\n"
+      + "1. <h3>📋 Décisions prises</h3> — liste à puces des décisions importantes\n"
+      + "2. <h3>✅ Actions à mener</h3> — liste à puces : qui fait quoi, échéance si mentionnée\n"
+      + "3. <h3>❓ Points en suspens</h3> — questions ou sujets reportés\n"
+      + "4. <h3>📌 Informations clés</h3> — chiffres, noms, dates importants\n\n"
+      + "Contenu de la réunion :\n" + plain;
+    fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + groqKey },
+      body: JSON.stringify({
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.2,
+        max_tokens: 1800,
+        messages: [{ role: "system", content: sys }, { role: "user", content: usr }]
+      })
+    }).then(function(r){ return r.json(); }).then(function(data){
+      var html = (data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content || "").trim();
+      // Nettoie un éventuel markdown qui se serait glissé
+      html = html.replace(/^```html?\s*/i, "").replace(/```$/i, "").trim();
+      setAiSummary({ loading: false, error: null, html: html });
+    }).catch(function(e){
+      setAiSummary({ loading: false, error: String(e.message || e), html: null });
+    });
+  };
+  var insertSummaryAtTop = function() {
+    if (!aiSummary || !aiSummary.html) return;
+    var color = reunion.color || "#102A63";
+    var dateStr = new Date().toLocaleDateString("fr-FR", { day:"2-digit", month:"long", year:"numeric" });
+    var wrap = '<div data-mtg-block="summary" style="background:#FAFAF8;border-left:4px solid '+color+';padding:12px 16px;margin:8px 0 14px;border-radius:0 8px 8px 0;">'
+      + '<div style="font-size:10px;font-family:\'DM Mono\',monospace;color:'+color+';font-weight:700;letter-spacing:0.08em;margin-bottom:8px;">✨ RÉSUMÉ IA — '+dateStr+'</div>'
+      + aiSummary.html
+      + '</div>';
+    var newContent = wrap + (reunion.content || "");
+    onSave(Object.assign({}, reunion, { content: newContent }));
+    setRemountKey(function(k){ return k + 1; });
+    setAiSummary(null);
+  };
+  var copySummary = function() {
+    if (!aiSummary || !aiSummary.html) return;
+    var tmp = document.createElement("div");
+    tmp.innerHTML = aiSummary.html;
+    var text = tmp.innerText || "";
+    try {
+      navigator.clipboard.writeText(text).then(function(){
+        var prev = aiSummary;
+        setAiSummary(Object.assign({}, prev, { copied: true }));
+        setTimeout(function(){ setAiSummary(function(p){ return p ? Object.assign({},p,{copied:false}) : p; }); }, 1500);
+      });
+    } catch(e) {}
+  };
+
   // ─── Export PDF (impression) ───
   var exportPdf = function() {
     var w = window.open("", "_blank", "width=900,height=700");
@@ -4240,6 +4366,12 @@ function MeetingPanel({ reunion, onSave, onOpenSettings, onDelete, onAddTask, se
           <button onClick={openQuickTask} title="Créer une tâche (depuis la sélection si présente)"
             style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#102A63",fontFamily:_DM,flexShrink:0,fontWeight:700}}>+ Tâche</button>
         )}
+        {settings && settings.groqKey && (
+          <button onClick={runAiSummary} disabled={aiSummary && aiSummary.loading} title="Résumer la réunion avec l'IA (décisions, actions, points en suspens)"
+            style={{border:"1px solid #102A63",background:aiSummary && aiSummary.loading ? "#EEF4FF" : "white",borderRadius:6,padding:"4px 10px",cursor:aiSummary && aiSummary.loading?"wait":"pointer",fontSize:12,color:"#102A63",fontFamily:_DM,flexShrink:0,fontWeight:700}}>
+            {aiSummary && aiSummary.loading ? "⟳ IA…" : "✨ Résumer"}
+          </button>
+        )}
         <button onClick={exportPdf} title="Exporter en PDF (Imprimer → Enregistrer en PDF)"
           style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#555",fontFamily:_DM,flexShrink:0}}>📄 PDF</button>
         {onDelete && !confirmDel && (
@@ -4270,6 +4402,51 @@ function MeetingPanel({ reunion, onSave, onOpenSettings, onDelete, onAddTask, se
           rows={28}
         />
       </div>
+
+      {aiSummary && (aiSummary.loading || aiSummary.html || aiSummary.error) && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(){ if (!aiSummary.loading) setAiSummary(null); }}>
+          <div onClick={function(e){e.stopPropagation();}} style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:680,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",overflow:"hidden",borderTop:"4px solid "+(reunion.color||"#102A63"),fontFamily:_FL}}>
+            <div style={{padding:"14px 22px",borderBottom:"1px solid #ECEAE5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:10,fontFamily:_DM,color:"#888",letterSpacing:"0.1em"}}>✨ RÉSUMÉ IA</div>
+                <div style={{fontSize:15,fontWeight:700,color:"#102A63"}}>{reunion.title}</div>
+              </div>
+              <button onClick={function(){ if (!aiSummary.loading) setAiSummary(null); }} disabled={aiSummary.loading}
+                style={{border:"none",background:"none",fontSize:22,cursor:aiSummary.loading?"wait":"pointer",color:"#BDC3C7",lineHeight:1}}>×</button>
+            </div>
+            <div style={{padding:"18px 24px",overflowY:"auto",flex:1,minHeight:120}}>
+              {aiSummary.loading && (
+                <div style={{textAlign:"center",padding:"40px 20px",color:"#888",fontSize:13}}>
+                  <div style={{fontSize:32,marginBottom:10,animation:"spin 1.2s linear infinite",display:"inline-block"}}>⟳</div>
+                  <div>Analyse en cours…</div>
+                  <div style={{fontSize:11,color:"#AAA",marginTop:8,fontFamily:_DM}}>Cela peut prendre 5–15 s selon la taille</div>
+                  <style>{`@keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }`}</style>
+                </div>
+              )}
+              {aiSummary.error && (
+                <div style={{background:"#FEE2E2",border:"1px solid #FCA5A5",borderRadius:8,padding:"12px 16px",color:"#991B1B",fontSize:13}}>
+                  ⚠ Erreur IA : {aiSummary.error}
+                </div>
+              )}
+              {aiSummary.html && (
+                <div style={{fontSize:13,lineHeight:1.65,color:"#2C3E50"}} dangerouslySetInnerHTML={{__html: aiSummary.html}} />
+              )}
+            </div>
+            {aiSummary.html && (
+              <div style={{padding:"12px 22px",borderTop:"1px solid #ECEAE5",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,background:"#FAFAF8"}}>
+                <button onClick={copySummary}
+                  style={{...S.ghost,fontSize:12,padding:"6px 14px"}}>
+                  {aiSummary.copied ? "✓ Copié" : "📋 Copier (texte brut)"}
+                </button>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={function(){setAiSummary(null);}} style={{...S.ghost,fontSize:12}}>Fermer</button>
+                  <button onClick={insertSummaryAtTop} style={{...S.btn("#102A63"),fontSize:12}}>↑ Insérer en haut de la réunion</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {quickTask && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:5000,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={function(){setQuickTask(null);}}>
@@ -5488,20 +5665,53 @@ const ALL_TABS = [
 
 function DailySummary({ tasks, onClose }) {
   const today = new Date().toISOString().split("T")[0];
+  const [extra, setExtra] = React.useState({ meetings: [], cots: [], pays: [], rcfAlerts: [] });
+
+  React.useEffect(() => {
+    Promise.all([
+      appDbGet("meetings").catch(()=>[]),
+      appDbGet("cotations").catch(()=>[]),
+      appDbGet("payments").catch(()=>[]),
+    ]).then(([meetings, cots, pays]) => {
+      const mtgArr = Array.isArray(meetings) ? meetings : [];
+      const cotArr = Array.isArray(cots) ? cots : [];
+      const payArr = Array.isArray(pays) ? pays : [];
+      // Actions de réunion échues / du jour
+      const mtgActions = [];
+      mtgArr.forEach(m => {
+        (m.actions || []).forEach(a => {
+          if (a.status === "done" || a.status === "cancelled") return;
+          if (!a.dueDate) return;
+          if (a.dueDate <= today) {
+            mtgActions.push({ id: m.id+"_"+a.id, title: a.title || "(sans titre)", mtg: m.title || "", dueDate: a.dueDate, overdue: a.dueDate < today });
+          }
+        });
+      });
+      // RCF alertes
+      const rcfAlerts = _rcfAlertItems(today).filter(it => it.urgent).slice(0, 6);
+      // Cotations à clôturer + paiements du jour
+      const cotsDue = cotArr.filter(c => !["done","refused"].includes(c.status) && c.closeDate && c.closeDate <= today);
+      const paysDue = payArr.filter(p => !p.paye && p.datePaiement && p.datePaiement <= today);
+      setExtra({ meetings: mtgActions, cots: cotsDue, pays: paysDue, rcfAlerts });
+    });
+  }, []);
+
   const todayTasks = tasks.filter(t => !t.completed && t.dueDate === today);
   const overdue = tasks.filter(t => !t.completed && t.dueDate && t.dueDate < today);
   const urgent = tasks.filter(t => !t.completed && (t.priority === "urgente" || t.priority === "haute") && (!t.dueDate || t.dueDate >= today));
   const doneToday = tasks.filter(t => t.completed && t.dueDate === today);
   const dateLabel = new Date().toLocaleDateString("fr-FR", {weekday:"long", day:"numeric", month:"long"});
+  const extraCount = extra.meetings.length + extra.cots.length + extra.pays.length + extra.rcfAlerts.length;
   const stats = [
-    {n: todayTasks.length, l: "A faire",    c: "#7EB8F7"},
     {n: overdue.length,    l: "En retard",  c: "#F1948A"},
+    {n: todayTasks.length, l: "A faire",    c: "#7EB8F7"},
     {n: urgent.length,     l: "Urgentes",   c: "#F0B27A"},
-    {n: doneToday.length,  l: "Completees", c: "#82E0AA"},
+    {n: extraCount,        l: "Échéances",  c: "#C3B9F7"},
   ];
+  const fmtD = (s) => s ? s.split("-").reverse().slice(0,2).join("/") : "";
   return (
     <div style={{position:"fixed",inset:0,zIndex:9500,background:"rgba(0,0,0,0.45)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
-      <div style={{background:"white",borderRadius:16,width:"100%",maxWidth:520,boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}} onClick={e => e.stopPropagation()}>
+      <div style={{background:"white",borderRadius:16,width:"100%",maxWidth:560,boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}} onClick={e => e.stopPropagation()}>
         <div style={{background:"#102A63",color:"white",padding:"18px 22px",borderRadius:"16px 16px 0 0"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <div>
@@ -5519,25 +5729,71 @@ function DailySummary({ tasks, onClose }) {
             ))}
           </div>
         </div>
-        <div style={{padding:18,maxHeight:320,overflowY:"auto"}}>
+        <div style={{padding:18,maxHeight:400,overflowY:"auto"}}>
           {overdue.length > 0 && (
             <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:"#C0392B",fontFamily:_DM,marginBottom:6}}>EN RETARD ({overdue.length})</div>
+              <div style={{fontSize:10,fontWeight:700,color:"#C0392B",fontFamily:_DM,marginBottom:6,letterSpacing:"0.08em"}}>TÂCHES EN RETARD ({overdue.length})</div>
               {overdue.slice(0,5).map(t => (
-                <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",display:"flex",justifyContent:"space-between",fontFamily:_FL}}>
-                  <span>{t.title}</span>
-                  <span style={{color:"#C0392B",fontSize:10,fontFamily:_DM}}>{t.dueDate}</span>
+                <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",display:"flex",justifyContent:"space-between",fontFamily:_FL,gap:8}}>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
+                  <span style={{color:"#C0392B",fontSize:10,fontFamily:_DM,flexShrink:0}}>{fmtD(t.dueDate)}</span>
+                </div>
+              ))}
+              {overdue.length > 5 && <div style={{fontSize:10,color:"#999",fontFamily:_DM,marginTop:3}}>+ {overdue.length-5} autres</div>}
+            </div>
+          )}
+          {todayTasks.length > 0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_DM,marginBottom:6,letterSpacing:"0.08em"}}>TÂCHES AUJOURD'HUI ({todayTasks.length})</div>
+              {todayTasks.slice(0,8).map(t => (
+                <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</div>
+              ))}
+            </div>
+          )}
+          {extra.meetings.length > 0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#7C3AED",fontFamily:_DM,marginBottom:6,letterSpacing:"0.08em"}}>ACTIONS DE RÉUNION ({extra.meetings.length})</div>
+              {extra.meetings.slice(0,5).map(a => (
+                <div key={a.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL,display:"flex",justifyContent:"space-between",gap:8}}>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📌 {a.title} <span style={{color:"#999",fontSize:10}}>· {a.mtg}</span></span>
+                  <span style={{color:a.overdue?"#C0392B":"#7C3AED",fontSize:10,fontFamily:_DM,flexShrink:0}}>{fmtD(a.dueDate)}</span>
                 </div>
               ))}
             </div>
           )}
-          <div style={{fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_DM,marginBottom:6}}>AUJOURD HUI ({todayTasks.length})</div>
-          {todayTasks.length === 0 && (
-            <div style={{color:"#AAA",fontSize:12,fontFamily:_FL}}>Aucune tache prevue.</div>
+          {(extra.cots.length > 0 || extra.pays.length > 0) && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#1E40AF",fontFamily:_DM,marginBottom:6,letterSpacing:"0.08em"}}>ÉCHÉANCES FINANCIÈRES</div>
+              {extra.cots.slice(0,4).map(c => (
+                <div key={"cot-"+c.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL,display:"flex",justifyContent:"space-between",gap:8}}>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>💼 Cotation : {c.clientName || "(sans nom)"}</span>
+                  <span style={{color:"#1E40AF",fontSize:10,fontFamily:_DM,flexShrink:0}}>{fmtD(c.closeDate)}</span>
+                </div>
+              ))}
+              {extra.pays.slice(0,4).map(p => (
+                <div key={"pay-"+(p.id||p.reference)} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL,display:"flex",justifyContent:"space-between",gap:8}}>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>💰 Paiement : {p.reference || p.intitule || p.clientName || ""}</span>
+                  <span style={{color:"#15803D",fontSize:10,fontFamily:_DM,flexShrink:0}}>{fmtD(p.datePaiement)}</span>
+                </div>
+              ))}
+            </div>
           )}
-          {todayTasks.length > 0 && todayTasks.slice(0,8).map(t => (
-            <div key={t.id} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL}}>{t.title}</div>
-          ))}
+          {extra.rcfAlerts.length > 0 && (
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#DC2626",fontFamily:_DM,marginBottom:6,letterSpacing:"0.08em"}}>ALERTES RCF ({extra.rcfAlerts.length})</div>
+              {extra.rcfAlerts.slice(0,4).map(r => (
+                <div key={r.key} style={{fontSize:12,padding:"5px 0",borderBottom:"1px solid #F3F3F3",fontFamily:_FL,display:"flex",justifyContent:"space-between",gap:8}}>
+                  <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>🏦 {r.intitule} <span style={{color:"#999",fontSize:10}}>· {r.label}</span></span>
+                  <span style={{color:"#DC2626",fontSize:10,fontFamily:_DM,flexShrink:0}}>{fmtD(r.date)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {overdue.length === 0 && todayTasks.length === 0 && extraCount === 0 && (
+            <div style={{textAlign:"center",padding:"30px 10px",color:"#94A3B8",fontSize:13,fontFamily:_FL,fontStyle:"italic"}}>
+              ✨ Aucune urgence aujourd'hui. Bonne journée !
+            </div>
+          )}
         </div>
         <div style={{padding:"0 18px 18px",display:"flex",justifyContent:"flex-end"}}>
           <button onClick={onClose} style={{border:"none",background:"#102A63",color:"white",borderRadius:8,padding:"8px 18px",fontSize:12,cursor:"pointer",fontFamily:_DM}}>Commencer</button>
@@ -16224,7 +16480,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.613{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.614{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
