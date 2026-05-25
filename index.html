@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v618-1779107496"/>
+  <meta name="app-version" content="v619-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -759,6 +759,127 @@ async function bridgeSyncToIDB(opts) {
       await _appDbSetCore(store, val);
     } catch(e) { console.warn("bridgeSyncToIDB", store, e && e.message); }
   }
+}
+
+// ─── Sauvegardes : export/import JSON + snapshots Firestore quotidiens ───
+
+const BACKUP_STORES = [
+  "tasks", "meetings", "payments", "cotations", "contentieux", "dev",
+  "rcf", "echeancier", "reports", "suivi_clients", "responsables",
+  "settings", "user_profiles",
+];
+
+async function exportAllDataJSON() {
+  const data = {
+    version: (document.querySelector('meta[name=app-version]') || {}).content || "",
+    exportedAt: new Date().toISOString(),
+    userId: (window._auth && _auth.currentUser && _auth.currentUser.uid) || null,
+    stores: {},
+    deletedTasks: null,
+    deletedMeetings: null,
+  };
+  for (const s of BACKUP_STORES) {
+    try { const v = await appDbGet(s); if (v != null) data.stores[s] = v; } catch {}
+  }
+  // Inclut aussi les corbeilles persistées en localStorage
+  try { const t = localStorage.getItem("deletedTasks"); if (t) data.deletedTasks = JSON.parse(t); } catch {}
+  try { const m = localStorage.getItem("deletedMeetings"); if (m) data.deletedMeetings = JSON.parse(m); } catch {}
+  return data;
+}
+
+async function downloadBackupJSON() {
+  const data = await exportAllDataJSON();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  const ts = new Date().toISOString().replace(/[:.]/g, "-").split("T");
+  a.download = "mestaches_backup_" + ts[0] + "_" + ts[1].slice(0,5) + ".json";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 200);
+  try { localStorage.setItem("last_local_backup_at", new Date().toISOString()); } catch {}
+  return data;
+}
+
+async function importBackupJSON(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const obj = JSON.parse(reader.result);
+        if (!obj || typeof obj !== "object" || !obj.stores) throw new Error("Format de fichier invalide");
+        const restored = [];
+        for (const [s, v] of Object.entries(obj.stores)) {
+          if (!BACKUP_STORES.includes(s)) continue;
+          await appDbSet(s, v); // bridge LS + Firestore sync
+          restored.push(s + " (" + (Array.isArray(v) ? v.length + " items" : "obj") + ")");
+        }
+        if (obj.deletedTasks) try { localStorage.setItem("deletedTasks", JSON.stringify(obj.deletedTasks)); } catch {}
+        if (obj.deletedMeetings) try { localStorage.setItem("deletedMeetings", JSON.stringify(obj.deletedMeetings)); } catch {}
+        resolve(restored);
+      } catch(e) { reject(e); }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+}
+
+// Snapshot Firestore quotidien — rotation 7 jours
+async function dailyFirestoreSnapshot() {
+  try {
+    if (!window._auth || !_auth.currentUser || !window._db) return;
+    const uid = _auth.currentUser.uid;
+    const today = new Date().toISOString().split("T")[0];
+    const lastKey = "last_firestore_snapshot_date";
+    if (localStorage.getItem(lastKey) === today) return; // déjà fait aujourd'hui
+    const data = await exportAllDataJSON();
+    const blob = JSON.stringify(data);
+    // Limite Firestore 1 MiB par doc — si trop gros, on tronque les stores volumineux
+    if (blob.length > 950000) {
+      console.warn("Snapshot > 950 Ko, exclusion des stores volumineux");
+      delete data.stores.contentieux;
+      delete data.stores.echeancier;
+    }
+    await _db.collection("users").doc(uid).collection("snapshots").doc(today).set({
+      createdAt: Date.now(),
+      payload: JSON.stringify(data),
+    });
+    localStorage.setItem(lastKey, today);
+    // Rotation : garde les 7 plus récents
+    const snap = await _db.collection("users").doc(uid).collection("snapshots").orderBy("createdAt", "desc").get();
+    if (snap.docs.length > 7) {
+      const batch = _db.batch();
+      snap.docs.slice(7).forEach(d => batch.delete(d.ref));
+      await batch.commit();
+    }
+    console.log("Snapshot Firestore créé :", today);
+  } catch(e) { console.warn("Snapshot Firestore failed:", e && e.message); }
+}
+
+async function listFirestoreSnapshots() {
+  if (!window._auth || !_auth.currentUser || !window._db) return [];
+  const uid = _auth.currentUser.uid;
+  const snap = await _db.collection("users").doc(uid).collection("snapshots").orderBy("createdAt", "desc").get();
+  return snap.docs.map(d => ({ id: d.id, createdAt: d.data().createdAt, size: (d.data().payload || "").length }));
+}
+
+async function restoreFromFirestoreSnapshot(snapshotId) {
+  if (!window._auth || !_auth.currentUser || !window._db) throw new Error("Non connecté");
+  const uid = _auth.currentUser.uid;
+  const doc = await _db.collection("users").doc(uid).collection("snapshots").doc(snapshotId).get();
+  if (!doc.exists) throw new Error("Snapshot introuvable");
+  const data = JSON.parse(doc.data().payload);
+  if (!data || !data.stores) throw new Error("Snapshot corrompu");
+  const restored = [];
+  for (const [s, v] of Object.entries(data.stores)) {
+    if (!BACKUP_STORES.includes(s)) continue;
+    await appDbSet(s, v);
+    restored.push(s);
+  }
+  if (data.deletedTasks) try { localStorage.setItem("deletedTasks", JSON.stringify(data.deletedTasks)); } catch {}
+  if (data.deletedMeetings) try { localStorage.setItem("deletedMeetings", JSON.stringify(data.deletedMeetings)); } catch {}
+  return restored;
 }
 
 // Bootstrap: on first run of the sync-fix version, push any LOCAL IDB data
@@ -7163,6 +7284,138 @@ function DevView() {
   );
 }
 
+function BackupView() {
+  const [snapshots, setSnapshots] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [msg, setMsg] = React.useState(null);
+  const [confirmRestore, setConfirmRestore] = React.useState(null); // {id, source}
+  const fileInputRef = React.useRef(null);
+
+  const refresh = React.useCallback(async () => {
+    setLoading(true);
+    try { setSnapshots(await listFirestoreSnapshots()); } catch { setSnapshots([]); }
+    setLoading(false);
+  }, []);
+  React.useEffect(() => { refresh(); }, [refresh]);
+
+  const handleDownload = async () => {
+    try {
+      const data = await downloadBackupJSON();
+      const n = Object.values(data.stores).reduce((a, v) => a + (Array.isArray(v) ? v.length : 1), 0);
+      setMsg({ type:"ok", text: "Sauvegarde téléchargée — " + n + " enregistrements." });
+    } catch(e) { setMsg({ type:"err", text: "Erreur : " + (e.message || e) }); }
+  };
+
+  const handleImport = (e) => {
+    const f = e.target.files && e.target.files[0];
+    if (!f) return;
+    if (!confirm("Cette opération va REMPLACER les données actuelles par celles du fichier « " + f.name + " ». Continuer ?")) { e.target.value=""; return; }
+    importBackupJSON(f).then(restored => {
+      setMsg({ type:"ok", text: "Restauration OK : " + restored.join(", ") + ". Rechargez la page pour rafraîchir." });
+    }).catch(err => setMsg({ type:"err", text: "Erreur d'import : " + (err.message || err) }));
+    e.target.value = "";
+  };
+
+  const handleRestoreSnapshot = async (id) => {
+    try {
+      const restored = await restoreFromFirestoreSnapshot(id);
+      setMsg({ type:"ok", text: "Restauration depuis " + id + " : " + restored.length + " stores. Rechargez pour rafraîchir." });
+      setConfirmRestore(null);
+    } catch(e) { setMsg({ type:"err", text: "Erreur : " + (e.message || e) }); }
+  };
+
+  const handleSnapshotNow = async () => {
+    setMsg({ type:"info", text: "Création du snapshot…" });
+    try {
+      // Force en supprimant le flag du jour
+      localStorage.removeItem("last_firestore_snapshot_date");
+      await dailyFirestoreSnapshot();
+      await refresh();
+      setMsg({ type:"ok", text: "Snapshot créé." });
+    } catch(e) { setMsg({ type:"err", text: "Erreur : " + (e.message || e) }); }
+  };
+
+  const lastLocal = (() => { try { return localStorage.getItem("last_local_backup_at"); } catch { return null; } })();
+  const lastSnap = (() => { try { return localStorage.getItem("last_firestore_snapshot_date"); } catch { return null; } })();
+
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div style={{ fontSize: 12, color: "#888", fontFamily: _DM, marginBottom: 16 }}>
+        Sauvegardes locales (téléchargement JSON) et cloud (snapshots Firestore quotidiens, rotation 7 jours).
+      </div>
+
+      {msg && (
+        <div style={{ padding:"10px 14px", borderRadius:8, marginBottom:14, fontSize:12, fontFamily:_FL,
+          background: msg.type==="ok" ? "#D1FAE5" : msg.type==="err" ? "#FEE2E2" : "#DBEAFE",
+          color: msg.type==="ok" ? "#065F46" : msg.type==="err" ? "#991B1B" : "#1E40AF",
+          border: "1px solid " + (msg.type==="ok" ? "#34D399" : msg.type==="err" ? "#FCA5A5" : "#93C5FD"),
+          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span>{msg.text}</span>
+          <button onClick={()=>setMsg(null)} style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:16, color:"inherit", lineHeight:1 }}>×</button>
+        </div>
+      )}
+
+      {/* Sauvegarde manuelle (téléchargement JSON) */}
+      <div style={{ background:"#F0F8FF", border:"1px solid #BAE6FD", borderRadius:12, padding:"16px 18px", marginBottom:18 }}>
+        <div style={{ fontSize: 13, fontWeight:700, fontFamily:_FL, color:"#0369A1", marginBottom:6 }}>📥 Sauvegarde locale (fichier JSON)</div>
+        <div style={{ fontSize:11, color:"#0369A1", fontFamily:_FL, marginBottom:12, opacity:0.8 }}>
+          Télécharge un fichier <code>.json</code> avec toutes tes données. À conserver sur ton PC ou un disque externe.
+          {lastLocal && <span style={{ display:"block", marginTop:4, fontSize:10, fontFamily:_DM, opacity:0.7 }}>Dernier export : {new Date(lastLocal).toLocaleString("fr-FR")}</span>}
+        </div>
+        <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+          <button onClick={handleDownload} style={{ ...S.btn("#0369A1"), fontSize:12 }}>📥 Télécharger maintenant</button>
+          <button onClick={()=>fileInputRef.current && fileInputRef.current.click()} style={{ ...S.ghost, fontSize:12, borderColor:"#0369A1", color:"#0369A1" }}>📤 Restaurer depuis un fichier</button>
+          <input ref={fileInputRef} type="file" accept=".json,application/json" onChange={handleImport} style={{ display:"none" }} />
+        </div>
+      </div>
+
+      {/* Snapshots Firestore */}
+      <div style={{ background:"#FEF9E7", border:"1px solid #FCD34D", borderRadius:12, padding:"16px 18px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+          <div style={{ fontSize: 13, fontWeight:700, fontFamily:_FL, color:"#92400E" }}>☁ Snapshots cloud (Firestore)</div>
+          <button onClick={handleSnapshotNow} style={{ ...S.ghost, fontSize:11, borderColor:"#92400E", color:"#92400E", padding:"4px 10px" }}>+ Snapshot maintenant</button>
+        </div>
+        <div style={{ fontSize:11, color:"#92400E", fontFamily:_FL, marginBottom:12, opacity:0.85 }}>
+          Une sauvegarde automatique est créée par jour de premier lancement. Les 7 plus récentes sont conservées (les plus anciennes sont supprimées automatiquement).
+          {lastSnap && <span style={{ display:"block", marginTop:4, fontSize:10, fontFamily:_DM, opacity:0.7 }}>Dernier snapshot : {lastSnap}</span>}
+        </div>
+        {loading ? (
+          <div style={{ padding:"20px 0", textAlign:"center", color:"#92400E", fontSize:12, fontFamily:_DM }}>Chargement…</div>
+        ) : snapshots.length === 0 ? (
+          <div style={{ padding:"20px 0", textAlign:"center", color:"#92400E", fontSize:12, fontFamily:_FL, fontStyle:"italic", opacity:0.7 }}>Aucun snapshot pour l'instant.</div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {snapshots.map(s => {
+              const dt = new Date(s.createdAt);
+              const sizeStr = s.size > 1024 ? (s.size/1024).toFixed(1) + " Ko" : s.size + " o";
+              const isConfirm = confirmRestore && confirmRestore.id === s.id;
+              return (
+                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px", background:"white", borderRadius:8, border:"1px solid #FCD34D" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:600, fontFamily:_FL, color:"#92400E" }}>{s.id}</div>
+                    <div style={{ fontSize:10, fontFamily:_DM, color:"#A16207" }}>
+                      {dt.toLocaleString("fr-FR")} · {sizeStr}
+                    </div>
+                  </div>
+                  {!isConfirm ? (
+                    <button onClick={()=>setConfirmRestore({id: s.id})} style={{ ...S.ghost, fontSize:10, padding:"4px 10px", borderColor:"#92400E", color:"#92400E" }}>↻ Restaurer</button>
+                  ) : (
+                    <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                      <span style={{ fontSize:10, color:"#991B1B", fontFamily:_DM }}>Remplacer tout ?</span>
+                      <button onClick={()=>handleRestoreSnapshot(s.id)} style={{ ...S.btn("#C0392B"), fontSize:10, padding:"4px 10px" }}>Oui</button>
+                      <button onClick={()=>setConfirmRestore(null)} style={{ ...S.ghost, fontSize:10, padding:"4px 10px" }}>Non</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StorageView() {
   const [info, setInfo] = React.useState(null);
   const [idbInfo, setIdbInfo] = React.useState(null);
@@ -7392,6 +7645,7 @@ function SettingsView({ settings, onSave }) {
           <Tab id="creditbail" label="🧾 Crédit-bail" />
           <Tab id="profiles" label="👥 Profils" />
           <Tab id="stockage" label="💾 Stockage" />
+          <Tab id="backups"  label="💼 Sauvegardes" />
         </div>
         <div style={{ padding: "20px 24px" }}>
           {tab === "general" && <>
@@ -7517,6 +7771,10 @@ function SettingsView({ settings, onSave }) {
 
           {tab === "stockage" && (
             <StorageView />
+          )}
+
+          {tab === "backups" && (
+            <BackupView />
           )}
 
           {tab === "profiles" && (
@@ -14805,6 +15063,7 @@ function SuiviClientView({ settings }) {
     };
     return <div onClick={()=>handleSort(col)} style={{ position:"relative", width:w, minWidth:w, maxWidth:w, padding:"0 6px", fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap", boxSizing:"border-box" }}>{label}{si(col)}<span onMouseDown={startResize} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize", userSelect:"none" }} /></div>;
   };
+  const SUIVI_PAGE_SIZE = 25;
   const suiTotalPages = Math.ceil(filtered.length / SUIVI_PAGE_SIZE) || 1;
   const filteredPage   = filtered.slice((page-1)*SUIVI_PAGE_SIZE, page*SUIVI_PAGE_SIZE);
 
@@ -16246,6 +16505,8 @@ function App() {
       const savedSettings = await appDbGet("settings");
       if (savedSettings) setSettings(savedSettings);
       setAppReady(true);
+      // Snapshot Firestore quotidien (différé pour ne pas bloquer le démarrage)
+      setTimeout(() => { dailyFirestoreSnapshot().catch(()=>{}); }, 4000);
     })();
   }, []);
 
@@ -16671,7 +16932,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.618{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.619{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
