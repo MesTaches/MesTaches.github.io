@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v620-1779107496"/>
+  <meta name="app-version" content="v621-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -773,7 +773,7 @@ async function exportAllDataJSON() {
   const data = {
     version: (document.querySelector('meta[name=app-version]') || {}).content || "",
     exportedAt: new Date().toISOString(),
-    userId: (window._auth && _auth.currentUser && _auth.currentUser.uid) || null,
+    userId: (typeof _auth !== "undefined" && _auth.currentUser && _auth.currentUser.uid) || null,
     stores: {},
     deletedTasks: null,
     deletedMeetings: null,
@@ -827,26 +827,29 @@ async function importBackupJSON(file) {
 
 // Snapshot Firestore quotidien — rotation 7 jours
 async function dailyFirestoreSnapshot() {
+  if (typeof _auth === "undefined" || !_auth.currentUser || typeof _db === "undefined") {
+    throw new Error("Non connecté à Firebase");
+  }
+  const uid = _auth.currentUser.uid;
+  const today = new Date().toISOString().split("T")[0];
+  const lastKey = "last_firestore_snapshot_date";
+  if (localStorage.getItem(lastKey) === today) return; // déjà fait aujourd'hui
+  const data = await exportAllDataJSON();
+  let blob = JSON.stringify(data);
+  // Limite Firestore 1 MiB par doc — si trop gros, on tronque les stores volumineux
+  if (blob.length > 950000) {
+    console.warn("Snapshot > 950 Ko, exclusion des stores volumineux");
+    delete data.stores.contentieux;
+    delete data.stores.echeancier;
+    blob = JSON.stringify(data);
+  }
+  await _db.collection("users").doc(uid).collection("snapshots").doc(today).set({
+    createdAt: Date.now(),
+    payload: JSON.stringify(data),
+  });
+  localStorage.setItem(lastKey, today);
+  // Rotation : garde les 7 plus récents
   try {
-    if (!window._auth || !_auth.currentUser || !window._db) return;
-    const uid = _auth.currentUser.uid;
-    const today = new Date().toISOString().split("T")[0];
-    const lastKey = "last_firestore_snapshot_date";
-    if (localStorage.getItem(lastKey) === today) return; // déjà fait aujourd'hui
-    const data = await exportAllDataJSON();
-    const blob = JSON.stringify(data);
-    // Limite Firestore 1 MiB par doc — si trop gros, on tronque les stores volumineux
-    if (blob.length > 950000) {
-      console.warn("Snapshot > 950 Ko, exclusion des stores volumineux");
-      delete data.stores.contentieux;
-      delete data.stores.echeancier;
-    }
-    await _db.collection("users").doc(uid).collection("snapshots").doc(today).set({
-      createdAt: Date.now(),
-      payload: JSON.stringify(data),
-    });
-    localStorage.setItem(lastKey, today);
-    // Rotation : garde les 7 plus récents
     const snap = await _db.collection("users").doc(uid).collection("snapshots").orderBy("createdAt", "desc").get();
     if (snap.docs.length > 7) {
       const batch = _db.batch();
@@ -858,14 +861,14 @@ async function dailyFirestoreSnapshot() {
 }
 
 async function listFirestoreSnapshots() {
-  if (!window._auth || !_auth.currentUser || !window._db) return [];
+  if (typeof _auth === "undefined" || !_auth.currentUser || typeof _db === "undefined") return [];
   const uid = _auth.currentUser.uid;
   const snap = await _db.collection("users").doc(uid).collection("snapshots").orderBy("createdAt", "desc").get();
   return snap.docs.map(d => ({ id: d.id, createdAt: d.data().createdAt, size: (d.data().payload || "").length }));
 }
 
 async function restoreFromFirestoreSnapshot(snapshotId) {
-  if (!window._auth || !_auth.currentUser || !window._db) throw new Error("Non connecté");
+  if (typeof _auth === "undefined" || !_auth.currentUser || typeof _db === "undefined") throw new Error("Non connecté");
   const uid = _auth.currentUser.uid;
   const doc = await _db.collection("users").doc(uid).collection("snapshots").doc(snapshotId).get();
   if (!doc.exists) throw new Error("Snapshot introuvable");
@@ -7339,7 +7342,7 @@ function BackupView() {
   const lastSnap = (() => { try { return localStorage.getItem("last_firestore_snapshot_date"); } catch { return null; } })();
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div>
       <div style={{ fontSize: 12, color: "#888", fontFamily: _DM, marginBottom: 16 }}>
         Sauvegardes locales (téléchargement JSON) et cloud (snapshots Firestore quotidiens, rotation 7 jours).
       </div>
@@ -7458,7 +7461,7 @@ function StorageView() {
   const barColor = p => p > 80 ? "#C0392B" : p > 60 ? "#E67E22" : "#27AE60";
 
   return (
-    <div style={{ maxWidth:560 }}>
+    <div>
       <div style={{ fontSize:12, fontFamily:_FL, color:"#888", marginBottom:20 }}>
         Utilisation du stockage du navigateur. Les données Crédit-bail sont stockées dans IndexedDB (grande capacité), les autres modules dans localStorage (limité à ~5 Mo).
       </div>
@@ -15094,6 +15097,7 @@ function SuiviClientView({ settings }) {
   const [sortCol, setSortCol] = React.useState(null);
   const [suiviDupAlert, setSuiviDupAlert] = React.useState(null);
   const [sortDir, setSortDir] = React.useState("asc");
+  const [page, setPage] = React.useState(1);
   const [colWidths, setColWidths] = React.useState(()=>{ try { return JSON.parse(localStorage.getItem("taskmanager_suivi_colwidths_v1")) || { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } catch { return { clientName:220, clientCode:90, description:220, suiviType:110, followupDate:95, reminderDate:95, actions:52 }; } });
   const [deletedClient, setDeletedClient] = React.useState(null);
   const [deleteTimer, setDeleteTimer] = React.useState(null);
@@ -17015,7 +17019,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.620{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.621{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
