@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v610-1779107496"/>
+  <meta name="app-version" content="v611-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1759,6 +1759,88 @@ function RichTextAiBtn({ editorRef, groqKey, onChange }) {
 
 function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, groqKey = "" }) {
   const ref = useRef(null);
+  const wrapRef = useRef(null);
+  const [selImg, setSelImg] = useState(null);
+  const [imgRect, setImgRect] = useState(null);
+
+  const recomputeImgRect = () => {
+    if (!selImg || !wrapRef.current || !document.body.contains(selImg)) { setImgRect(null); return; }
+    const r = selImg.getBoundingClientRect();
+    const w = wrapRef.current.getBoundingClientRect();
+    setImgRect({ top: r.top - w.top, left: r.left - w.left, width: r.width, height: r.height });
+  };
+
+  useEffect(() => {
+    if (!selImg) { setImgRect(null); return; }
+    recomputeImgRect();
+    const on = () => recomputeImgRect();
+    window.addEventListener("scroll", on, true);
+    window.addEventListener("resize", on);
+    return () => {
+      window.removeEventListener("scroll", on, true);
+      window.removeEventListener("resize", on);
+    };
+  }, [selImg]);
+
+  // Click hors éditeur => déselectionne l'image
+  useEffect(() => {
+    if (!selImg) return;
+    const onDocClick = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setSelImg(null);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [selImg]);
+
+  const startImgResize = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!selImg) return;
+    const startX = e.clientX;
+    const rect0  = selImg.getBoundingClientRect();
+    const startW = rect0.width;
+    const ratio  = (selImg.naturalHeight && selImg.naturalWidth)
+      ? (selImg.naturalHeight / selImg.naturalWidth)
+      : (rect0.height / Math.max(1, rect0.width));
+    selImg.removeAttribute("width");
+    selImg.removeAttribute("height");
+    const wrapW  = wrapRef.current ? wrapRef.current.getBoundingClientRect().width - 24 : 9999;
+    const onMove = (ev) => {
+      const nw = Math.max(40, Math.min(wrapW, startW + (ev.clientX - startX)));
+      selImg.style.width  = nw + "px";
+      selImg.style.height = (nw * ratio) + "px";
+      recomputeImgRect();
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      onChange(ref.current.innerHTML);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
+  const applyImgSize = (mode) => {
+    if (!selImg) return;
+    const wrap = wrapRef.current;
+    const wrapW = wrap ? wrap.getBoundingClientRect().width - 24 : 600;
+    selImg.removeAttribute("width");
+    selImg.removeAttribute("height");
+    if (mode === "reset") {
+      selImg.style.width = "";
+      selImg.style.height = "";
+    } else {
+      const pct = mode === "small" ? 0.33 : mode === "medium" ? 0.66 : 1.0;
+      const ratio  = (selImg.naturalHeight && selImg.naturalWidth)
+        ? (selImg.naturalHeight / selImg.naturalWidth) : null;
+      const nw = Math.round(wrapW * pct);
+      selImg.style.width = nw + "px";
+      if (ratio) selImg.style.height = Math.round(nw * ratio) + "px";
+      else selImg.style.height = "auto";
+    }
+    recomputeImgRect();
+    onChange(ref.current.innerHTML);
+  };
 
   // Rétrocompat : injecte un bouton × dans les anciens séparateurs de séance
   // qui n'avaient pas encore data-rta-block. Repère par le texte "📅 Séance du".
@@ -1802,6 +1884,15 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
         block.parentNode.removeChild(block);
         onChange(ref.current.innerHTML);
       }
+      return;
+    }
+    if (t && t.tagName === "IMG") {
+      e.preventDefault();
+      setSelImg(t);
+      // Petit délai pour laisser le DOM mettre à jour
+      setTimeout(recomputeImgRect, 0);
+    } else {
+      setSelImg(null);
     }
   };
 
@@ -1816,7 +1907,7 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
       style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5, minWidth: 24 }}>{label}</button>
   );
   return (
-    <div style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "#FAFAFA" }}>
+    <div ref={wrapRef} style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "#FAFAFA", position: "relative" }}>
       <div style={{ display: "flex", gap: 4, padding: "5px 8px", borderBottom: "1px solid #F0F0F0", background: "white", flexWrap: "wrap", alignItems: "center" }}>
         <ToolBtn cmd="bold"   label={<strong>G</strong>} title="Gras" />
         <ToolBtn cmd="underline" label={<u>S</u>} title="Souligner" />
@@ -1855,11 +1946,23 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
             }
           }
         }}
-        onInput={(e) => onChange(e.currentTarget.innerHTML)}
+        onInput={(e) => { onChange(e.currentTarget.innerHTML); if (selImg) setTimeout(recomputeImgRect, 0); }}
         onClick={handleEditorClick}
         data-placeholder={placeholder}
         style={{ minHeight: rows * 22, padding: "8px 12px", fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", outline: "none", lineHeight: 1.7 }} />
-      <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}`}</style>
+      {imgRect && (
+        <div style={{ position: "absolute", top: imgRect.top, left: imgRect.left, width: imgRect.width, height: imgRect.height, pointerEvents: "none", border: "2px solid #102A63", boxSizing: "border-box", zIndex: 5 }}>
+          <div style={{ position: "absolute", top: -32, left: 0, display: "flex", gap: 4, pointerEvents: "auto", background: "white", border: "1px solid #E0E0E0", borderRadius: 6, padding: "2px 4px", fontFamily: "'DM Mono',monospace", fontSize: 10, boxShadow: "0 2px 6px rgba(0,0,0,0.08)" }}>
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); applyImgSize("small"); }} title="Petit (~33%)" style={{ border: "none", background: "transparent", cursor: "pointer", padding: "2px 6px", color: "#555" }}>S</button>
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); applyImgSize("medium"); }} title="Moyen (~66%)" style={{ border: "none", background: "transparent", cursor: "pointer", padding: "2px 6px", color: "#555" }}>M</button>
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); applyImgSize("large"); }} title="Pleine largeur" style={{ border: "none", background: "transparent", cursor: "pointer", padding: "2px 6px", color: "#555" }}>L</button>
+            <button type="button" onMouseDown={(e) => { e.preventDefault(); applyImgSize("reset"); }} title="Taille d'origine" style={{ border: "none", background: "transparent", cursor: "pointer", padding: "2px 6px", color: "#555" }}>↺</button>
+          </div>
+          <div onMouseDown={startImgResize} title="Glisser pour redimensionner"
+            style={{ position: "absolute", right: -7, bottom: -7, width: 14, height: 14, background: "#102A63", border: "2px solid white", borderRadius: 3, cursor: "nwse-resize", pointerEvents: "auto", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }} />
+        </div>
+      )}
+      <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic} [contenteditable] img{max-width:100%;cursor:pointer;vertical-align:middle}`}</style>
     </div>
   );
 }
@@ -15851,7 +15954,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.610{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.611{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
