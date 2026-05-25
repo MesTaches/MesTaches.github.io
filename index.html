@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v617-1779107496"/>
+  <meta name="app-version" content="v618-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -730,10 +730,16 @@ async function appDbSet(store, data) {
   return ok;
 }
 
-// Bridge: push localStorage values (freshly loaded from Firestore) into IDB.
-// Called on app mount and on every remote update so components that read IDB
-// directly see the latest data.
-async function bridgeSyncToIDB() {
+// Bridge: copy localStorage values (loaded from Firestore) into IDB.
+//
+// SAFETY: by default (force=false), this NEVER overwrites a non-empty IDB store.
+// This protects users whose IDB holds data more recent than Firestore (e.g. a
+// device that's been working offline or on data that pre-dates the sync fix).
+//
+// force=true is used only when we know the remote is authoritative — i.e. when
+// the periodic remote check detected a fresh write from another device.
+async function bridgeSyncToIDB(opts) {
+  const force = !!(opts && opts.force);
   for (const store of Object.keys(STORE_TO_SYNC_KEY)) {
     const lsKey = STORE_TO_SYNC_KEY[store];
     try {
@@ -741,12 +747,46 @@ async function bridgeSyncToIDB() {
       if (!raw) continue;
       const val = JSON.parse(raw);
       if (val == null) continue;
-      // Skip if IDB already matches (avoid unnecessary writes)
       const cur = await appDbGet(store);
+      // If IDB already has data and we're NOT in "force" mode, skip.
+      if (!force) {
+        const hasLocal = Array.isArray(cur)
+          ? cur.length > 0
+          : (cur && typeof cur === "object" && Object.keys(cur).length > 0);
+        if (hasLocal) continue;
+      }
       if (JSON.stringify(cur) === raw) continue;
       await _appDbSetCore(store, val);
     } catch(e) { console.warn("bridgeSyncToIDB", store, e && e.message); }
   }
+}
+
+// Bootstrap: on first run of the sync-fix version, push any LOCAL IDB data
+// to localStorage (which the monkey-patch then replicates to Firestore).
+// Runs once per device. Protects users whose data was only in IDB.
+async function bootstrapPushLocalToSync() {
+  const FLAG = "sync_bootstrap_v617";
+  if (localStorage.getItem(FLAG)) return;
+  let pushed = 0;
+  for (const store of Object.keys(STORE_TO_SYNC_KEY)) {
+    const lsKey = STORE_TO_SYNC_KEY[store];
+    try {
+      const v = await appDbGet(store);
+      if (v == null) continue;
+      const hasContent = Array.isArray(v)
+        ? v.length > 0
+        : (typeof v === "object" && Object.keys(v).length > 0);
+      if (!hasContent) continue;
+      const newRaw = JSON.stringify(v);
+      const curRaw = localStorage.getItem(lsKey);
+      if (curRaw === newRaw) continue;
+      // Use the monkey-patched setItem so Firestore receives this data.
+      localStorage.setItem(lsKey, newRaw);
+      pushed++;
+    } catch(e) {}
+  }
+  localStorage.setItem(FLAG, "1");
+  if (pushed > 0) console.log("Sync bootstrap: pushed", pushed, "local stores to Firestore");
 }
 
 async function appDbGetAll() {
@@ -16196,8 +16236,12 @@ function App() {
   useEffect(() => {
     (async () => {
       await migrateAllToIDB();
-      // Bridge Firestore-loaded localStorage values into IDB so views that
-      // read IDB directly (Payments, Cotation, Meetings, etc.) see them.
+      // First-run protection: push any LOCAL IDB data into LS so it reaches
+      // Firestore. Prevents loss when local IDB is newer than the cloud.
+      await bootstrapPushLocalToSync();
+      // Then bridge Firestore-loaded LS values into IDB, but ONLY for stores
+      // that don't already have local data (safety against overwriting fresher
+      // local edits with stale cloud data on first sync).
       await bridgeSyncToIDB();
       const savedSettings = await appDbGet("settings");
       if (savedSettings) setSettings(savedSettings);
@@ -16325,9 +16369,9 @@ function App() {
     const handleRemoteUpdate = async (e) => {
       const key = e && e.detail && e.detail.key;
       try {
-        // 1) Push any updated localStorage value into IDB so views that read
-        //    IDB directly see the change.
-        await bridgeSyncToIDB();
+        // 1) Push the freshly-arrived localStorage value into IDB. force=true
+        //    because the remote update event proves the cloud is newer.
+        await bridgeSyncToIDB({ force: true });
         // 2) Refresh React state for the local view-specific data.
         if (!key || key === STORAGE_KEY) {
           const s = localStorage.getItem(STORAGE_KEY);
@@ -16627,7 +16671,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.617{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.618{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
