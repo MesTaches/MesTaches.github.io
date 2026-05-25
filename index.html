@@ -1756,7 +1756,52 @@ function RichTextAiBtn({ editorRef, groqKey, onChange }) {
 
 function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, groqKey = "" }) {
   const ref = useRef(null);
-  useEffect(() => { if (ref.current && ref.current.innerHTML !== (value || "")) ref.current.innerHTML = value || ""; }, []);
+
+  // Rétrocompat : injecte un bouton × dans les anciens séparateurs de séance
+  // qui n'avaient pas encore data-rta-block. Repère par le texte "📅 Séance du".
+  const ensureBlockDeleteButtons = (root) => {
+    if (!root) return;
+    const divs = root.querySelectorAll("div");
+    divs.forEach((div) => {
+      if (div.querySelector(".rta-block-delete")) return;
+      const txt = div.textContent || "";
+      const isSeance = div.getAttribute("data-rta-block") === "seance" || /📅\s*Séance\s+du/.test(txt);
+      if (!isSeance) return;
+      div.setAttribute("data-rta-block", "seance");
+      if (!div.style.position) div.style.position = "relative";
+      // Petit padding à droite pour éviter le chevauchement
+      div.style.paddingRight = "38px";
+      const btn = document.createElement("button");
+      btn.className = "rta-block-delete";
+      btn.setAttribute("contenteditable", "false");
+      btn.type = "button";
+      btn.title = "Supprimer cette séparation";
+      btn.textContent = "×";
+      btn.style.cssText = "position:absolute;top:6px;right:8px;background:rgba(255,255,255,0.7);border:1px solid #DDD;color:#C0392B;cursor:pointer;font-size:14px;line-height:1;padding:2px 7px;border-radius:4px;font-weight:700;font-family:sans-serif";
+      div.appendChild(btn);
+    });
+  };
+
+  useEffect(() => {
+    if (ref.current && ref.current.innerHTML !== (value || "")) {
+      ref.current.innerHTML = value || "";
+      ensureBlockDeleteButtons(ref.current);
+    }
+  }, []);
+
+  const handleEditorClick = (e) => {
+    const t = e.target;
+    if (t && t.classList && t.classList.contains("rta-block-delete")) {
+      e.preventDefault();
+      e.stopPropagation();
+      const block = t.closest("[data-rta-block]");
+      if (block && block.parentNode) {
+        block.parentNode.removeChild(block);
+        onChange(ref.current.innerHTML);
+      }
+    }
+  };
+
   const exec = (cmd, val = null) => { ref.current.focus(); document.execCommand(cmd, false, val); onChange(ref.current.innerHTML); };
   const insertChecklist = () => {
     ref.current.focus();
@@ -1808,6 +1853,7 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
           }
         }}
         onInput={(e) => onChange(e.currentTarget.innerHTML)}
+        onClick={handleEditorClick}
         data-placeholder={placeholder}
         style={{ minHeight: rows * 22, padding: "8px 12px", fontSize: 13, fontFamily: "'Lora',serif", color: "#2C3E50", outline: "none", lineHeight: 1.7 }} />
       <style>{`[contenteditable]:empty:before{content:attr(data-placeholder);color:#BDC3C7;pointer-events:none;font-style:italic}`}</style>
@@ -3660,7 +3706,7 @@ function _mtgSeanceHeader(color, date) {
   var days = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
   var months = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
   var dateStr = days[d.getDay()] + " " + d.getDate() + " " + months[d.getMonth()] + " " + d.getFullYear();
-  return '<div style="margin:24px 0 10px;padding:10px 14px;background:#F0F5FF;border-left:4px solid '+(color||"#102A63")+';border-radius:6px;font-family:Lora,serif;font-size:13px;font-weight:700;color:#102A63;letter-spacing:0.02em">📅 Séance du '+dateStr+'</div><p><br></p>';
+  return '<div data-rta-block="seance" style="position:relative;margin:24px 0 10px;padding:10px 38px 10px 14px;background:#F0F5FF;border-left:4px solid '+(color||"#102A63")+';border-radius:6px;font-family:Lora,serif;font-size:13px;font-weight:700;color:#102A63;letter-spacing:0.02em">📅 Séance du '+dateStr+'<button class="rta-block-delete" contenteditable="false" type="button" title="Supprimer cette séparation" style="position:absolute;top:6px;right:8px;background:rgba(255,255,255,0.7);border:1px solid #DDD;color:#C0392B;cursor:pointer;font-size:14px;line-height:1;padding:2px 7px;border-radius:4px;font-weight:700;font-family:sans-serif">×</button></div><p><br></p>';
 }
 function _mkSess(date) {
   return { id:uid(), date:date||new Date().toISOString().split("T")[0], agenda:"", notes:"", actions:[] };
@@ -3906,6 +3952,8 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
   var [selMtgId, setSelMtgId] = React.useState(null);
   var [showNew, setShowNew] = React.useState(false);
   var [showSettings, setShowSettings] = React.useState(false);
+  var [dragOver, setDragOver] = React.useState(null); // { type:"cat"|"mtg", key }
+  var dragInfoRef = React.useRef(null);               // { type, cat?, id? }
 
   React.useEffect(function(){
     appDbGet(MTG_KEY)
@@ -3994,15 +4042,108 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
           var uncat = meetings.filter(function(m){ return !m.category; });
           if (uncat.length>0) groups.push({ cat:"", items:uncat });
           return groups.map(function(g, gi){
+            var isCatDragOver = dragOver && dragOver.type==="cat" && dragOver.key===g.cat;
+            var catDraggable = !!g.cat; // "Sans catégorie" pas draggable
             return (
               <div key={g.cat || "_none_"+gi}>
-                <div style={{fontFamily:_DM,fontSize:9,fontWeight:700,color:"#888",letterSpacing:"0.08em",textTransform:"uppercase",padding:"12px 14px 5px",background:"#FAFAF8",borderTop: gi>0 ? "1px solid #F0F0F0" : "none"}}>
-                  {g.cat || "Sans catégorie"} <span style={{color:"#CCC",fontWeight:400}}>· {g.items.length}</span>
+                <div
+                  draggable={catDraggable}
+                  onDragStart={catDraggable ? function(e){
+                    dragInfoRef.current = {type:"cat", cat:g.cat};
+                    if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", g.cat); } catch(_){} }
+                  } : undefined}
+                  onDragOver={function(e){
+                    var di = dragInfoRef.current;
+                    if (di && di.type==="cat") {
+                      e.preventDefault();
+                      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+                      if (!isCatDragOver) setDragOver({type:"cat", key:g.cat});
+                    }
+                  }}
+                  onDragLeave={function(){ if (isCatDragOver) setDragOver(null); }}
+                  onDrop={function(e){
+                    var di = dragInfoRef.current;
+                    if (di && di.type==="cat" && di.cat !== g.cat && onSaveSettings) {
+                      e.preventDefault();
+                      var newCats = availableCats.slice();
+                      var fromIdx = newCats.indexOf(di.cat);
+                      if (fromIdx >= 0) {
+                        newCats.splice(fromIdx, 1);
+                        var toIdx = newCats.indexOf(g.cat);
+                        if (toIdx < 0) toIdx = newCats.length;
+                        newCats.splice(toIdx, 0, di.cat);
+                        onSaveSettings(Object.assign({}, settings, { meetingCategories: newCats }));
+                      }
+                    }
+                    dragInfoRef.current = null;
+                    setDragOver(null);
+                  }}
+                  onDragEnd={function(){ dragInfoRef.current = null; setDragOver(null); }}
+                  style={{
+                    fontFamily:_DM, fontSize:9, fontWeight:700, color:"#888",
+                    letterSpacing:"0.08em", textTransform:"uppercase",
+                    padding:"12px 14px 5px",
+                    background: isCatDragOver ? "#DBEAFE" : "#FAFAF8",
+                    borderTop: gi>0 ? "1px solid #F0F0F0" : (isCatDragOver ? "2px solid #102A63" : "none"),
+                    cursor: catDraggable ? "grab" : "default",
+                    userSelect:"none",
+                    display:"flex", alignItems:"center", gap:5
+                  }}>
+                  {catDraggable && <span style={{color:"#CCC",fontSize:11,lineHeight:1}}>⠿</span>}
+                  <span style={{flex:1}}>{g.cat || "Sans catégorie"} <span style={{color:"#CCC",fontWeight:400}}>· {g.items.length}</span></span>
                 </div>
                 {g.items.map(function(m){
                   var isActive = m.id===selMtgId;
+                  var isMtgDragOver = dragOver && dragOver.type==="mtg" && dragOver.key===m.id;
+                  var sameCat = function(){ var di = dragInfoRef.current; return di && di.type==="mtg" && (di.cat||"") === (m.category||""); };
                   return (
-                    <div key={m.id} onClick={function(){selectMeeting(m.id);}} style={{padding:"9px 14px",cursor:"pointer",background:isActive?"#EEF2FF":"white",borderLeft:"3px solid "+(isActive?m.color:"transparent"),display:"flex",alignItems:"center",gap:8,transition:"background 0.12s"}}>
+                    <div key={m.id}
+                      draggable
+                      onDragStart={function(e){
+                        e.stopPropagation();
+                        dragInfoRef.current = {type:"mtg", id:m.id, cat:m.category||""};
+                        if (e.dataTransfer) { e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", m.id); } catch(_){} }
+                      }}
+                      onDragOver={function(e){
+                        if (sameCat() && dragInfoRef.current.id !== m.id) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+                          if (!isMtgDragOver) setDragOver({type:"mtg", key:m.id});
+                        }
+                      }}
+                      onDragLeave={function(){ if (isMtgDragOver) setDragOver(null); }}
+                      onDrop={function(e){
+                        var di = dragInfoRef.current;
+                        if (di && di.type==="mtg" && di.id !== m.id && (di.cat||"") === (m.category||"")) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          var arr = meetings.slice();
+                          var fromIdx = arr.findIndex(function(x){return x.id===di.id;});
+                          if (fromIdx >= 0) {
+                            var moved = arr.splice(fromIdx, 1)[0];
+                            var toIdx = arr.findIndex(function(x){return x.id===m.id;});
+                            if (toIdx < 0) toIdx = arr.length;
+                            arr.splice(toIdx, 0, moved);
+                            saveMeetings(arr);
+                          }
+                        }
+                        dragInfoRef.current = null;
+                        setDragOver(null);
+                      }}
+                      onDragEnd={function(){ dragInfoRef.current = null; setDragOver(null); }}
+                      onClick={function(){selectMeeting(m.id);}}
+                      style={{
+                        padding:"9px 14px",
+                        cursor:"pointer",
+                        background: isActive ? "#EEF2FF" : (isMtgDragOver ? "#F0F4FF" : "white"),
+                        borderLeft:"3px solid "+(isActive?m.color:"transparent"),
+                        borderTop: isMtgDragOver ? "2px solid #102A63" : "1px solid transparent",
+                        display:"flex", alignItems:"center", gap:8,
+                        transition:"background 0.12s",
+                        userSelect:"none"
+                      }}>
+                      <span style={{color:"#CCC",fontSize:11,lineHeight:1,flexShrink:0}}>⠿</span>
                       <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
                       <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
                     </div>
@@ -15480,7 +15621,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.606{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.607{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -15517,15 +15658,15 @@ function App() {
                 fontSize:13, fontFamily:_FL, flexShrink:0, minHeight:32 }}>
               📧 {!isMobile && <span style={{fontSize:10,fontFamily:_DM,marginLeft:2}}>Email</span>}
             </button>
-            <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-              + {isMobile ? "" : "Nouvelle tâche"}
-            </button>
             <button onClick={() => setShowSearch(true)}
               title="Recherche globale (⌘K)"
               style={{ border:"1px solid #E8E8E8", background:"white", borderRadius:8, padding:"6px 10px",
                 display:"flex", alignItems:"center", gap:5, cursor:"pointer", color:"#64748B",
                 fontSize:11, fontFamily:"'Lora',serif", flexShrink:0, minHeight:32 }}>
               🔍 {!isMobile && <span style={{fontSize:9,color:"#CBD5E1",fontFamily:"'DM Mono',monospace",border:"1px solid #E2E8F0",borderRadius:4,padding:"1px 5px",marginLeft:2}}>⌘K</span>}
+            </button>
+            <button onClick={() => openNew()} style={{ ...S.btn("#102A63"), padding: "7px 14px", fontSize: 12, display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+              + {isMobile ? "" : "Nouvelle tâche"}
             </button>
             </>
           )}
