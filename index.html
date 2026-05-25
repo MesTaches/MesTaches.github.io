@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v547-1779107496"/>
+  <meta name="app-version" content="v608-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3805,10 +3805,11 @@ function MeetingActionPanel({ action, categories, onSave, onClose }) {
 }
 
 /* ── MeetingSettingsPanel ── */
-function MeetingSettingsPanel({ reunion, onSave, onClose, settings, onSaveSettings }) {
+function MeetingSettingsPanel({ reunion, onSave, onClose, onDelete, settings, onSaveSettings }) {
   var [d, setD] = React.useState(Object.assign({},reunion));
   var set = function(k,v){ setD(function(p){ var n=Object.assign({},p); n[k]=v; return n; }); };
   var [newCat, setNewCat] = React.useState("");
+  var [confirmDel, setConfirmDel] = React.useState(false);
   var availableCats = (settings && settings.meetingCategories) || [];
 
   var addGlobalCat = function(){
@@ -3874,9 +3875,29 @@ function MeetingSettingsPanel({ reunion, onSave, onClose, settings, onSaveSettin
             </select>
           </div>
         </div>
-        <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"flex-end",gap:10}}>
-          <button onClick={onClose} style={S.btn("#F0F0F0","#555")}>Annuler</button>
-          <button onClick={function(){onSave(d);}} disabled={!d.title.trim()} style={S.btn(d.color)}>Enregistrer</button>
+        <div style={{padding:"12px 24px",borderTop:"1px solid #F0F0F0",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+          <div>
+            {onDelete && !confirmDel && (
+              <button onClick={function(){setConfirmDel(true);}}
+                style={{border:"1px solid #FECACA",background:"white",color:"#C0392B",borderRadius:8,padding:"6px 12px",fontSize:11,cursor:"pointer",fontFamily:_DM,fontWeight:600}}
+                title="Déplacer cette réunion vers la corbeille (30 jours)">
+                🗑 Supprimer
+              </button>
+            )}
+            {onDelete && confirmDel && (
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:11,color:"#C0392B",fontFamily:_FL,fontWeight:600}}>Confirmer ?</span>
+                <button onClick={function(){ onDelete(d.id); }}
+                  style={{background:"#C0392B",color:"white",border:"none",borderRadius:6,padding:"5px 11px",fontSize:11,cursor:"pointer",fontFamily:_DM,fontWeight:700}}>Oui, supprimer</button>
+                <button onClick={function(){setConfirmDel(false);}}
+                  style={{background:"#F0F0F0",color:"#666",border:"none",borderRadius:6,padding:"5px 11px",fontSize:11,cursor:"pointer",fontFamily:_DM}}>Non</button>
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <button onClick={onClose} style={S.btn("#F0F0F0","#555")}>Annuler</button>
+            <button onClick={function(){onSave(d);}} disabled={!d.title.trim()} style={S.btn(d.color)}>Enregistrer</button>
+          </div>
         </div>
       </div>
     </div>
@@ -3954,6 +3975,27 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
   var [showSettings, setShowSettings] = React.useState(false);
   var [dragOver, setDragOver] = React.useState(null); // { type:"cat"|"mtg", key }
   var dragInfoRef = React.useRef(null);               // { type, cat?, id? }
+  var [renamingMtgId, setRenamingMtgId] = React.useState(null);
+  var [renamingMtgValue, setRenamingMtgValue] = React.useState("");
+  var [renamingCat, setRenamingCat] = React.useState(null);   // ancien nom de la catégorie en édition
+  var [renamingCatValue, setRenamingCatValue] = React.useState("");
+  var [undoMeeting, setUndoMeeting] = React.useState(null);
+  var [showTrash, setShowTrash] = React.useState(false);
+  var [trashTick, setTrashTick] = React.useState(0); // bump pour forcer re-render trash
+  var undoMtgTimerRef = React.useRef(null);
+
+  var MTG_TRASH_KEY = "deletedMeetings";
+  var getDeletedMeetings = function(){
+    try {
+      var arr = JSON.parse(localStorage.getItem(MTG_TRASH_KEY) || "[]");
+      var now = Date.now();
+      return arr.filter(function(x){ return now - (x._deletedAt||0) < 30 * 86400000; });
+    } catch { return []; }
+  };
+  var writeDeletedMeetings = function(arr){
+    try { localStorage.setItem(MTG_TRASH_KEY, JSON.stringify(arr)); } catch(e) {}
+    setTrashTick(function(t){ return t+1; });
+  };
 
   React.useEffect(function(){
     appDbGet(MTG_KEY)
@@ -4011,14 +4053,121 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
 
   var handleSaveSettings = function(updated){ handleSaveMtg(updated); setShowSettings(false); };
 
+  // ─── Renommage inline ───
+  var commitRenameMtg = function(){
+    var t = String(renamingMtgValue||"").trim();
+    if (renamingMtgId && t) {
+      saveMeetings(meetings.map(function(m){ return m.id===renamingMtgId ? Object.assign({},m,{title:t}) : m; }));
+    }
+    setRenamingMtgId(null);
+    setRenamingMtgValue("");
+  };
+  var startRenameMtg = function(m){
+    setRenamingMtgId(m.id);
+    setRenamingMtgValue(m.title || "");
+  };
+  var commitRenameCat = function(){
+    var t = String(renamingCatValue||"").trim();
+    var old = renamingCat;
+    if (old && t && t !== old) {
+      // Met à jour settings.meetingCategories (en évitant les doublons)
+      if (onSaveSettings && settings) {
+        var cats = (settings.meetingCategories||[]).slice();
+        var seen = {};
+        cats = cats.map(function(c){ return c === old ? t : c; }).filter(function(c){
+          if (seen[c]) return false;
+          seen[c] = 1;
+          return true;
+        });
+        onSaveSettings(Object.assign({}, settings, { meetingCategories: cats }));
+      }
+      // Propage le nouveau nom aux réunions concernées
+      saveMeetings(meetings.map(function(m){ return m.category === old ? Object.assign({},m,{category:t}) : m; }));
+    }
+    setRenamingCat(null);
+    setRenamingCatValue("");
+  };
+  var startRenameCat = function(cat){
+    if (!cat) return;
+    setRenamingCat(cat);
+    setRenamingCatValue(cat);
+  };
+
+  // ─── Suppression réunion + undo 10s + corbeille 30j ───
+  var deleteMeetingWithUndo = function(id){
+    var found = meetings.find(function(m){ return m.id===id; });
+    if (!found) return;
+    var newList = meetings.filter(function(m){ return m.id!==id; });
+    saveMeetings(newList);
+    // Stocke dans la corbeille
+    try {
+      var arr = JSON.parse(localStorage.getItem(MTG_TRASH_KEY) || "[]");
+      arr = arr.filter(function(x){ return Date.now() - (x._deletedAt||0) < 30 * 86400000; });
+      arr.push(Object.assign({}, found, { _deletedAt: Date.now() }));
+      writeDeletedMeetings(arr);
+    } catch(e) {}
+    // Désélection si la réunion supprimée était sélectionnée
+    if (selMtgId === id) {
+      setSelMtgId(newList.length>0 ? newList[0].id : null);
+    }
+    // Bandeau undo
+    setUndoMeeting(found);
+    if (undoMtgTimerRef.current) clearTimeout(undoMtgTimerRef.current);
+    undoMtgTimerRef.current = setTimeout(function(){ setUndoMeeting(null); }, 10000);
+    // Ferme la modale de paramètres si ouverte
+    setShowSettings(false);
+  };
+  var undoDeleteMeeting = function(){
+    if (!undoMeeting) return;
+    if (undoMtgTimerRef.current) clearTimeout(undoMtgTimerRef.current);
+    saveMeetings([undoMeeting].concat(meetings));
+    try {
+      var arr = JSON.parse(localStorage.getItem(MTG_TRASH_KEY) || "[]");
+      arr = arr.filter(function(x){ return x.id !== undoMeeting.id; });
+      writeDeletedMeetings(arr);
+    } catch(e) {}
+    setSelMtgId(undoMeeting.id);
+    setUndoMeeting(null);
+  };
+  var restoreFromTrash = function(id){
+    var deleted = getDeletedMeetings();
+    var found = deleted.find(function(x){ return x.id===id; });
+    if (!found) return;
+    var restored = Object.assign({}, found);
+    delete restored._deletedAt;
+    saveMeetings([restored].concat(meetings));
+    try {
+      var arr = JSON.parse(localStorage.getItem(MTG_TRASH_KEY) || "[]");
+      arr = arr.filter(function(x){ return x.id !== id; });
+      writeDeletedMeetings(arr);
+    } catch(e) {}
+    setSelMtgId(id);
+  };
+  var purgeFromTrash = function(id){
+    try {
+      var arr = JSON.parse(localStorage.getItem(MTG_TRASH_KEY) || "[]");
+      arr = arr.filter(function(x){ return x.id !== id; });
+      writeDeletedMeetings(arr);
+    } catch(e) {}
+  };
+
   if(!loaded) return <div style={{padding:40,fontFamily:_FL,color:"#94A3B8"}}>Chargement…</div>;
   if(error) return <div style={{padding:40,fontFamily:_FL,color:"#C0392B"}}>Erreur IDB : {error}</div>;
 
   return (
     <div style={{display:"flex",width:"100%",height:"100%",minHeight:"calc(100vh - 56px)",fontFamily:_FL,background:"#F7F6F3"}}>
       <div style={{width:260,flexShrink:0,background:"white",borderRight:"1px solid #ECEAE5",display:"flex",flexDirection:"column",overflowY:"auto"}}>
-        <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #F0F0F0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <span style={{fontFamily:_DM,fontSize:11,fontWeight:700,color:"#102A63",letterSpacing:"0.06em"}}>RÉUNIONS</span>
+        <div style={{padding:"14px 16px 10px",borderBottom:"1px solid #F0F0F0",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:6}}>
+          <span style={{fontFamily:_DM,fontSize:11,fontWeight:700,color:"#102A63",letterSpacing:"0.06em",flex:1}}>RÉUNIONS</span>
+          {(function(){
+            var n = getDeletedMeetings().length;
+            return (
+              <button onClick={function(){setShowTrash(true);}} title={"Corbeille ("+n+")"}
+                style={{border:"1px solid "+(n>0?"#E67E22":"#E0E0E0"),background:n>0?"#FEF9E7":"white",color:n>0?"#E67E22":"#888",borderRadius:6,padding:"3px 8px",fontSize:11,cursor:"pointer",fontFamily:_DM,display:"flex",alignItems:"center",gap:4}}>
+                🗑 {n>0 && <span style={{background:"#E67E22",color:"white",borderRadius:10,fontSize:9,padding:"0 5px",fontWeight:700}}>{n}</span>}
+              </button>
+            );
+          })()}
           <button onClick={function(){setShowNew(true);}} style={Object.assign({},S.btn("#102A63"),{padding:"3px 10px",fontSize:12})} title="Nouvelle réunion">+</button>
         </div>
         {meetings.length===0 ? (
@@ -4079,6 +4228,7 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
                     setDragOver(null);
                   }}
                   onDragEnd={function(){ dragInfoRef.current = null; setDragOver(null); }}
+                  onDoubleClick={catDraggable ? function(e){ e.stopPropagation(); startRenameCat(g.cat); } : undefined}
                   style={{
                     fontFamily:_DM, fontSize:9, fontWeight:700, color:"#888",
                     letterSpacing:"0.08em", textTransform:"uppercase",
@@ -4088,9 +4238,25 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
                     cursor: catDraggable ? "grab" : "default",
                     userSelect:"none",
                     display:"flex", alignItems:"center", gap:5
-                  }}>
+                  }}
+                  title={catDraggable ? "Double-clic pour renommer · Glisser pour réordonner" : undefined}>
                   {catDraggable && <span style={{color:"#CCC",fontSize:11,lineHeight:1}}>⠿</span>}
-                  <span style={{flex:1}}>{g.cat || "Sans catégorie"} <span style={{color:"#CCC",fontWeight:400}}>· {g.items.length}</span></span>
+                  {renamingCat === g.cat ? (
+                    <input
+                      autoFocus
+                      value={renamingCatValue}
+                      onChange={function(e){ setRenamingCatValue(e.target.value); }}
+                      onClick={function(e){ e.stopPropagation(); }}
+                      onBlur={commitRenameCat}
+                      onKeyDown={function(e){
+                        if (e.key==="Enter") { e.preventDefault(); commitRenameCat(); }
+                        else if (e.key==="Escape") { setRenamingCat(null); setRenamingCatValue(""); }
+                      }}
+                      style={{flex:1,border:"1px solid #102A63",borderRadius:4,padding:"2px 6px",fontSize:10,fontFamily:_DM,fontWeight:700,color:"#102A63",letterSpacing:"0.08em",textTransform:"uppercase",outline:"none",background:"white"}}
+                    />
+                  ) : (
+                    <span style={{flex:1}}>{g.cat || "Sans catégorie"} <span style={{color:"#CCC",fontWeight:400}}>· {g.items.length}</span></span>
+                  )}
                 </div>
                 {g.items.map(function(m){
                   var isActive = m.id===selMtgId;
@@ -4132,7 +4298,9 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
                         setDragOver(null);
                       }}
                       onDragEnd={function(){ dragInfoRef.current = null; setDragOver(null); }}
-                      onClick={function(){selectMeeting(m.id);}}
+                      onClick={function(){ if (renamingMtgId !== m.id) selectMeeting(m.id); }}
+                      onDoubleClick={function(e){ e.stopPropagation(); startRenameMtg(m); }}
+                      title="Double-clic pour renommer · Glisser pour réordonner"
                       style={{
                         padding:"9px 14px",
                         cursor:"pointer",
@@ -4145,7 +4313,22 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
                       }}>
                       <span style={{color:"#CCC",fontSize:11,lineHeight:1,flexShrink:0}}>⠿</span>
                       <div style={{width:8,height:8,borderRadius:"50%",background:m.color,flexShrink:0}} />
-                      <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+                      {renamingMtgId === m.id ? (
+                        <input
+                          autoFocus
+                          value={renamingMtgValue}
+                          onChange={function(e){ setRenamingMtgValue(e.target.value); }}
+                          onClick={function(e){ e.stopPropagation(); }}
+                          onBlur={commitRenameMtg}
+                          onKeyDown={function(e){
+                            if (e.key==="Enter") { e.preventDefault(); commitRenameMtg(); }
+                            else if (e.key==="Escape") { setRenamingMtgId(null); setRenamingMtgValue(""); }
+                          }}
+                          style={{flex:1,border:"1px solid #102A63",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:_FL,fontWeight:700,color:"#102A63",outline:"none",background:"white"}}
+                        />
+                      ) : (
+                        <span style={{fontFamily:_FL,fontSize:12,fontWeight:isActive?700:400,color:isActive?"#102A63":"#444",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</span>
+                      )}
                     </div>
                   );
                 })}
@@ -4175,9 +4358,53 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
           reunion={selMtg}
           onSave={handleSaveSettings}
           onClose={function(){setShowSettings(false);}}
+          onDelete={deleteMeetingWithUndo}
           settings={settings}
           onSaveSettings={onSaveSettings}
         />
+      )}
+
+      {undoMeeting && (
+        <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",zIndex:9999,background:"#102A63",color:"#fff",padding:"12px 20px",borderRadius:10,boxShadow:"0 4px 18px rgba(0,0,0,0.25)",display:"flex",alignItems:"center",gap:14,fontFamily:_FL,fontSize:13}}>
+          <span>Réunion « {undoMeeting.title} » supprimée</span>
+          <button onClick={undoDeleteMeeting} style={{background:"#F4D35E",color:"#102A63",border:"none",borderRadius:6,padding:"6px 14px",fontWeight:700,cursor:"pointer",fontFamily:_FL,fontSize:12}}>↶ Annuler</button>
+        </div>
+      )}
+
+      {showTrash && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9998,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={function(){setShowTrash(false);}}>
+          <div onClick={function(e){e.stopPropagation();}} style={{background:"#fff",borderRadius:14,width:"min(640px, 92vw)",maxHeight:"82vh",display:"flex",flexDirection:"column",fontFamily:_FL,overflow:"hidden"}}>
+            <div style={{padding:"16px 22px",borderBottom:"1px solid #ECEAE5",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#102A63"}}>🗑 Corbeille des réunions</div>
+              <button onClick={function(){setShowTrash(false);}} style={{background:"transparent",border:"none",fontSize:22,cursor:"pointer",color:"#888",lineHeight:1}}>×</button>
+            </div>
+            <div style={{padding:"8px 22px 4px",fontSize:11,color:"#888",fontFamily:_DM,letterSpacing:"0.04em"}}>Conservation 30 jours après suppression</div>
+            <div style={{flex:1,overflowY:"auto",padding:"10px 22px 18px"}}>
+              {(function(){
+                var del = getDeletedMeetings();
+                if (del.length === 0) {
+                  return <div style={{padding:"30px 0",textAlign:"center",color:"#94A3B8",fontSize:13}}>La corbeille est vide.</div>;
+                }
+                return del.sort(function(a,b){ return (b._deletedAt||0) - (a._deletedAt||0); }).map(function(r){
+                  var daysLeft = Math.max(0, 30 - Math.floor((Date.now() - (r._deletedAt||0)) / 86400000));
+                  return (
+                    <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",border:"1px solid #ECEAE5",borderRadius:10,marginBottom:8,background:"#FAFAF8"}}>
+                      <div style={{width:10,height:10,borderRadius:"50%",background:r.color||"#102A63",flexShrink:0}}></div>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:"#102A63",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.title || "(sans titre)"}</div>
+                        <div style={{fontSize:10,color:"#888",fontFamily:_DM,marginTop:2}}>
+                          {r.category ? r.category + " · " : ""}Supprimée le {fmtDate(new Date(r._deletedAt||Date.now()).toISOString().split("T")[0])} · purge dans {daysLeft}j
+                        </div>
+                      </div>
+                      <button onClick={function(){restoreFromTrash(r.id);}} style={{...S.btn("#27AE60"),fontSize:10,padding:"6px 12px"}}>↩ Restaurer</button>
+                      <button onClick={function(){if(confirm("Supprimer définitivement « "+(r.title||"")+" » ?")) purgeFromTrash(r.id);}} style={{...S.btn("#C0392B"),fontSize:10,padding:"6px 12px"}}>✕ Purger</button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -15621,7 +15848,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.607{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.608{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
