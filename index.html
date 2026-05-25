@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v608-1779107496"/>
+  <meta name="app-version" content="v609-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -978,7 +978,6 @@ function CotationView({ settings }) {
   const [noteModal, setNoteModal] = React.useState(null);
   const [search, setSearch]       = React.useState("");
   const [filterStatus, setFilterStatus] = React.useState("Tous");
-  React.useEffect(() => setPage(1), [filterStatus, filterLabel, search, sortCol, sortDir]);
   const [filterLabel,  setFilterLabel]  = React.useState("Toutes");
   const [sortCol,  setSortCol]  = React.useState(null);
   const [sortDir,  setSortDir]  = React.useState("asc");
@@ -988,6 +987,7 @@ function CotationView({ settings }) {
   const [undoCot, setUndoCot]           = React.useState(null);
   const undoCotTimerRef                 = React.useRef(null);
   const [page, setPage]                 = React.useState(1);
+  React.useEffect(() => setPage(1), [filterStatus, filterLabel, search, sortCol, sortDir]);
   const PAGE_SIZE                       = 25;
   const [showTrashCot, setShowTrashCot] = React.useState(false);
   const [trashCot, setTrashCot] = useAppStore("trash_cotations", []);
@@ -15848,7 +15848,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.608{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.609{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
