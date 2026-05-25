@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v611-1779107496"/>
+  <meta name="app-version" content="v612-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4035,8 +4035,12 @@ function MeetingNewModal({ onSave, onClose, blank }) {
 }
 
 /* ── MeetingPanel ── */
-function MeetingPanel({ reunion, onSave, onOpenSettings }) {
+function MeetingPanel({ reunion, onSave, onOpenSettings, onDelete }) {
   var [remountKey, setRemountKey] = React.useState(0);
+  var [confirmDel, setConfirmDel] = React.useState(false);
+
+  // Reset la confirmation si on change de réunion
+  React.useEffect(function(){ setConfirmDel(false); }, [reunion.id]);
 
   var saveContent = function(html) {
     onSave(Object.assign({}, reunion, { content: html }));
@@ -4054,6 +4058,21 @@ function MeetingPanel({ reunion, onSave, onOpenSettings }) {
       <div style={{background:"white",borderBottom:"1px solid #ECEAE5",padding:"10px 20px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
         <div style={{width:10,height:10,borderRadius:"50%",background:reunion.color,flexShrink:0}} />
         <span style={{fontFamily:_FL,fontWeight:700,fontSize:14,color:"#102A63",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{reunion.title}</span>
+        {onDelete && !confirmDel && (
+          <button onClick={function(){setConfirmDel(true);}} title="Supprimer cette réunion"
+            style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#C0392B",fontFamily:_DM,flexShrink:0}}>🗑</button>
+        )}
+        {onDelete && confirmDel && (
+          <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:6,padding:"3px 6px 3px 10px"}}>
+            <span style={{fontSize:11,color:"#991B1B",fontFamily:_FL}}>Supprimer ?</span>
+            <button onClick={function(){ setConfirmDel(false); onDelete(reunion.id); }}
+              title="Confirmer la suppression"
+              style={{border:"none",background:"#C0392B",color:"#fff",borderRadius:5,padding:"3px 10px",cursor:"pointer",fontSize:11,fontFamily:_DM,fontWeight:700}}>Oui</button>
+            <button onClick={function(){ setConfirmDel(false); }}
+              title="Annuler"
+              style={{border:"1px solid #DDD",background:"#fff",color:"#555",borderRadius:5,padding:"3px 10px",cursor:"pointer",fontSize:11,fontFamily:_DM}}>Non</button>
+          </div>
+        )}
         <button onClick={onOpenSettings} title="Paramètres" style={{border:"1px solid #E0E0E0",background:"white",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#888",fontFamily:_DM,flexShrink:0}}>⚙</button>
         <button onClick={addSeance} title="Insérer un séparateur de séance daté en haut" style={Object.assign({},S.btn(reunion.color),{padding:"5px 14px",fontSize:11,flexShrink:0,fontWeight:700})}>+ Séance</button>
       </div>
@@ -4455,6 +4474,7 @@ function MeetingsView({ onAddTask, settings, onSaveSettings }) {
           reunion={selMtg}
           onSave={handleSaveMtg}
           onOpenSettings={function(){setShowSettings(true);}}
+          onDelete={deleteMeetingWithUndo}
         />
       )}
 
@@ -15954,7 +15974,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.611{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.612{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
