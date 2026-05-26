@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v630-1779107496"/>
+  <meta name="app-version" content="v631-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13112,8 +13112,29 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             </div>
             {(()=>{
               const lgAll2 = localDos.lignes||[];
-              const nDif   = lgAll2.filter(r=>r.estDiffere).length;
-              const nAmort = lgAll2.filter(r=>r.estAmort).length;
+              const _catP = (r) => {
+                if (r.estVersement) return "vers";
+                if (r.estDifferFin) return "inFine";
+                if (r.estDiffere)   return "differe";
+                if (r.estCapita)    return "capita";
+                const t = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+                if (t.includes("disponib") || t.includes("dispo")) return "dispo";
+                if (t.includes("amort") || r.estAmort) return "amort";
+                if (r.estSansFlux) return "sansFlux";
+                return "autre";
+              };
+              const counts = {};
+              lgAll2.forEach(r => { const c=_catP(r); counts[c]=(counts[c]||0)+1; });
+              const rows = [
+                { c:"vers",     l:"Versement",      v:counts["vers"]||0 },
+                { c:"dispo",    l:"Disponibilité",  v:counts["dispo"]||0 },
+                { c:"inFine",   l:"In fine",        v:counts["inFine"]||0 },
+                { c:"differe",  l:"Différé",        v:counts["differe"]||0 },
+                { c:"capita",   l:"Capitalisé",     v:counts["capita"]||0 },
+                { c:"amort",    l:"Amortissement",  v:counts["amort"]||0 },
+                { c:"sansFlux", l:"Sans flux",      v:counts["sansFlux"]||0 },
+                { c:"autre",    l:"Autre",          v:counts["autre"]||0 },
+              ].filter(r => r.v > 0);
               const StatLine = ({label, val}) => (
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #FDE68A"}}>
                   <span style={{fontSize:10,color:"#92400E",fontFamily:_FL}}>{label}</span>
@@ -13122,8 +13143,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               );
               return lgAll2.length>0 ? (
                 <div style={{display:"flex",flexDirection:"column"}}>
-                  <StatLine label="Différé" val={nDif}/>
-                  <StatLine label="Amortissement" val={nAmort}/>
+                  {rows.length === 0
+                    ? <StatLine label="—" val={0}/>
+                    : rows.map(r => <StatLine key={r.c} label={r.l} val={r.v}/>)}
                 </div>
               ) : (
                 <div>{lblL("Différé (mois)")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="Ex: 12" style={inpL}/></div>
@@ -13133,18 +13155,34 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
           {total>0 && (
             <div>
               {(()=>{
-                const ct = t => lignes.filter(t).length;
-                const nV=ct(r=>r.estVersement), nF=ct(r=>r.estDifferFin), nC=ct(r=>r.estCapita);
-                const nD=ct(r=>r.estDiffere), nA=ct(r=>r.estAmort), nS=ct(r=>r.estSansFlux);
-                const tot=lignes.length||1;
-                const phases=[
-                  ...(nV>0?[{l:"Versement",n:nV,bg:"#BFDBFE",tc:"#1D4ED8"}]:[]),
-                  ...(nF>0?[{l:"In fine",n:nF,bg:"#FED7AA",tc:"#C2410C"}]:[]),
-                  ...(nC>0?[{l:"Int. capit.",n:nC,bg:"#DDD6FE",tc:"#6D28D9"}]:[]),
-                  ...(nS>0?[{l:"Sans flux",n:nS,bg:"#E5E7EB",tc:"#9CA3AF"}]:[]),
-                  ...(nD>0?[{l:"Différé",n:nD,bg:"#FCD34D",tc:"#A16207"}]:[]),
-                  ...(nA>0?[{l:"Amort.",n:nA,bg:"#6EE7B7",tc:"#065F46"}]:[]),
+                const _catP = (r) => {
+                  if (r.estVersement) return "vers";
+                  if (r.estDifferFin) return "inFine";
+                  if (r.estDiffere)   return "differe";
+                  if (r.estCapita)    return "capita";
+                  const t = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+                  if (t.includes("disponib") || t.includes("dispo")) return "dispo";
+                  if (t.includes("amort") || r.estAmort) return "amort";
+                  if (r.estSansFlux) return "sansFlux";
+                  return "autre";
+                };
+                const counts = {};
+                lignes.forEach(r => { const c=_catP(r); counts[c]=(counts[c]||0)+1; });
+                const tot = lignes.length || 1;
+                // Ordre logique (chronologique : versement → dispo → différé/capita → amort → fin)
+                const phaseDefs = [
+                  { c:"vers",     l:"Versement",     bg:"#BFDBFE", tc:"#1D4ED8" },
+                  { c:"dispo",    l:"Disponibilité", bg:"#A5F3FC", tc:"#155E75" },
+                  { c:"inFine",   l:"In fine",       bg:"#FED7AA", tc:"#C2410C" },
+                  { c:"capita",   l:"Int. capit.",   bg:"#DDD6FE", tc:"#6D28D9" },
+                  { c:"differe",  l:"Différé",       bg:"#FCD34D", tc:"#A16207" },
+                  { c:"amort",    l:"Amort.",        bg:"#6EE7B7", tc:"#065F46" },
+                  { c:"sansFlux", l:"Sans flux",     bg:"#E5E7EB", tc:"#9CA3AF" },
+                  { c:"autre",    l:"Autre",         bg:"#E0E7FF", tc:"#3730A3" },
                 ];
+                const phases = phaseDefs
+                  .filter(p => (counts[p.c]||0) > 0)
+                  .map(p => ({ l:p.l, n:counts[p.c], bg:p.bg, tc:p.tc }));
                 return (<>
                   <div style={{display:"flex",height:12,borderRadius:6,overflow:"hidden",gap:1,marginBottom:4}}>
                     {phases.map((p,i)=>(
@@ -17103,7 +17141,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.630{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.631{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
