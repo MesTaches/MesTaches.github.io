@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v632-1779107496"/>
+  <meta name="app-version" content="v633-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12677,10 +12677,39 @@ const ECH_DOC_TYPES = ["Contrat","Échéancier","Tableau d'amortissement","Avena
 function EchAttachments({ attachments, onChange }) {
   const [selType, setSelType] = React.useState("Contrat");
   const add = (files) => {
-    const news = Array.from(files).map(f=>({name:f.name, size:f.size, type:selType, date:new Date().toISOString().split("T")[0]}));
-    onChange([...(attachments||[]), ...news]);
+    const arr = Array.from(files);
+    if (!arr.length) return;
+    const today = new Date().toISOString().split("T")[0];
+    const readers = arr.map(f => new Promise((resolve) => {
+      if (f.size > 5 * 1024 * 1024) {
+        alert("Fichier trop lourd (max 5 Mo) : " + f.name);
+        resolve(null);
+        return;
+      }
+      const r = new FileReader();
+      r.onload = (ev) => resolve({
+        name: f.name, size: f.size, type: selType, mime: f.type, date: today,
+        dataUrl: ev.target.result,
+      });
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(f);
+    }));
+    Promise.all(readers).then(res => {
+      const ok = res.filter(Boolean);
+      if (ok.length) onChange([...(attachments || []), ...ok]);
+    });
   };
   const remove = (i) => onChange((attachments||[]).filter((_,idx)=>idx!==i));
+  const download = (a) => {
+    if (!a.dataUrl) { alert("Ce fichier a été ajouté avant le support du téléchargement.\nRe-joins-le pour pouvoir le télécharger."); return; }
+    const link = document.createElement("a");
+    link.href = a.dataUrl;
+    link.download = a.name || "fichier";
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => link.remove(), 50);
+  };
+  const fmtSize = (b) => !b ? "" : (b < 1024 ? b + " o" : b < 1048576 ? Math.round(b/1024) + " Ko" : (b/1048576).toFixed(1) + " Mo");
   return (
     <div>
       {(attachments||[]).length > 0 && (
@@ -12689,8 +12718,12 @@ function EchAttachments({ attachments, onChange }) {
             <div key={i} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 8px",background:"#F8F9FB",borderRadius:6,border:"1px solid #ECEAE5"}}>
               <span style={{fontSize:9,background:"#E0F7FA",color:"#0E7490",borderRadius:3,padding:"1px 6px",fontFamily:_FL,fontWeight:700,flexShrink:0}}>{a.type||"—"}</span>
               <span style={{flex:1,fontSize:10,fontFamily:_FL,color:"#2C3E50",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.name}</span>
+              {a.size && <span style={{fontSize:9,color:"#AAA",fontFamily:_FL,flexShrink:0}}>{fmtSize(a.size)}</span>}
               <span style={{fontSize:9,color:"#AAA",fontFamily:_FL,flexShrink:0}}>{a.date||""}</span>
-              <button onClick={()=>remove(i)} style={{border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
+              <button onClick={()=>download(a)} title="Télécharger"
+                style={{border:"1px solid #E0E0E0",background:a.dataUrl?"white":"#F5F5F5",borderRadius:4,padding:"2px 6px",fontSize:10,cursor:"pointer",color:a.dataUrl?"#4F46E5":"#AAA",flexShrink:0}}>⬇</button>
+              <button onClick={()=>remove(i)} title="Supprimer"
+                style={{border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,flexShrink:0}}>×</button>
             </div>
           ))}
         </div>
@@ -12701,7 +12734,7 @@ function EchAttachments({ attachments, onChange }) {
           {ECH_DOC_TYPES.map(t=><option key={t}>{t}</option>)}
         </select>
         <label style={{cursor:"pointer",flex:1}}>
-          <input type="file" multiple style={{display:"none"}} onChange={e=>add(e.target.files)}/>
+          <input type="file" multiple style={{display:"none"}} onChange={e=>{add(e.target.files);e.target.value="";}}/>
           <span style={{display:"block",textAlign:"center",padding:"5px 8px",border:"1px dashed #BFDBFE",borderRadius:6,fontSize:11,fontFamily:_FL,color:"#1D4ED8",background:"#EFF6FF",cursor:"pointer"}}>📎 Joindre un fichier</span>
         </label>
       </div>
@@ -17138,7 +17171,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.632{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.633{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
