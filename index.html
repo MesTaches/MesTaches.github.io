@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v624-1779107496"/>
+  <meta name="app-version" content="v625-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9478,6 +9478,7 @@ function sendCBEmail(d) {
 }
 
 function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, onUpdateFinanceurs }) {
+  const isMobile = useIsMobile();
   const uid = () => Math.random().toString(36).substr(2,9);
   React.useEffect(() => { document.body.classList.add("cb-modal-open"); return () => document.body.classList.remove("cb-modal-open"); }, []);
   const empty = { id:"", codeProjet:"", intitule:"", typeInvestissement:"", typeFinancement:"", numeroContrat:"", fournisseur:"", montantHT:"", tva:"20", montantTTC:"", montantFinance:"", duree:"36", periodicite:"Mensuelle", valeurResPct:"", statut:"montage", notes:"", financeurs:[], documents:{}, createdAt:new Date().toISOString() };
@@ -17021,7 +17022,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.624{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.625{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
