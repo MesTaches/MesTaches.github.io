@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v633-1779107496"/>
+  <meta name="app-version" content="v634-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12992,7 +12992,11 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
             </>) : (
               <div style={{gridColumn:"1/-1",background:"#F0FDF4",borderRadius:6,padding:"8px 10px",border:"1px solid #BBF7D0",fontSize:10,fontFamily:_FL,color:"#065F46"}}>
-                ✓ {localDos.lignes.length} lignes importées · Durée : {localDos.duree||"calculée"}
+                {(()=>{
+                  const nVers = (localDos.lignes||[]).filter(r=>r.estVersement).length;
+                  const nMens = (localDos.lignes||[]).length - nVers;
+                  return <>✓ {localDos.lignes.length} lignes importées · {nMens} mensualité{nMens>1?"s":""}{nVers>0 ? " + "+nVers+" versement"+(nVers>1?"s":"") : ""} · Durée : {localDos.duree||"calculée"} mois</>;
+                })()}
               </div>
             )}
           </div>
@@ -13494,9 +13498,16 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   if (!lg.length) return dos;
   var nowS = new Date().toISOString().split("T")[0];
 
+  // Détection statut versement : peut venir du champ "type" OU du champ "statut" (selon convention de l'Excel importé)
+  var _isVers = function(r){
+    var sL = (r.statut||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+    var tL = (r.type  ||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+    return sL.includes("versement") || tL.includes("versement") || sL.includes("tirage") || tL.includes("tirage");
+  };
+  var _nonVersCounter = 0;
   lg = lg.map(function(r) {
     var tL = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
-    var estVersement = tL.includes("versement");
+    var estVersement = _isVers(r);
     var estInFine    = tL.includes("fine");
     var estDiffere   = tL.includes("differe");
     var estCapita    = r.estCapita || (r.capitalisé === "Oui") || false;
@@ -13507,7 +13518,11 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     var estDifferFin = estInFine && !estCapita && cap===0 && inter===0 && comm===0;
     var estSansFlux  = !estInFine && !estDiffere && !estCapita && !estVersement && cap===0 && inter===0 && comm===0 && ech===0;
     var estAmort     = !estInFine && !estDiffere && !estCapita && !estSansFlux && !estVersement && cap>0;
+    // N° : seules les lignes NON versement sont numérotées (1, 2, 3…)
+    // Les versements (tirages, drawdowns) restent sans numéro
+    var newN = estVersement ? "" : (++_nonVersCounter);
     return Object.assign({}, r, {
+      n: newN,
       estVersement: estVersement,
       estDifferFin: estDifferFin,
       estDiffere:   estDiffere,
@@ -13522,7 +13537,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var totalCapRbt  = lg.reduce(function(a,r){ return a + (r.estVersement ? 0 : (r.capital||0)); }, 0);
   var montantAuto  = totalVersAmt > 0 ? totalVersAmt : totalCapRbt;
 
-  var dureeAuto = String(lg.length);
+  // Durée = nombre de mensualités effectives (hors versements)
+  var dureeAuto = String(lg.filter(function(r){ return !r.estVersement; }).length);
   var dates = lg.map(function(r){ return r.date||""; }).filter(Boolean).sort();
   var dateFin = dates.length ? dates[dates.length-1] : "";
 
@@ -17171,7 +17187,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.633{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.634{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
