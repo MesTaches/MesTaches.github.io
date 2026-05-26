@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v629-1779107496"/>
+  <meta name="app-version" content="v630-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13027,14 +13027,33 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 else if(hasInFine||(allSansFlux&&!hasAmort&&!hasDiff)) statutPret2=st;
                 if(hasAmort) statutAmort2=st;
               });
-              const lgPret2  = (statutsMap2[statutPret2]||[]).filter(r=>!r.estVersement);
-              const lgAmort  = lg2.filter(r=>r.estAmort);
-              const lgDif    = lg2.filter(r=>r.estDiffere);
-              const intPret  = lgPret2.reduce((a,r)=>a+(r.interets||0),0);  // inclut capitalisés
-              const intAmort = lgAmort.reduce((a,r)=>a+(r.interets||0),0);
-              const intDif   = lgDif.reduce((a,r)=>a+(r.interets||0),0);
-              const garPret  = lgPret2.reduce((a,r)=>a+(r.commGarantie||0),0);  // inclut capitalisés
-              const garAmort = [...lgAmort,...lgDif].reduce((a,r)=>a+(r.commGarantie||0),0);
+              // Catégorisation fonctionnelle (cohérente avec calcDossierAuto)
+              const _catOf = (r) => {
+                if (r.estVersement) return "vers";
+                if (r.estDifferFin) return "inFine";
+                if (r.estDiffere)   return "differe";
+                if (r.estCapita)    return "capita";
+                const t = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+                if (t.includes("disponib") || t.includes("dispo")) return "dispo";
+                if (t.includes("amort") || r.estAmort) return "amort";
+                if (r.estSansFlux) return "sansFlux";
+                return "autre";
+              };
+              const byCat = {};
+              lg2.forEach(r => { const c=_catOf(r); (byCat[c]=byCat[c]||[]).push(r); });
+              const sumInt  = arr => (arr||[]).reduce((a,r)=>a+(r.interets||0),0);
+              const sumComm = arr => (arr||[]).reduce((a,r)=>a+(r.commGarantie||0),0);
+              const intDispo   = sumInt(byCat["dispo"]);
+              const intAmortC  = sumInt(byCat["amort"]);
+              const intDifC    = sumInt(byCat["differe"]);
+              const intFineC   = sumInt(byCat["inFine"]);
+              const intCapitaC = sumInt(byCat["capita"]);
+              const garDispo   = sumComm(byCat["dispo"]);
+              const garAmortC  = sumComm(byCat["amort"]);
+              const garDifC    = sumComm(byCat["differe"]);
+              const garFineC   = sumComm(byCat["inFine"]);
+              const garCapitaC = sumComm(byCat["capita"]);
+              const tpc = localDos.tauxParCat || {};
               const fmtM = v => v>0 ? v.toLocaleString("fr-FR",{minimumFractionDigits:0,maximumFractionDigits:0})+" €" : "—";
               const fmtT = v => v && String(v).trim() ? String(v).trim()+"%" : "—";
               const TauxRow = ({label,taux,montant,isGarantie,isTotal,isTEG,isCapita}) => (
@@ -13048,8 +13067,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                   </div>
                 </div>
               );
-              const totalInterets    = intPret + intAmort + intDif;
-              const totalGarantieAll = garPret + garAmort;
+              const totalInterets    = intDispo + intAmortC + intDifC + intFineC + intCapitaC;
+              const totalGarantieAll = garDispo + garAmortC + garDifC + garFineC + garCapitaC;
               const montantVerse = (lg2.filter(r=>r.estVersement).reduce((a,r)=>a+(r.capital||0),0))
                 || parseFloat(String(localDos.montant||"0").replace(/\s/g,"").replace(/,/,".")) || 0;
 
@@ -13071,11 +13090,15 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 ? ((totalInterets + totalGarantieAll) / capitalMoyen / dureeAns2 * 100).toFixed(2) : "—";
 
               return (<>
-                <TauxRow label="Intérêts — Prêt (dont capitalisés)" taux={localDos.tauxAnnuel} montant={intPret}/>
-                {intDif>0&&<TauxRow label="Intérêts — Différé" taux={localDos.tauxDiffere||localDos.tauxAmort} montant={intDif}/>}
-                <TauxRow label="Intérêts — Amortissement" taux={localDos.tauxAmort} montant={intAmort}/>
-                <TauxRow label="Com. garantie — Prêt" taux={localDos.tauxGarantie} montant={garPret} isGarantie/>
-                {garAmort>0&&<TauxRow label="Com. garantie — Amort." taux={localDos.tauxGarantie2||localDos.tauxGarantie} montant={garAmort} isGarantie/>}
+                {intDispo>0   && <TauxRow label="Intérêts — Disponibilité"        taux={tpc["dispo"]   || localDos.tauxAnnuel}  montant={intDispo}/>}
+                {intFineC>0   && <TauxRow label="Intérêts — In fine"              taux={tpc["inFine"]  || localDos.tauxAnnuel}  montant={intFineC}/>}
+                {intDifC>0    && <TauxRow label="Intérêts — Différé"              taux={tpc["differe"] || localDos.tauxDiffere || localDos.tauxAmort} montant={intDifC}/>}
+                {intCapitaC>0 && <TauxRow label="Intérêts — Capitalisés"          taux={tpc["capita"]  || localDos.tauxAnnuel}  montant={intCapitaC} isCapita/>}
+                {intAmortC>0  && <TauxRow label="Intérêts — Amortissement"        taux={tpc["amort"]   || localDos.tauxAmort}   montant={intAmortC}/>}
+                {garDispo>0   && <TauxRow label="Com. garantie — Disponibilité"   taux={(localDos.commParCat||{})["dispo"]   || localDos.tauxGarantie}  montant={garDispo}   isGarantie/>}
+                {garFineC>0   && <TauxRow label="Com. garantie — In fine"         taux={(localDos.commParCat||{})["inFine"]  || localDos.tauxGarantie}  montant={garFineC}   isGarantie/>}
+                {garDifC>0    && <TauxRow label="Com. garantie — Différé"         taux={(localDos.commParCat||{})["differe"] || localDos.tauxGarantie}  montant={garDifC}    isGarantie/>}
+                {garAmortC>0  && <TauxRow label="Com. garantie — Amortissement"   taux={(localDos.commParCat||{})["amort"]   || localDos.tauxGarantie2 || localDos.tauxGarantie} montant={garAmortC}  isGarantie/>}
                 <div style={{height:1,background:"#E2E8F0",margin:"4px 0"}}/>
                 <TauxRow label="Total intérêts (dont capitalisés)" taux={totalInteretsPct!=="—"?totalInteretsPct:null} montant={totalInterets} isTotal/>
                 <TauxRow label="TEG total (intérêts + garanties)" taux={tegPct!=="—"?tegPct:null} montant={totalInterets+totalGarantieAll} isTEG/>
@@ -13437,11 +13460,56 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
 
   var nbDiffere = lg.filter(function(r){ return r.estDiffere && !r.estSansFlux; }).length;
 
+  // Catégorisation fonctionnelle d'une ligne pour le calcul des taux.
+  // Une ligne appartient à UNE seule catégorie qui détermine son traitement.
+  var _categoryOf = function(r) {
+    if (r.estVersement) return "vers";
+    if (r.estDifferFin) return "inFine";
+    if (r.estDiffere)   return "differe";
+    if (r.estCapita)    return "capita";
+    var t = (r.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+    if (t.includes("disponib") || t.includes("dispo")) return "dispo";
+    if (t.includes("amort") || r.estAmort) return "amort";
+    if (r.estSansFlux) return "sansFlux";
+    return "autre";
+  };
+
   var statuts = {};
   lg.forEach(function(r) {
     var st = r.statut || "default";
     if (!statuts[st]) statuts[st] = [];
     statuts[st].push(r);
+  });
+
+  // ─── Groupement par catégorie fonctionnelle (Disponibilité, Amortissement, Différé…) ───
+  // C'est ce groupement (et pas le statut) qui détermine les taux affichés au panneau
+  // TAUX & COÛT. Plusieurs catégories peuvent coexister dans un même statut (typique :
+  // statut "Prêt" avec phase Disponibilité puis phase Amortissement).
+  var categories = {};
+  lg.forEach(function(r) {
+    var c = _categoryOf(r);
+    if (!categories[c]) categories[c] = [];
+    categories[c].push(r);
+  });
+
+  var tauxParCat = {};
+  var commParCat = {};
+  Object.keys(categories).forEach(function(c) {
+    if (c === "vers" || c === "sansFlux") return; // pas de taux pour ces catégories
+    var lines = categories[c];
+    var lgActives = lines.filter(function(r){ return (r.capitalRestant||0) > 0; });
+    if (lgActives.length === 0) return;
+    var totInt  = lgActives.reduce(function(a,r){ return a+(r.interets||0); }, 0);
+    var totComm = lgActives.reduce(function(a,r){ return a+(r.commGarantie||0); }, 0);
+    var capMoy = lgActives.reduce(function(a,r){ return a+(r.capitalRestant||0); }, 0) / lgActives.length;
+    var datesC = lgActives.map(function(r){ return r.date; }).filter(Boolean).sort();
+    var dureeAnsC = (datesC.length >= 2)
+      ? Math.max((new Date(datesC[datesC.length-1]) - new Date(datesC[0])) / (1000*60*60*24*365.25), 0.08)
+      : lgActives.length / 12;
+    if (capMoy > 0 && dureeAnsC > 0) {
+      if (totInt > 0)  tauxParCat[c] = (totInt  / capMoy / dureeAnsC * 100).toFixed(2);
+      if (totComm > 0) commParCat[c] = (totComm / capMoy / dureeAnsC * 100).toFixed(2);
+    }
   });
 
   var tauxParStatut = {};
@@ -13513,20 +13581,27 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     if (hasDiffere && !hasAmort) statutDiffPur = st;
   });
 
-  if (statutPret && tauxParStatut[statutPret]) {
-    // Méthode unifiée capital moyen sur durée — vraie pour in fine ET amortissable
-    tauxAuto = tauxParStatut[statutPret];
-  } else if (Object.keys(tauxParStatut).length > 0) {
-    tauxAuto = Object.values(tauxParStatut)[0];
-  }
+  // Les taux globaux (tauxAuto, tauxAmortAuto, tauxDiffereAuto) sont alimentés par les
+  // catégories fonctionnelles (et plus par les statuts) pour refléter les phases réelles
+  // du prêt (Disponibilité ≠ Amortissement).
+  if (tauxParCat["dispo"])   tauxAuto = tauxParCat["dispo"];
+  else if (tauxParCat["inFine"])  tauxAuto = tauxParCat["inFine"];
+  else if (tauxParCat["differe"]) tauxAuto = tauxParCat["differe"];
+  else if (tauxParCat["capita"])  tauxAuto = tauxParCat["capita"];
+  else if (tauxParCat["amort"])   tauxAuto = tauxParCat["amort"];
+  else if (statutPret && tauxParStatut[statutPret]) tauxAuto = tauxParStatut[statutPret];
 
-  if (statutAmort && tauxParStatut[statutAmort]) tauxAmortAuto = tauxParStatut[statutAmort];
-  if (statutDiffPur && tauxParStatut[statutDiffPur]) tauxDiffereAuto = tauxParStatut[statutDiffPur];
-  else if (statutAmort && tauxParStatut[statutAmort]) tauxDiffereAuto = tauxParStatut[statutAmort]; // même taux si pas de différé pur
+  if (tauxParCat["amort"]) tauxAmortAuto = tauxParCat["amort"];
+  else if (statutAmort && tauxParStatut[statutAmort]) tauxAmortAuto = tauxParStatut[statutAmort];
 
-  var commAmortAuto = "";
-  if (statutAmort && commParStatut[statutAmort]) { commAmortAuto = commParStatut[statutAmort]; }
-  if (statutPret && commParStatut[statutPret]) commAuto = commParStatut[statutPret];
+  if (tauxParCat["differe"]) tauxDiffereAuto = tauxParCat["differe"];
+  else if (statutDiffPur && tauxParStatut[statutDiffPur]) tauxDiffereAuto = tauxParStatut[statutDiffPur];
+  else if (tauxAmortAuto) tauxDiffereAuto = tauxAmortAuto;
+
+  var commAmortAuto = commParCat["amort"] || (statutAmort ? commParStatut[statutAmort] : "") || "";
+  if (commParCat["dispo"])   commAuto = commParCat["dispo"];
+  else if (commParCat["amort"]) commAuto = commParCat["amort"];
+  else if (statutPret && commParStatut[statutPret]) commAuto = commParStatut[statutPret];
   else if (statutAmort && commParStatut[statutAmort]) commAuto = commParStatut[statutAmort];
 
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
@@ -13552,6 +13627,8 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
     totalVersements: totalVersAmt || montantAuto,
     tauxParStatut: tauxParStatut,
     commParStatut: commParStatut,
+    tauxParCat: tauxParCat,
+    commParCat: commParCat,
   });
 };
 
@@ -17026,7 +17103,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.629{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.630{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
