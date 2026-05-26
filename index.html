@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v628-1779107496"/>
+  <meta name="app-version" content="v629-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13326,15 +13326,26 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                             ?<select value={typeVal} onChange={e=>setType(e.target.value)} style={{...inpS,textAlign:"center",width:90}}>
                               {typeOpts.map(o=><option key={o}>{o}</option>)}
                             </select>
-                            :row.estCapita?<span style={{fontSize:8,background:"#EDE9FE",color:"#6D28D9",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Intérêts capit.</span>
-                            :row.estCarence?<span style={{fontSize:8,background:"#FEE2E2",color:"#B91C1C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Carence</span>
-                            :row.estDifferFin?<span style={{fontSize:8,background:"#FFF7ED",color:"#C2410C",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>In fine</span>
-                            :row.estDiffere?<span style={{fontSize:8,background:"#FEF9C3",color:"#A16207",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Différé</span>
-                            :row.estVersement?<span style={{fontSize:8,background:"#DCFCE7",color:"#15803D",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Versement</span>
-                            :row.estAmort?<span style={{fontSize:8,background:"#D1FAE5",color:"#065F46",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Amortissement</span>
-                            :(row.type && String(row.type).trim())?<span style={{fontSize:8,background:"#DBEAFE",color:"#1E3A8A",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>{row.type}</span>
-                            :(row.estSansFlux||(row.echeance===0&&row.capital===0&&row.interets===0&&!row.estCapita&&!row.estCarence&&!row.estDiffere&&!row.estVersement&&!row.estDifferFin))?<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>Sans flux</span>
-                            :<span style={{fontSize:8,background:"#F1F5F9",color:"#64748B",borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"}}>—</span>}
+                            :(()=>{
+                              const BS={fontSize:8,borderRadius:3,padding:"1px 5px",fontWeight:700,whiteSpace:"nowrap"};
+                              const tS=(row.type||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+                              if (row.estCapita) return <span style={{...BS,background:"#EDE9FE",color:"#6D28D9"}}>Intérêts capit.</span>;
+                              if (row.estCarence) return <span style={{...BS,background:"#FEE2E2",color:"#B91C1C"}}>Carence</span>;
+                              if (row.estDifferFin) return <span style={{...BS,background:"#FFF7ED",color:"#C2410C"}}>In fine</span>;
+                              if (row.estDiffere) return <span style={{...BS,background:"#FEF9C3",color:"#A16207"}}>Différé</span>;
+                              if (row.estVersement) return <span style={{...BS,background:"#DCFCE7",color:"#15803D"}}>Versement</span>;
+                              // Détection sur le texte importé (passe avant estAmort pour préserver le libellé du tableau d'amortissement)
+                              if (tS.includes("disponib") || tS.includes("dispo")) return <span style={{...BS,background:"#CFFAFE",color:"#155E75"}}>{row.type}</span>;
+                              if (tS.includes("amort"))  return <span style={{...BS,background:"#D1FAE5",color:"#065F46"}}>{row.type}</span>;
+                              if (tS.includes("fine"))   return <span style={{...BS,background:"#FFF7ED",color:"#C2410C"}}>{row.type}</span>;
+                              if (tS.includes("differ")) return <span style={{...BS,background:"#FEF9C3",color:"#A16207"}}>{row.type}</span>;
+                              if (tS.includes("vers"))   return <span style={{...BS,background:"#DCFCE7",color:"#15803D"}}>{row.type}</span>;
+                              if (tS.includes("capital")) return <span style={{...BS,background:"#EDE9FE",color:"#6D28D9"}}>{row.type}</span>;
+                              if (row.estAmort) return <span style={{...BS,background:"#D1FAE5",color:"#065F46"}}>Amortissement</span>;
+                              if (row.type && String(row.type).trim()) return <span style={{...BS,background:"#E0E7FF",color:"#3730A3"}}>{row.type}</span>;
+                              if (row.estSansFlux || (row.echeance===0&&row.capital===0&&row.interets===0)) return <span style={{...BS,background:"#F1F5F9",color:"#64748B"}}>Sans flux</span>;
+                              return <span style={{...BS,background:"#F1F5F9",color:"#64748B"}}>—</span>;
+                            })()}
                         </td>
 
                         
@@ -13436,37 +13447,36 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   var tauxParStatut = {};
   var commParStatut = {};
 
-  // Pour chaque statut, on calcule le taux via la méthode "capital moyen sur durée"
-  // qui est mathématiquement exacte pour un emprunt classique (in fine OU amortissable).
+  // Pour chaque statut on calcule le taux nominal via la méthode "capital moyen sur durée"
+  // qui est mathématiquement exacte quelle que soit la structure de l'emprunt (in fine,
+  // amortissable, mensuel, semestriel, multi-tranche avec capitalisation, etc.).
   //
-  // Formule : taux = total_intérêts / capital_moyen_sur_la_période / durée_années
+  // Formule : taux = total_intérêts / capital_moyen / durée_années
   //
-  // Le capital moyen est la moyenne des capitalRestant sur les lignes "actives" de la
-  // tranche. Pour un in fine, capital_moyen ≈ capital_initial. Pour un amortissable
-  // linéaire, capital_moyen ≈ capital_initial / 2. Cette formule donne le taux nominal
-  // dans les deux cas, alors que totalInt / capitalInitial / années surestime d'un
-  // facteur ~2 pour un amortissable.
+  // - capital moyen = moyenne du capitalRestant sur toutes les lignes actives de la tranche
+  //   (lignes non-versement avec capitalRestant > 0). On prend TOUTES les lignes, pas
+  //   seulement celles avec flux, pour avoir le bon dénominateur en cas de périodicité
+  //   non-mensuelle (semestrielle, annuelle, etc.).
+  // - durée = écart entre la première et la dernière date de la tranche (en années).
+  //
+  // Cette méthode est identique à celle qui calcule le TEG TOTAL (qui sort un % réaliste).
   Object.keys(statuts).forEach(function(st) {
     var lines = statuts[st];
-    var lignesFlux = lines.filter(function(r){
-      return (r.interets||0) > 0 && !r.estSansFlux && !r.estVersement;
-    });
-    if (lignesFlux.length === 0) return;
-    // Total intérêts sur la tranche (inclut les capitalisés)
-    var totIntStatut = lignesFlux.reduce(function(a,r){ return a+(r.interets||0); }, 0);
-    var totCommStatut = lignesFlux.reduce(function(a,r){ return a+(r.commGarantie||0); }, 0);
-    // Capital moyen : moyenne du capital restant AVANT chaque échéance
-    // capAvant = capitalRestant (après) + capital (remboursé ce mois) = capital début de période
-    var sumCapAvant = 0, nCap = 0;
-    lignesFlux.forEach(function(r){
-      var capAvant = (r.capitalRestant||0) + (r.capital||0);
-      if (capAvant <= 0) capAvant = r.capitalRestant||0;
-      if (capAvant > 0) { sumCapAvant += capAvant; nCap++; }
-    });
-    if (nCap === 0) return;
-    var capMoyen = sumCapAvant / nCap;
-    // Durée en années (nombre de lignes / 12 mois)
-    var dureeAns = lignesFlux.length / 12;
+    var lgActives = lines.filter(function(r){ return !r.estVersement && (r.capitalRestant||0) > 0; });
+    if (lgActives.length === 0) return;
+    // Total intérêts et commissions (inclut les capitalisés)
+    var totIntStatut  = lgActives.reduce(function(a,r){ return a+(r.interets||0); }, 0);
+    var totCommStatut = lgActives.reduce(function(a,r){ return a+(r.commGarantie||0); }, 0);
+    // Capital moyen
+    var capMoyen = lgActives.reduce(function(a,r){ return a+(r.capitalRestant||0); }, 0) / lgActives.length;
+    // Durée en années (date min → date max)
+    var datesT = lgActives.map(function(r){ return r.date; }).filter(Boolean).sort();
+    var dureeAns;
+    if (datesT.length >= 2) {
+      dureeAns = Math.max((new Date(datesT[datesT.length-1]) - new Date(datesT[0])) / (1000*60*60*24*365.25), 0.08);
+    } else {
+      dureeAns = lgActives.length / 12;
+    }
     if (capMoyen > 0 && dureeAns > 0) {
       if (totIntStatut > 0) {
         tauxParStatut[st] = (totIntStatut / capMoyen / dureeAns * 100).toFixed(2);
@@ -17016,7 +17026,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.628{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.629{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
