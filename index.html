@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v626-1779107496"/>
+  <meta name="app-version" content="v627-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15994,7 +15994,7 @@ function PaymentsView({ settings }) {
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>
                     {p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}
                   </div>
-                  <div style={{ fontSize: 11, fontFamily: _DM, color: "#2C3E50", fontWeight: 600, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums" }}>{fmtEuro(p.amount)}</div>
+                  <div style={{ fontSize: 12, fontFamily: _DM, color: "#2C3E50", fontWeight: 500, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}>{fmtEuro(p.amount)}</div>
                   <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <button onClick={(e) => { e.stopPropagation(); setNoteModal(p); }}
@@ -16017,7 +16017,7 @@ function PaymentsView({ settings }) {
               <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
                 <div /><div /><div /><div /><div /><div />
                 <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "\'Lora\',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#102A63", fontFamily: _DM, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#102A63", fontFamily: _DM, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em" }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
                 <div /><div />
@@ -17022,7 +17022,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.626{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.627{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
