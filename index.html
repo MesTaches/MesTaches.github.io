@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v640-1779107496"/>
+  <meta name="app-version" content="v641-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,7 +79,7 @@ const _fbApp = firebase.initializeApp({
 const _db = firebase.firestore();
 const _auth = firebase.auth();
 
-const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1", "taskmanager_payments", "taskmanager_cotations"];
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1", "taskmanager_payments", "taskmanager_cotations", "taskmanager_suiviclient_v1", "taskmanager_suiviclient_notes_v1"];
 let _uid = null;
 let _debounce = {};
 let _reactMounted = false;
@@ -611,7 +611,7 @@ function useIsMobile() {
    APP_DB  —  couche IndexedDB universelle (tous modules)
    ════════════════════════════════════════════════════════ */
 const APP_DB_NAME    = "app_main_db";
-const APP_DB_VERSION = 2;
+const APP_DB_VERSION = 3;
 
 const APP_STORES = [
   "tasks",          // Tâches principales (STORAGE_KEY)
@@ -624,6 +624,7 @@ const APP_STORES = [
   "echeancier",     // Échéancier
   "rcf",            // RCF
   "suivi_clients",  // Suivi client
+  "suivi_clients_notes", // Notes des suivis clients (ajouté v3, manquait avant — entraînait des écritures silencieusement perdues)
   "meetings",       // Réunions
   "responsables",   // Responsables
   "settings",       // Paramètres
@@ -692,13 +693,15 @@ async function appDbGet(store) {
 // Stores NOT listed here (creditbail, echeancier) stay local-only — they can be
 // too large for Firestore's 1 MiB doc limit.
 const STORE_TO_SYNC_KEY = {
-  "tasks":       "taskmanager_v4",
-  "settings":    "taskmanager_settings_v1",
-  "meetings":    "taskmanager_meetings_v1",
-  "dev":         "devtracker_tasks_v1",
-  "contentieux": "contentieux_dossiers_v1",
-  "payments":    "taskmanager_payments",
-  "cotations":   "taskmanager_cotations",
+  "tasks":               "taskmanager_v4",
+  "settings":            "taskmanager_settings_v1",
+  "meetings":            "taskmanager_meetings_v1",
+  "dev":                 "devtracker_tasks_v1",
+  "contentieux":         "contentieux_dossiers_v1",
+  "payments":            "taskmanager_payments",
+  "cotations":           "taskmanager_cotations",
+  "suivi_clients":       "taskmanager_suiviclient_v1",
+  "suivi_clients_notes": "taskmanager_suiviclient_notes_v1",
 };
 
 // Core: IDB-only write (no LS bridge, no Firestore trigger).
@@ -15374,7 +15377,18 @@ function SuiviClientView({ settings }) {
   };
   const handleDelete = (id) => { const found = clients.find(c=>c.id===id); if(!found) return; const next = clients.filter(c=>c.id!==id); saveClients(next); if(selected?.id===id) setSelected(null); setDeletedClient(found); if(deleteTimer) clearTimeout(deleteTimer); setDeleteTimer(setTimeout(()=>setDeletedClient(null), 10000)); };
   const undoDelete = () => { if(!deletedClient) return; const next = [...clients, deletedClient].sort((a,b)=>Number(a.id)-Number(b.id)); saveClients(next); setDeletedClient(null); };
-  const saveNote = (id, html) => { const n={...notes,[id]:html}; setNotes(n); saveSuiviNotes(n); };
+  const saveNote = (id, html) => {
+    // 1) Stocke dans le map global notes → IDB "suivi_clients_notes"
+    const n = {...notes, [id]: html};
+    setNotes(n);
+    saveSuiviNotes(n);
+    // 2) Filet de sécurité : aussi écrit dans le champ `notes` du client lui-même (store "suivi_clients")
+    //    Si jamais le store dédié venait à manquer ou se vider, on a un backup dans le client.
+    const updated = clients.map(c => c.id === id ? {...c, notes: html} : c);
+    setClients(updated);
+    saveClients(updated);
+    if (selected && selected.id === id) setSelected({...selected, notes: html});
+  };
   const handleSort = (col) => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
   const si = (col) => sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : "";
   const FBtn = ({label,active,onClick,color}) => <button onClick={onClick} style={{ border:`1px solid ${active?(color||"#102A63"):"#E0E0E0"}`, background:active?(color||"#102A63"):"white", color:active?"white":"#666", borderRadius:20, padding:"3px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:active?700:400, flexShrink:0 }}>{label}</button>;
@@ -17276,7 +17290,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.640{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.641{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
