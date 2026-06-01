@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v645-1779107496"/>
+  <meta name="app-version" content="v646-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13218,8 +13218,8 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <div>{lblL("Différé (mois)","Phase initiale où seuls les intérêts sont payés")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="0" style={inpL}/></div>
               <div>{lblL("In fine (mois)","Mois en fin où le capital est remboursé en bloc")}<input type="text" value={localDos.differFin||""} onChange={e=>setL("differFin",e.target.value)} placeholder="0" style={inpL}/></div>
               <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
-              {/* Boutons Générer + Importer */}
-              <div style={{gridColumn:"1/-1",marginTop:6,display:"flex",flexDirection:"column",gap:6}}>
+              {/* Bouton Générer (prêts simples — pour les complexes, importer depuis la modale + Nouvel échéancier) */}
+              <div style={{gridColumn:"1/-1",marginTop:6}}>
                 <button onClick={regenererLocal}
                   disabled={!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut}
                   style={{
@@ -13229,47 +13229,10 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                     border:"none", borderRadius:8,
                     cursor:(!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut) ? "not-allowed" : "pointer",
                   }}>
-                  🔄 Générer l'échéancier (prêt simple)
+                  🔄 Générer l'échéancier
                 </button>
-                <div style={{fontSize:9,color:"#888",fontFamily:_FL,textAlign:"center"}}>— ou —</div>
-                <label style={{cursor:"pointer"}}>
-                  <input type="file" accept=".csv,.xlsx,.xls" style={{display:"none"}}
-                    onChange={e=>{
-                      const file = e.target.files[0]; if (!file) return;
-                      const ext = file.name.split(".").pop().toLowerCase();
-                      const apply = (rows) => {
-                        if (!rows || rows.length === 0) { alert("Aucune ligne trouvée dans le fichier."); return; }
-                        const u = {...localDos, lignes: rows};
-                        const calc = window.calcDossierAuto ? window.calcDossierAuto(u) : u;
-                        setLocalDos(calc);
-                        saveDossier(calc);
-                        alert("✓ " + rows.length + " lignes importées depuis " + file.name);
-                      };
-                      if (ext === "xlsx" || ext === "xls") {
-                        const r = new FileReader();
-                        r.onload = ev => apply(window.parseXLSXEcheancier(ev.target.result));
-                        r.readAsArrayBuffer(file);
-                      } else {
-                        const r = new FileReader();
-                        r.onload = ev => apply(window.parseCSVEcheancier(ev.target.result));
-                        r.readAsText(file, "UTF-8");
-                      }
-                      e.target.value = "";
-                    }} />
-                  <span style={{
-                    display:"block", textAlign:"center", padding:"8px 14px",
-                    fontSize:11, fontWeight:600, fontFamily:_FL,
-                    background:"#F0FDF4", color:"#065F46", border:"1.5px dashed #86EFAC",
-                    borderRadius:8, cursor:"pointer", transition:"all 0.15s",
-                  }}
-                  onMouseEnter={e=>{e.currentTarget.style.background="#D1FAE5";}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="#F0FDF4";}}>
-                    📥 Importer un échéancier Excel / CSV (prêt complexe)
-                  </span>
-                </label>
-                <div style={{fontSize:9,color:"#888",fontFamily:_FL,marginTop:2,textAlign:"center",lineHeight:1.5}}>
-                  Génération auto : remplis les 4 champs obligatoires.<br/>
-                  Import : pour prêts multi-phases, semestriels, ou tableaux fournis par la banque.
+                <div style={{fontSize:9,color:"#888",fontFamily:_FL,marginTop:4,textAlign:"center"}}>
+                  Renseigne au minimum montant, taux, durée et date début pour calculer l'échéancier.
                 </div>
               </div>
             </>) : (
@@ -17539,7 +17502,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.645{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.646{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
