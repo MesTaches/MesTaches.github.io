@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v642-1779107496"/>
+  <meta name="app-version" content="v643-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15423,7 +15423,14 @@ function SuiviClientView({ settings }) {
     }
     if(search && ![c.clientName,c.clientCode,c.description].some(v=>(v||"").toLowerCase().includes(search.toLowerCase()))) return false;
     return true;
-  }).sort((a,b)=>{ if(!sortCol) return 0; const va=(a[sortCol]||"").toLowerCase(), vb=(b[sortCol]||"").toLowerCase(); return (sortDir==="asc"?1:-1)*va.localeCompare(vb,"fr",{sensitivity:"base"}); });
+  }).sort((a,b)=>{
+    // 1) Les clôturés vont toujours en bas, peu importe le tri choisi
+    if (!!a.closed !== !!b.closed) return a.closed ? 1 : -1;
+    // 2) Sinon, tri sur la colonne sélectionnée (ou ordre naturel)
+    if(!sortCol) return 0;
+    const va=(a[sortCol]||"").toLowerCase(), vb=(b[sortCol]||"").toLowerCase();
+    return (sortDir==="asc"?1:-1)*va.localeCompare(vb,"fr",{sensitivity:"base"});
+  });
   const HeaderCell = ({col,label}) => {
     const w = colWidths[col] || 100;
     const startResize = (e) => {
@@ -15528,9 +15535,14 @@ function SuiviClientView({ settings }) {
               const pastReminder=c.reminderDate && c.reminderDate<today;
               return <div key={c.id} onClick={()=>setSelected(c)} style={{ display:"grid", gridTemplateColumns:`34px ${Math.max(70,colWidths.clientName)}px ${Math.max(60,colWidths.clientCode)}px ${Math.max(120,colWidths.description)}px ${Math.max(70,colWidths.suiviType)}px ${Math.max(70,colWidths.followupDate)}px ${Math.max(70,colWidths.reminderDate)}px ${Math.max(40,colWidths.actions)}px`, alignItems:"center", padding:"8px 12px", borderBottom:"1px solid #F5F5F5", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", cursor:"pointer", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:c.closed?0.55:1, transition:"background 0.12s", minWidth:"max-content" }}>
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }} style={{ width:14, height:14, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, color:"white", padding:0, lineHeight:1 }}>✓</button>
+                  <button onClick={e=>{e.stopPropagation(); const next=clients.map(x=>x.id===c.id?{...x, closed:!x.closed}:x); saveClients(next); if(selected?.id===c.id) setSelected({...c, closed:!c.closed}); }}
+                    title={c.closed ? "Rouvrir le suivi" : "Clôturer le suivi"}
+                    style={{ width:14, height:14, borderRadius:"50%", border:`2px solid ${c.closed ? "#27AE60" : "#BDC3C7"}`, background:c.closed ? "#27AE60" : "white", cursor:"pointer", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:8, color:"white", padding:0, lineHeight:1 }}>✓</button>
                 </div>
-                <div style={{ fontSize:10, fontWeight:600, color:"#2C3E50", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.clientName||"—"}</div>
+                <div style={{ fontSize:10, fontWeight:600, color: c.closed ? "#94A3B8" : "#2C3E50", textDecoration: c.closed ? "line-through" : "none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box", display:"flex", alignItems:"center", gap:5 }}>
+                  {c.clientName||"—"}
+                  {c.closed && <span style={{ fontSize:8, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:3, padding:"1px 5px", fontFamily:_DM, flexShrink:0, textDecoration:"none" }}>CLÔTURÉ</span>}
+                </div>
                 <div style={{ fontFamily:_DM, color:"#6B7280", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.clientCode||"—"}</div>
                 <div style={{ color:"#555", fontSize:10, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6, boxSizing:"border-box" }}>{c.description||"—"}</div>
                 <div>{st ? <span style={{ fontSize:8, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", fontFamily:_DM, whiteSpace:"nowrap" }}>{st.name}</span> : <span style={{ color:"#CCC", fontSize:10 }}>—</span>}</div>
@@ -15558,11 +15570,29 @@ function SuiviClientView({ settings }) {
           {selected ? <>
             <div style={{ padding:"12px 20px", borderBottom:"1px solid #ECEAE5", background:"white", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
-                <div style={{ fontSize:13, fontWeight:700, fontFamily:_FL, color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:_DM }}>Clôturé</span>}</div>
-<div style={{ fontSize:10, fontFamily:_DM, color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
+                <div style={{ fontSize:13, fontWeight:700, fontFamily:_FL, color: selected.closed ? "#94A3B8" : "#102A63", textDecoration: selected.closed ? "line-through" : "none", display:"flex", alignItems:"center", gap:8 }}>
+                  {selected.clientName}
+                  {selected.closed && <span style={{ fontSize:10, background:"#D1FAE5", color:"#065F46", borderRadius:4, padding:"2px 8px", fontFamily:_DM, textDecoration:"none", fontWeight:700 }}>✓ Clôturé</span>}
+                </div>
+                <div style={{ fontSize:10, fontFamily:_DM, color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                 <div style={{ fontSize:10, fontFamily:_DM, color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div>
+                <button onClick={()=>{
+                  const next = clients.map(x => x.id === selected.id ? {...x, closed: !x.closed} : x);
+                  saveClients(next);
+                  setSelected({...selected, closed: !selected.closed});
+                }}
+                  title={selected.closed ? "Rouvrir ce suivi" : "Marquer comme clôturé"}
+                  style={{
+                    border: selected.closed ? "1px solid #BBF7D0" : "1px solid #E0E0E0",
+                    background: selected.closed ? "#F0FDF4" : "white",
+                    color: selected.closed ? "#065F46" : "#102A63",
+                    borderRadius: 20, padding: "4px 12px", cursor: "pointer",
+                    fontFamily: _DM, fontSize: 10, fontWeight: 600,
+                  }}>
+                  {selected.closed ? "↻ Rouvrir" : "✓ Clôturer"}
+                </button>
                 <button onClick={()=>{
                   const subject = encodeURIComponent(`Suivi client - ${selected.clientName}`);
                   const body = encodeURIComponent(htmlToPlainText(notes[selected.id]||""));
@@ -17314,7 +17344,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.642{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.643{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
