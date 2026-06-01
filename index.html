@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v641-1779107496"/>
+  <meta name="app-version" content="v642-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -646,7 +646,8 @@ const LS_TO_STORE = {
   "taskmanager_reports":         "reports",
   "echeancier_dossiers_v1":      "echeancier",
   "taskmanager_rcf_v1":          "rcf",
-  "taskmanager_suiviclient_v1":  "suivi_clients",
+  "taskmanager_suiviclient_v1":       "suivi_clients",
+  "taskmanager_suiviclient_notes_v1": "suivi_clients_notes",
   "taskmanager_meetings_v1":     "meetings",
   "taskmanager_responsables_v1": "responsables",
   "taskmanager_settings_v1":     "settings",
@@ -924,6 +925,27 @@ async function appDbGetAll() {
     if (v !== null) result[store] = v;
   }
   return result;
+}
+
+// Migration ciblée (s'exécute UNE FOIS pour tout le monde, en plus de migrateAllToIDB).
+// Récupère les notes de suivi clients restées en localStorage avant que le store IDB existe.
+async function migrateSuiviNotesFromLS() {
+  const FLAG = "migrate_suivi_notes_v1_done";
+  if (localStorage.getItem(FLAG)) return;
+  try {
+    const raw = localStorage.getItem("taskmanager_suiviclient_notes_v1");
+    if (raw) {
+      const lsData = JSON.parse(raw);
+      if (lsData && typeof lsData === "object" && Object.keys(lsData).length > 0) {
+        // Fusionne avec ce qui existe déjà en IDB (priorité aux notes IDB plus récentes)
+        const idbData = await appDbGet("suivi_clients_notes");
+        const merged = Object.assign({}, lsData, (idbData && typeof idbData === "object") ? idbData : {});
+        await appDbSet("suivi_clients_notes", merged);
+        console.log("Migré", Object.keys(lsData).length, "notes de suivi clients depuis localStorage vers IDB");
+      }
+    }
+  } catch(e) { console.warn("migrateSuiviNotesFromLS:", e && e.message); }
+  try { localStorage.setItem(FLAG, "1"); } catch(e) {}
 }
 
 async function migrateAllToIDB() {
@@ -16853,6 +16875,8 @@ function App() {
   useEffect(() => {
     (async () => {
       await migrateAllToIDB();
+      // Récupération des notes Suivi clients laissées en localStorage (bug pré-v0.641)
+      await migrateSuiviNotesFromLS();
       // First-run protection: push any LOCAL IDB data into LS so it reaches
       // Firestore. Prevents loss when local IDB is newer than the cloud.
       await bootstrapPushLocalToSync();
@@ -17290,7 +17314,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.641{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.642{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
