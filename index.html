@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v638-1779107496"/>
+  <meta name="app-version" content="v639-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2143,8 +2143,8 @@ function RichTextArea({ value, onChange, placeholder, rows = 5, showAi = false, 
       style={{ border: "1px solid #E0E0E0", background: "white", borderRadius: 4, padding: "2px 7px", fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace", color: "#555", lineHeight: 1.5, minWidth: 24 }}>{label}</button>
   );
   return (
-    <div ref={wrapRef} style={{ border: "1px solid #E8E8E8", borderRadius: 8, overflow: "hidden", background: "#FAFAFA", position: "relative" }}>
-      <div style={{ display: "flex", gap: 4, padding: "5px 8px", borderBottom: "1px solid #F0F0F0", background: "white", flexWrap: "wrap", alignItems: "center" }}>
+    <div ref={wrapRef} style={{ border: "1px solid #E8E8E8", borderRadius: 8, background: "#FAFAFA", position: "relative" }}>
+      <div style={{ display: "flex", gap: 4, padding: "5px 8px", borderBottom: "1px solid #F0F0F0", background: "white", flexWrap: "wrap", alignItems: "center", position: "sticky", top: 0, zIndex: 5, borderRadius: "8px 8px 0 0" }}>
         <ToolBtn cmd="bold"   label={<strong>G</strong>} title="Gras" />
         <ToolBtn cmd="underline" label={<u>S</u>} title="Souligner" />
         <ToolBtn cmd="italic" label={<em>I</em>} title="Italique" />
@@ -8652,6 +8652,68 @@ const PAYMENT_PRIORITIES = [
   { id: "normal",      label: "Normal",      icon: "▬ P3", color: "#7F8C8D" },
   { id: "faible",      label: "Faible",      icon: "▼ P4", color: "#27AE60" },
 ];
+
+// Convertit un HTML enrichi (RichTextArea) en texte brut structuré pour un mail :
+// - <br>, <p>, <div>     → saut de ligne
+// - <li>                 → "• " + contenu + saut de ligne
+// - <input checkbox>     → "[ ]" ou "[x]"
+// - <hr>                 → ligne de séparation "----"
+// - <h1/h2/h3>           → contenu en majuscules + sauts de ligne
+// - &nbsp;, entités HTML → caractères correspondants
+// - autres balises       → contenu uniquement (suppression de la balise)
+function htmlToPlainText(html) {
+  if (!html || typeof html !== "string") return "";
+  // Parse via un container DOM jetable pour gérer correctement les entités et la structure
+  var d = document.createElement("div");
+  d.innerHTML = html;
+  var out = [];
+  var walk = function(node, ctx) {
+    ctx = ctx || {};
+    if (node.nodeType === 3) {                                  // text node
+      out.push(node.nodeValue.replace(/ /g, " "));
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    var tag = node.tagName.toLowerCase();
+    if (tag === "br") { out.push("\n"); return; }
+    if (tag === "hr") { out.push("\n----------\n"); return; }
+    if (tag === "input" && node.type === "checkbox") {
+      out.push(node.checked ? "[x] " : "[ ] ");
+      return;
+    }
+    var block = ["p","div","section","article","header","footer","tr"].indexOf(tag) >= 0;
+    var heading = /^h[1-6]$/.test(tag);
+    var isLi = tag === "li";
+    if (isLi) {
+      // Préfixe selon le type de parent ul/ol
+      var parent = node.parentElement;
+      var bullet = "• ";
+      if (parent && parent.tagName && parent.tagName.toLowerCase() === "ol") {
+        // numéroter
+        var idx = 1;
+        var s = node.previousElementSibling;
+        while (s) { if (s.tagName && s.tagName.toLowerCase() === "li") idx++; s = s.previousElementSibling; }
+        bullet = idx + ". ";
+      }
+      out.push(bullet);
+    }
+    if (heading) out.push("\n");
+    var startLen = out.length;
+    for (var i = 0; i < node.childNodes.length; i++) walk(node.childNodes[i], ctx);
+    if (heading) {
+      // upper-case le contenu du heading
+      for (var j = startLen; j < out.length; j++) out[j] = String(out[j]).toUpperCase();
+      out.push("\n");
+    }
+    if (block || isLi) out.push("\n");
+  };
+  for (var i = 0; i < d.childNodes.length; i++) walk(d.childNodes[i], {});
+  // Nettoyage : merge \n consécutifs (max 2), trim espaces en bord de ligne
+  return out.join("")
+    .replace(/[ \t]+\n/g, "\n")          // espaces en fin de ligne
+    .replace(/\n{3,}/g, "\n\n")           // max 2 sauts de ligne consécutifs
+    .replace(/^\s+|\s+$/g, "");           // trim global
+}
 
 function fmtEuro(n) {
   if (n === "" || n === null || n === undefined) return "—";
@@ -15457,7 +15519,14 @@ function SuiviClientView({ settings }) {
                 <div style={{ fontSize:13, fontWeight:700, fontFamily:_FL, color:"#102A63", display:"flex", alignItems:"center", gap:8 }}>{selected.clientName}{selected.closed && <span style={{ fontSize:10, background:"#F0F0F0", color:"#888", borderRadius:4, padding:"2px 7px", fontFamily:_DM }}>Clôturé</span>}</div>
 <div style={{ fontSize:10, fontFamily:_DM, color:"#AAA", marginTop:2 }}>{selected.clientCode}{selected.followupDate ? ` · Suivi : ${selected.followupDate.split("-").reverse().join("/")}` : ""}{selected.reminderDate ? ` · Rappel : ${selected.reminderDate.split("-").reverse().join("/")}` : ""}</div>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}><div style={{ fontSize:10, fontFamily:_DM, color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div><button onClick={()=>{ const subject = encodeURIComponent(`Suivi client - ${selected.clientName}`); const body = encodeURIComponent((notes[selected.id]||"").replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim()); window.location.href = `mailto:?subject=${subject}&body=${body}`; }} style={{ border:"1px solid #E0E0E0", background:"white", color:"#102A63", borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:_DM, fontSize:10 }}>✉ Envoyer par mail</button></div>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <div style={{ fontSize:10, fontFamily:_DM, color:"#27AE60", opacity:0.8 }}>✓ Auto-sauvegarde</div>
+                <button onClick={()=>{
+                  const subject = encodeURIComponent(`Suivi client - ${selected.clientName}`);
+                  const body = encodeURIComponent(htmlToPlainText(notes[selected.id]||""));
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }} style={{ border:"1px solid #E0E0E0", background:"white", color:"#102A63", borderRadius:20, padding:"4px 10px", cursor:"pointer", fontFamily:_DM, fontSize:10 }}>✉ Envoyer par mail</button>
+              </div>
             </div>
             <div style={{ flex:1, padding:16, overflow:"auto" }}>
               {/* Notes de suivi — pré-rempli avec la note de création si vide */}
@@ -17201,7 +17270,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.638{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.639{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
