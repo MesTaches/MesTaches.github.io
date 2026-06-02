@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v646-1779107496"/>
+  <meta name="app-version" content="v647-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,7 +79,7 @@ const _fbApp = firebase.initializeApp({
 const _db = firebase.firestore();
 const _auth = firebase.auth();
 
-const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1", "taskmanager_payments", "taskmanager_cotations", "taskmanager_suiviclient_v1", "taskmanager_suiviclient_notes_v1"];
+const SYNC_KEYS = ["taskmanager_v4", "taskmanager_settings_v1", "taskmanager_meetings_v1", "devtracker_tasks_v1", "devtracker_settings_v1", "contentieux_dossiers_v1", "contentieux_settings_v1", "taskmanager_payments", "taskmanager_cotations", "taskmanager_suiviclient_v1", "taskmanager_suiviclient_notes_v1", "taskmanager_recouvrement_v1"];
 let _uid = null;
 let _debounce = {};
 let _reactMounted = false;
@@ -750,7 +750,7 @@ function useIsMobile() {
    APP_DB  —  couche IndexedDB universelle (tous modules)
    ════════════════════════════════════════════════════════ */
 const APP_DB_NAME    = "app_main_db";
-const APP_DB_VERSION = 3;
+const APP_DB_VERSION = 4;
 
 const APP_STORES = [
   "tasks",          // Tâches principales (STORAGE_KEY)
@@ -764,6 +764,7 @@ const APP_STORES = [
   "rcf",            // RCF
   "suivi_clients",  // Suivi client
   "suivi_clients_notes", // Notes des suivis clients (ajouté v3, manquait avant — entraînait des écritures silencieusement perdues)
+  "recouvrement",   // Suivi recouvrement / encours à risque (ajouté v4)
   "meetings",       // Réunions
   "responsables",   // Responsables
   "settings",       // Paramètres
@@ -787,6 +788,7 @@ const LS_TO_STORE = {
   "taskmanager_rcf_v1":          "rcf",
   "taskmanager_suiviclient_v1":       "suivi_clients",
   "taskmanager_suiviclient_notes_v1": "suivi_clients_notes",
+  "taskmanager_recouvrement_v1":      "recouvrement",
   "taskmanager_meetings_v1":     "meetings",
   "taskmanager_responsables_v1": "responsables",
   "taskmanager_settings_v1":     "settings",
@@ -842,6 +844,7 @@ const STORE_TO_SYNC_KEY = {
   "cotations":           "taskmanager_cotations",
   "suivi_clients":       "taskmanager_suiviclient_v1",
   "suivi_clients_notes": "taskmanager_suiviclient_notes_v1",
+  "recouvrement":        "taskmanager_recouvrement_v1",
 };
 
 // Core: IDB-only write (no LS bridge, no Firestore trigger).
@@ -909,8 +912,8 @@ async function bridgeSyncToIDB(opts) {
 
 const BACKUP_STORES = [
   "tasks", "meetings", "payments", "cotations", "contentieux", "dev",
-  "rcf", "echeancier", "reports", "suivi_clients", "responsables",
-  "settings", "user_profiles",
+  "rcf", "echeancier", "reports", "suivi_clients", "suivi_clients_notes",
+  "recouvrement", "responsables", "settings", "user_profiles",
 ];
 
 async function exportAllDataJSON() {
@@ -6082,6 +6085,7 @@ const ALL_TABS = [
   { id: "calendar",      label: "Calendrier",       icon: "◻" },
   { id: "notifications", label: "Rappels",          icon: "◔" },
   { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
+  { id: "recouvrement",  label: "Recouvrement",     icon: "⚠" },
   { id: "echeancier",    label: "Emprunts",            icon: "▦" },
   { id: "rcf",           label: "RCF",               icon: "↺" },
   { id: "creditbail",    label: "Crédit-bail",      icon: "🧾" },
@@ -15503,6 +15507,335 @@ function SuiviClientModal({ item, onSave, onClose, suiviTypes }) {
   );
 }
 
+/* ═══════════════════════════════════════════════
+   RECOUVREMENT — suivi des encours à risque / clients en retard
+═══════════════════════════════════════════════ */
+const REC_GRAVITE = [
+  { id:"critique",     name:"Critique",     color:"#B91C1C", bg:"#FEE2E2", dot:"🔴", rank:0 },
+  { id:"tension",      name:"Tension",      color:"#A16207", bg:"#FEF9C3", dot:"🟠", rank:1 },
+  { id:"surveillance", name:"Surveillance", color:"#15803D", bg:"#DCFCE7", dot:"🟢", rank:2 },
+];
+const REC_STATUT = [
+  { id:"relance",        name:"Relance amiable",  color:"#1D4ED8", bg:"#DBEAFE" },
+  { id:"miseendemeure",  name:"Mise en demeure",  color:"#C2410C", bg:"#FFEDD5" },
+  { id:"precontentieux", name:"Pré-contentieux",  color:"#9333EA", bg:"#F3E8FF" },
+  { id:"plan",           name:"Plan d'apurement", color:"#0891B2", bg:"#CFFAFE" },
+  { id:"solde",          name:"Soldé",            color:"#15803D", bg:"#DCFCE7" },
+];
+const REC_CHEZQUI = [
+  { id:"moi",        name:"Moi" },
+  { id:"commercial", name:"Commercial" },
+  { id:"juridique",  name:"Juridique" },
+  { id:"avocat",     name:"Avocat" },
+  { id:"client",     name:"Client (attente réponse)" },
+];
+const REC_ASSUR = [
+  { id:"couvert",    name:"Couvert",        color:"#15803D", bg:"#DCFCE7" },
+  { id:"noncouvert", name:"Non couvert",    color:"#B91C1C", bg:"#FEE2E2" },
+  { id:"encours",    name:"Demande en cours", color:"#A16207", bg:"#FEF9C3" },
+];
+function _mkRec() {
+  return { id: uid(), clientName:"", clientCode:"", cotation:"", gravite:"surveillance",
+    assuranceCredit:"", encoursTotal:"", montantEchu:"", plafond:"", dateEcheanceAncienne:"",
+    statut:"relance", chezQui:"moi", litige:false, litigeNature:"",
+    dateProchainSuivi:"", dateMiseEnDemeure:"", dateLimite:"", notes:"", closed:false,
+    createdAt:new Date().toISOString() };
+}
+
+function RecouvrementView({ settings }) {
+  const isMobile = useIsMobile();
+  const today0 = today();
+  const [dossiers, setDossiers] = React.useState([]);
+  const [ready, setReady] = React.useState(false);
+  const [selId, setSelId] = React.useState(null);
+  const [search, setSearch] = React.useState("");
+  const [filterGravite, setFilterGravite] = React.useState("Tous");
+  const [filterStatut, setFilterStatut] = React.useState("Actifs");
+  const [undoDel, setUndoDel] = React.useState(null);
+  const undoTimerRef = React.useRef(null);
+
+  // Chargement IDB + fallback localStorage + écoute sync distante
+  const reload = React.useCallback(async () => {
+    try {
+      let v = await appDbGet("recouvrement");
+      if (!v || (Array.isArray(v) && v.length === 0)) {
+        const raw = localStorage.getItem("taskmanager_recouvrement_v1");
+        if (raw) { try { const p = JSON.parse(raw); if (Array.isArray(p) && p.length) { v = p; await _appDbSetCore("recouvrement", v); } } catch {} }
+      }
+      if (v && Array.isArray(v)) setDossiers(v);
+    } catch(e) {}
+    setReady(true);
+  }, []);
+  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    const h = (e) => { if (e && e.detail && e.detail.key === "taskmanager_recouvrement_v1") reload(); };
+    window.addEventListener("idbStoreUpdated", h);
+    return () => window.removeEventListener("idbStoreUpdated", h);
+  }, [reload]);
+
+  const save = (list) => { setDossiers(list); appDbSet("recouvrement", list); };
+  const sel = dossiers.find(d => d.id === selId) || null;
+  const updSel = (patch) => {
+    if (!sel) return;
+    const next = dossiers.map(d => d.id === sel.id ? {...d, ...patch} : d);
+    save(next);
+  };
+  const addNew = () => { const r = _mkRec(); save([r, ...dossiers]); setSelId(r.id); };
+  const del = (id) => {
+    const found = dossiers.find(d => d.id === id); if (!found) return;
+    save(dossiers.filter(d => d.id !== id));
+    if (selId === id) setSelId(null);
+    setUndoDel(found);
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    undoTimerRef.current = setTimeout(() => setUndoDel(null), 10000);
+  };
+  const undoDelete = () => {
+    if (!undoDel) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    save([undoDel, ...dossiers]);
+    setSelId(undoDel.id);
+    setUndoDel(null);
+  };
+
+  const gravObj = (g) => REC_GRAVITE.find(x => x.id === g) || REC_GRAVITE[2];
+  const statObj = (s) => REC_STATUT.find(x => x.id === s) || REC_STATUT[0];
+  const ancienneteJours = (d) => {
+    if (!d.dateEcheanceAncienne) return null;
+    const diff = Math.floor((new Date(today0) - new Date(d.dateEcheanceAncienne)) / 86400000);
+    return diff >= 0 ? diff : null;
+  };
+  const depassement = (d) => {
+    const enc = parseNum(d.encoursTotal) || 0, pla = parseNum(d.plafond) || 0;
+    return (pla > 0 && enc > pla) ? enc - pla : 0;
+  };
+
+  // Filtrage + tri (critique en haut, clôturés en bas)
+  const filtered = dossiers.filter(d => {
+    if (filterStatut === "Actifs" && d.closed) return false;
+    if (filterStatut === "Clôturés" && !d.closed) return false;
+    if (filterGravite !== "Tous" && d.gravite !== filterGravite) return false;
+    if (search && ![d.clientName, d.clientCode].some(v => (v||"").toLowerCase().includes(search.toLowerCase()))) return false;
+    return true;
+  }).sort((a,b) => {
+    if (!!a.closed !== !!b.closed) return a.closed ? 1 : -1;
+    const ra = gravObj(a.gravite).rank, rb = gravObj(b.gravite).rank;
+    if (ra !== rb) return ra - rb;
+    return (parseNum(b.montantEchu)||0) - (parseNum(a.montantEchu)||0);
+  });
+
+  // KPI (sur les actifs)
+  const actifs = dossiers.filter(d => !d.closed);
+  const totalEncours = actifs.reduce((s,d) => s + (parseNum(d.encoursTotal)||0), 0);
+  const totalEchu = actifs.reduce((s,d) => s + (parseNum(d.montantEchu)||0), 0);
+  const nbCritiques = actifs.filter(d => d.gravite === "critique").length;
+
+  const inp = { border:"1px solid #E8E8E8", borderRadius:6, padding:"6px 9px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"white" };
+  const lbl = (t) => <div style={{ fontSize:9, fontWeight:700, color:"#102A63", fontFamily:_DM, marginBottom:3, letterSpacing:"0.05em" }}>{t}</div>;
+  const fmtJ = (n) => n === null ? "—" : n + " j";
+
+  if (!ready) return <div style={{ padding:40, fontFamily:_FL, color:"#94A3B8" }}>Chargement…</div>;
+
+  return (
+    <div style={{ display:"flex", width:"100%", height:"100%", minHeight:"calc(100vh - 56px)", fontFamily:_FL, background:"#F7F6F3", flexDirection:"column" }}>
+
+      {/* KPI bar */}
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"12px 20px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, flexShrink:0 }}>
+        {[
+          { label:"Dossiers actifs", val:actifs.length, color:"#102A63" },
+          { label:"Encours à risque", val:fmtEuro(totalEncours), color:"#1D4ED8" },
+          { label:"Échu impayé", val:fmtEuro(totalEchu), color:"#C0392B" },
+          { label:"Critiques", val:nbCritiques, color:"#B91C1C" },
+        ].map(k => (
+          <div key={k.label} style={{ textAlign:"center" }}>
+            <div style={{ fontSize:9, color:"#AAA", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:2 }}>{k.label}</div>
+            <div style={{ fontSize:16, fontWeight:700, color:k.color, fontFamily:_DM, fontVariantNumeric:"tabular-nums" }}>{k.val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
+        {/* ── Liste gauche ── */}
+        <div style={{ width:380, flexShrink:0, borderRight:"1px solid #ECEAE5", background:"white", display:"flex", flexDirection:"column" }}>
+          <div style={{ padding:"10px 14px", borderBottom:"1px solid #F0F0F0", display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ display:"flex", gap:6 }}>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...inp, fontSize:11 }} />
+              <button onClick={addNew} style={{ ...S.btn("#102A63"), padding:"6px 12px", fontSize:11, whiteSpace:"nowrap", flexShrink:0 }}>+ Client</button>
+            </div>
+            <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+              {["Actifs","Clôturés","Tous"].map(f => (
+                <button key={f} onClick={()=>setFilterStatut(f)} style={{ border:"1px solid "+(filterStatut===f?"#102A63":"#E0E0E0"), background:filterStatut===f?"#102A63":"white", color:filterStatut===f?"white":"#666", borderRadius:20, padding:"3px 10px", fontSize:10, cursor:"pointer", fontFamily:_FL, fontWeight:filterStatut===f?700:400 }}>{f}</button>
+              ))}
+              <span style={{ width:1, background:"#E8E8E8", margin:"0 2px" }} />
+              <button onClick={()=>setFilterGravite("Tous")} style={{ border:"1px solid "+(filterGravite==="Tous"?"#102A63":"#E0E0E0"), background:filterGravite==="Tous"?"#102A63":"white", color:filterGravite==="Tous"?"white":"#666", borderRadius:20, padding:"3px 10px", fontSize:10, cursor:"pointer", fontFamily:_FL }}>Toutes</button>
+              {REC_GRAVITE.map(g => (
+                <button key={g.id} onClick={()=>setFilterGravite(g.id)} title={g.name} style={{ border:"1px solid "+(filterGravite===g.id?g.color:"#E0E0E0"), background:filterGravite===g.id?g.bg:"white", color:g.color, borderRadius:20, padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:_FL, fontWeight:filterGravite===g.id?700:400 }}>{g.dot}</button>
+              ))}
+            </div>
+          </div>
+          <div style={{ flex:1, overflowY:"auto" }}>
+            {filtered.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"40px 16px", color:"#CCC", fontFamily:_FL, fontSize:13 }}>
+                {dossiers.length === 0 ? "Aucun dossier — cliquez sur « + Client »" : "Aucun résultat"}
+              </div>
+            ) : filtered.map(d => {
+              const g = gravObj(d.gravite), st = statObj(d.statut);
+              const active = selId === d.id;
+              const anc = ancienneteJours(d);
+              return (
+                <div key={d.id} onClick={()=>setSelId(d.id)} style={{ padding:"10px 14px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":"white", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:d.closed?0.55:1 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7, marginBottom:4 }}>
+                    <span style={{ fontSize:10 }}>{g.dot}</span>
+                    <span style={{ flex:1, fontSize:12.5, fontWeight:700, color:d.closed?"#94A3B8":"#1E293B", textDecoration:d.closed?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientName||"(sans nom)"}</span>
+                    {d.closed && <span style={{ fontSize:8, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:3, padding:"1px 5px", fontFamily:_DM, flexShrink:0 }}>SOLDÉ</span>}
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, justifyContent:"space-between" }}>
+                    <span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"1px 6px", fontFamily:_DM, whiteSpace:"nowrap" }}>{st.name}</span>
+                    {(parseNum(d.montantEchu)||0) > 0 && <span style={{ fontSize:11, fontWeight:700, color:"#C0392B", fontFamily:_DM, fontVariantNumeric:"tabular-nums" }}>{fmtEuro(d.montantEchu)}</span>}
+                  </div>
+                  {(d.clientCode || anc !== null) && (
+                    <div style={{ fontSize:9, color:"#94A3B8", fontFamily:_DM, marginTop:3 }}>
+                      {d.clientCode||""}{d.clientCode && anc!==null ? " · " : ""}{anc!==null ? "retard "+fmtJ(anc) : ""}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_DM, color:"#AAA" }}>{filtered.length} dossier{filtered.length!==1?"s":""}</div>
+        </div>
+
+        {/* ── Détail droite ── */}
+        <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC", overflow:"hidden" }}>
+          {!sel ? (
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14, color:"#AAA" }}>
+              <div style={{ fontSize:40 }}>⚠</div>
+              <div style={{ fontSize:14, fontFamily:_FL, fontStyle:"italic", color:"#9CA3AF" }}>Sélectionnez ou créez un dossier de recouvrement</div>
+              <button onClick={addNew} style={S.btn("#102A63")}>+ Nouveau dossier</button>
+            </div>
+          ) : (
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
+              {/* En-tête détail */}
+              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:16 }}>
+                <div style={{ flex:1 }}>
+                  <input value={sel.clientName} onChange={e=>updSel({clientName:e.target.value})} placeholder="Nom du client" style={{ ...inp, fontSize:18, fontWeight:700, color: sel.closed?"#94A3B8":"#102A63", border:"none", background:"transparent", padding:"2px 0", textDecoration:sel.closed?"line-through":"none" }} />
+                  <div style={{ fontSize:10, fontFamily:_DM, color:"#AAA", marginTop:2 }}>Créé le {fmtDate(sel.createdAt ? sel.createdAt.split("T")[0] : today0)}</div>
+                </div>
+                <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+                  <button onClick={()=>updSel({closed:!sel.closed})}
+                    style={{ border:sel.closed?"1px solid #BBF7D0":"1px solid #E0E0E0", background:sel.closed?"#F0FDF4":"white", color:sel.closed?"#065F46":"#102A63", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_DM, fontSize:10, fontWeight:600 }}>
+                    {sel.closed ? "↻ Rouvrir" : "✓ Solder"}
+                  </button>
+                  <button onClick={()=>del(sel.id)} title="Supprimer" style={{ border:"1px solid #E0E0E0", background:"white", color:"#C0392B", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_DM, fontSize:10 }}>🗑</button>
+                </div>
+              </div>
+
+              {/* Section 1 — Identification & risque */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:10 }}>IDENTIFICATION & RISQUE</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div>{lbl("CODE CLIENT")}<input value={sel.clientCode} onChange={e=>updSel({clientCode:e.target.value})} style={inp} /></div>
+                  <div>{lbl("COTATION / NOTE")}<input value={sel.cotation} onChange={e=>updSel({cotation:e.target.value})} placeholder="Ex: Allianz 8" style={inp} /></div>
+                  <div>
+                    {lbl("GRAVITÉ")}
+                    <div style={{ display:"flex", gap:5 }}>
+                      {REC_GRAVITE.map(g => (
+                        <button key={g.id} onClick={()=>updSel({gravite:g.id})} style={{ flex:1, border:"1px solid "+(sel.gravite===g.id?g.color:"#E0E0E0"), background:sel.gravite===g.id?g.bg:"white", color:g.color, borderRadius:6, padding:"5px 4px", fontSize:9, fontWeight:700, cursor:"pointer", fontFamily:_DM, whiteSpace:"nowrap" }}>{g.dot} {g.name}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    {lbl("ASSURANCE-CRÉDIT")}
+                    <select value={sel.assuranceCredit} onChange={e=>updSel({assuranceCredit:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
+                      <option value="">— Non renseigné —</option>
+                      {REC_ASSUR.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2 — Montants */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:10 }}>MONTANTS</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+                  <div>{lbl("ENCOURS TOTAL (€)")}<input value={sel.encoursTotal} onChange={e=>updSel({encoursTotal:e.target.value})} placeholder="0" style={{ ...inp, fontFamily:_DM, textAlign:"right" }} /></div>
+                  <div>{lbl("ÉCHU IMPAYÉ (€)")}<input value={sel.montantEchu} onChange={e=>updSel({montantEchu:e.target.value})} placeholder="0" style={{ ...inp, fontFamily:_DM, textAlign:"right", color:"#C0392B" }} /></div>
+                  <div>{lbl("PLAFOND AUTORISÉ (€)")}<input value={sel.plafond} onChange={e=>updSel({plafond:e.target.value})} placeholder="0" style={{ ...inp, fontFamily:_DM, textAlign:"right" }} /></div>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
+                  <div>{lbl("PLUS VIEILLE ÉCHÉANCE IMPAYÉE")}<input type="date" value={sel.dateEcheanceAncienne} onChange={e=>updSel({dateEcheanceAncienne:e.target.value})} style={inp} /></div>
+                  <div style={{ display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:4 }}>
+                    {depassement(sel) > 0 && (
+                      <div style={{ fontSize:11, fontFamily:_DM, color:"#B91C1C", background:"#FEE2E2", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⚠ Dépassement plafond : {fmtEuro(depassement(sel))}</div>
+                    )}
+                    {ancienneteJours(sel) !== null && (
+                      <div style={{ fontSize:11, fontFamily:_DM, color:"#A16207", background:"#FEF9C3", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⏱ Retard de {ancienneteJours(sel)} jours</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3 — Workflow d'action */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:10 }}>WORKFLOW D'ACTION</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                  <div>
+                    {lbl("STATUT")}
+                    <select value={sel.statut} onChange={e=>updSel({statut:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
+                      {REC_STATUT.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    {lbl("CHEZ QUI EST L'ACTION ?")}
+                    <select value={sel.chezQui} onChange={e=>updSel({chezQui:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
+                      {REC_CHEZQUI.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{ marginTop:10 }}>
+                  <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, fontFamily:_FL, color:"#555", userSelect:"none" }}>
+                    <input type="checkbox" checked={sel.litige||false} onChange={e=>updSel({litige:e.target.checked})} style={{ accentColor:"#C0392B", cursor:"pointer", width:15, height:15 }} />
+                    Litige en cours
+                  </label>
+                  {sel.litige && (
+                    <input value={sel.litigeNature} onChange={e=>updSel({litigeNature:e.target.value})} placeholder="Nature du litige (contestation facture, qualité, délai…)" style={{ ...inp, marginTop:7 }} />
+                  )}
+                </div>
+              </div>
+
+              {/* Section 4 — Échéances clés */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:10 }}>ÉCHÉANCES CLÉS</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+                  <div>{lbl("PROCHAIN SUIVI")}<input type="date" value={sel.dateProchainSuivi} onChange={e=>updSel({dateProchainSuivi:e.target.value})} style={inp} /></div>
+                  <div>{lbl("ENVOI MISE EN DEMEURE")}<input type="date" value={sel.dateMiseEnDemeure} onChange={e=>updSel({dateMiseEnDemeure:e.target.value})} style={inp} /></div>
+                  <div>{lbl("DATE LIMITE D'ACTION")}<input type="date" value={sel.dateLimite} onChange={e=>updSel({dateLimite:e.target.value})} style={inp} /></div>
+                </div>
+              </div>
+
+              {/* Section 5 — Historique / Notes */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px" }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_DM, letterSpacing:"0.06em", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <span>HISTORIQUE DU SUIVI</span>
+                  <span style={{ fontSize:9, color:"#27AE60", fontWeight:600 }}>✓ Auto-sauvegarde</span>
+                </div>
+                <RichTextArea key={sel.id} value={sel.notes||""} onChange={v=>updSel({notes:v})} placeholder="Journal des échanges, promesses de paiement, décisions, courriers envoyés…" rows={10} showAi={!!(settings&&settings.groqKey)} groqKey={(settings&&settings.groqKey)||""} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bandeau undo suppression */}
+      {undoDel && (
+        <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#102A63", color:"#fff", padding:"12px 20px", borderRadius:10, boxShadow:"0 4px 18px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:14, fontFamily:_FL, fontSize:13 }}>
+          <span>Dossier « {undoDel.clientName||"(sans nom)"} » supprimé</span>
+          <button onClick={undoDelete} style={{ background:"#F4D35E", color:"#102A63", border:"none", borderRadius:6, padding:"6px 14px", fontWeight:700, cursor:"pointer", fontFamily:_FL, fontSize:12 }}>↶ Annuler</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SuiviClientView({ settings }) {
   const isMobile = useIsMobile();
   const suiviTypes = settings?.suiviTypes || [
@@ -17380,6 +17713,7 @@ function App() {
     { id: "calendar",      label: "Calendrier",       icon: "◻" },
     { id: "notifications", label: "Rappels",          icon: "◔",  badge: notifBadge, iconColor: "white" },
     { id: "suiviclient",   label: "Suivi clients",    icon: "◈" },
+    { id: "recouvrement",  label: "Recouvrement",     icon: "⚠" },
     { id: "contentieux",   label: "Contentieux",      icon: "⚖" },
     { id: "cotation",      label: "Cotation",         icon: "◎" },
     { id: "reporting",     label: "Reporting",        icon: "▤" },
@@ -17421,7 +17755,7 @@ function App() {
   const hiddenTabs = settings.hiddenTabs || [];
   const visibleNav = NAV.filter(n => n.id === "tasks" || n.id === "settings" || !hiddenTabs.includes(n.id));
 
-  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "meetings";
+  const isFullWidthView = view === "tasks" || view === "categorytasks" || view === "cotation" || view === "suiviclient" || view === "recouvrement" || view === "meetings";
 
   return (
     <div style={{ minHeight: "100vh", width: "100%", background: "#F7F6F3", fontFamily: "'Lora',serif", display: "flex" }}>
@@ -17461,7 +17795,7 @@ function App() {
         ))}
         {/* Section : Suivi */}
         <div style={{ fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.3)", padding: "14px 18px 4px", letterSpacing: "1.5px", textTransform: "uppercase", flexShrink: 0 }}>Suivi</div>
-        {visibleNav.filter(n => ["suiviclient","contentieux","cotation","reporting"].includes(n.id)).map(n => (
+        {visibleNav.filter(n => ["suiviclient","recouvrement","contentieux","cotation","reporting"].includes(n.id)).map(n => (
           <button key={n.id} onClick={() => { setView(n.id); setSidebarOpen(false); }}
             style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", border: "none", background: view === n.id ? "rgba(255,255,255,0.13)" : "transparent", color: view === n.id ? "white" : "rgba(255,255,255,0.55)", borderLeft: view === n.id ? "3px solid #7EB8F7" : "3px solid transparent", padding: "8px 18px", cursor: "pointer", fontFamily: "'Lora',serif", fontSize: 12.5, fontWeight: view === n.id ? 700 : 400, textAlign: "left", transition: "all 0.15s", whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 14, width: 18, textAlign: "center", flexShrink: 0 }}>{n.icon}</span>
@@ -17502,7 +17836,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.646{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.647{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -17571,6 +17905,9 @@ function App() {
           )}
           {view === "suiviclient" && (
             <SuiviClientView settings={settings} />
+          )}
+          {view === "recouvrement" && (
+            <RecouvrementView settings={settings} />
           )}
           {view === "cotation" && (
             <CotationView settings={settings} />
