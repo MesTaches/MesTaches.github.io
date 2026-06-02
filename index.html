@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v649-1779107496"/>
+  <meta name="app-version" content="v650-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15536,7 +15536,7 @@ const REC_ASSUR = [
 ];
 const REC_GARANTIE_TYPES = ["Agrément Allianz", "Factor BNP", "Factor Natixis", "Limite de crédit", "Caution bancaire", "Délégation de paiement", "Autre"];
 function _mkRec() {
-  return { id: uid(), clientName:"", clientCode:"", cotation:"", typeGarantie:"", gravite:"surveillance",
+  return { id: uid(), clientName:"", clientCode:"", cotation:"", typeGarantie:"", montantGarantie:"", gravite:"surveillance",
     assuranceCredit:"", comptes:[], encoursTotal:"", montantEchu:"", plafond:"", dateEcheanceAncienne:"",
     statut:"relance", chezQui:"moi", litige:false, litigeNature:"",
     dateProchainSuivi:"", dateMiseEnDemeure:"", dateLimite:"", notes:"", closed:false,
@@ -15775,9 +15775,9 @@ function RecouvrementView({ settings }) {
               {/* Section 1 — Identification & risque */}
               <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>IDENTIFICATION & RISQUE</div>
-                <div style={{ display:"grid", gridTemplateColumns:"96px 1fr 1fr", gap:10 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"90px 150px 1fr 130px", gap:10 }}>
                   <div>{lbl("CODE CLIENT")}<input value={sel.clientCode} maxLength={7} onChange={e=>updSel({clientCode:e.target.value})} style={{ ...inp, textAlign:"center", fontVariantNumeric:"tabular-nums" }} /></div>
-                  <div>{lbl("COTATION / NOTE")}<input value={sel.cotation} onChange={e=>updSel({cotation:e.target.value})} placeholder="Ex: Allianz 8" style={inp} /></div>
+                  <div>{lbl("COTATION / NOTE")}<input value={sel.cotation} onChange={e=>updSel({cotation:e.target.value})} placeholder="Ex: Grade 7" style={inp} /></div>
                   <div>
                     {lbl("TYPE DE GARANTIE")}
                     <select value={sel.typeGarantie||""} onChange={e=>updSel({typeGarantie:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
@@ -15785,6 +15785,7 @@ function RecouvrementView({ settings }) {
                       {REC_GARANTIE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
+                  <div>{lbl("GARANTIE (€)")}<RecAmountInput value={sel.montantGarantie} onChange={v=>updSel({montantGarantie:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
                 </div>
 
                 {/* Comptes clients supplémentaires (groupe) */}
@@ -15832,9 +15833,9 @@ function RecouvrementView({ settings }) {
                   <div>{lbl("ÉCHU IMPAYÉ (€)")}<RecAmountInput value={sel.montantEchu} onChange={v=>updSel({montantEchu:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right", color:"#C0392B" }} /></div>
                   <div>{lbl("PLAFOND AUTORISÉ (€)")}<RecAmountInput value={sel.plafond} onChange={v=>updSel({plafond:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginTop:10 }}>
-                  <div>{lbl("PLUS VIEILLE ÉCHÉANCE IMPAYÉE")}<input type="date" value={sel.dateEcheanceAncienne} onChange={e=>updSel({dateEcheanceAncienne:e.target.value})} style={inp} /></div>
-                  <div style={{ display:"flex", flexDirection:"column", justifyContent:"flex-end", gap:4 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:10, alignItems:"start" }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    <div>{lbl("PLUS VIEILLE ÉCHÉANCE IMPAYÉE")}<input type="date" value={sel.dateEcheanceAncienne} onChange={e=>updSel({dateEcheanceAncienne:e.target.value})} style={inp} /></div>
                     {depassement(sel) > 0 && (
                       <div style={{ fontSize:11, fontFamily:_FL, color:"#B91C1C", background:"#FEE2E2", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⚠ Dépassement plafond : {fmtEuro(depassement(sel))}</div>
                     )}
@@ -15842,6 +15843,39 @@ function RecouvrementView({ settings }) {
                       <div style={{ fontSize:11, fontFamily:_FL, color:"#A16207", background:"#FEF9C3", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⏱ Retard de {ancienneteJours(sel)} jours</div>
                     )}
                   </div>
+                  {/* Graphique couverture encours : garanti vs non garanti */}
+                  {(()=>{
+                    const enc = parseNum(sel.encoursTotal) || 0;
+                    const gar = Math.min(parseNum(sel.montantGarantie) || 0, enc);
+                    const nonG = Math.max(0, enc - gar);
+                    if (enc <= 0) {
+                      return <div style={{ fontSize:10, color:"#CBD5E1", fontFamily:_FL, fontStyle:"italic", alignSelf:"center", textAlign:"center" }}>Renseigne l'encours pour visualiser la couverture</div>;
+                    }
+                    const pctG = Math.round(gar / enc * 100);
+                    return (
+                      <div>
+                        <div style={{ fontSize:9, fontWeight:700, color:"#102A63", fontFamily:_FL, marginBottom:6, letterSpacing:"0.05em" }}>COUVERTURE DE L'ENCOURS</div>
+                        <div style={{ display:"flex", height:16, borderRadius:8, overflow:"hidden", background:"#F0F0F0" }}>
+                          {gar > 0 && <div style={{ width:pctG+"%", background:"#34D399", display:"flex", alignItems:"center", justifyContent:"center" }} title={"Couvert : "+fmtEuro(gar)}>
+                            {pctG >= 18 && <span style={{ fontSize:8, fontWeight:700, color:"#065F46", fontFamily:_FL }}>{pctG}%</span>}
+                          </div>}
+                          {nonG > 0 && <div style={{ flex:1, background:"#FCA5A5", display:"flex", alignItems:"center", justifyContent:"center" }} title={"Non garanti : "+fmtEuro(nonG)}>
+                            {(100-pctG) >= 18 && <span style={{ fontSize:8, fontWeight:700, color:"#991B1B", fontFamily:_FL }}>{100-pctG}%</span>}
+                          </div>}
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:2, marginTop:6 }}>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10, fontFamily:_FL }}>
+                            <span style={{ color:"#065F46" }}>● Couvert</span>
+                            <span style={{ color:"#065F46", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{fmtEuro(gar)}</span>
+                          </div>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10, fontFamily:_FL }}>
+                            <span style={{ color:"#B91C1C" }}>● Non garanti</span>
+                            <span style={{ color:"#B91C1C", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{fmtEuro(nonG)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -17923,7 +17957,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.649{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.650{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
