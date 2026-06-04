@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v651-1779107496"/>
+  <meta name="app-version" content="v652-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9740,7 +9740,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
 
   const addDocs = (type, files) => {
     Array.from(files).forEach(f => {
-      if (f.size > 900000) { alert(f.name + ' dépasse 900 KB — fichier ignoré. Compressez-le avant de le joindre.'); return; }
+      if (f.size > 20 * 1024 * 1024) { alert(f.name + ' dépasse 20 Mo — fichier ignoré. Compressez-le avant de le joindre.'); return; }
       const reader = new FileReader();
       reader.onload = ev => {
         const newDoc = { id: uid(), name: f.name, size: f.size, type: f.type, data: ev.target.result, note: '', date: new Date().toISOString().split('T')[0] };
@@ -10191,7 +10191,7 @@ function CBDossierModal({ dossier, onSave, onClose, onDelete, financeursList, on
                     borderRadius:4, padding:"2px 10px" }}>
                     {docsComplete?"✓ Complet":"⚠ Incomplet"}
                   </span>
-                  <span style={{ fontSize:9, color:"#AAA", fontFamily:_FL, fontStyle:"italic" }}>Max 900 KB par fichier</span>
+                  <span style={{ fontSize:9, color:"#AAA", fontFamily:_FL, fontStyle:"italic" }}>Max 20 Mo par fichier</span>
                 </div>
                 <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
                   {CB_DOC_TYPES.map(dt => {
@@ -17957,7 +17957,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.651{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.652{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
