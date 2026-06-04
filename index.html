@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v650-1779107496"/>
+  <meta name="app-version" content="v651-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16816,15 +16816,15 @@ function PaymentsView({ settings }) {
     { id: "status",        label: "STATUT" },
   ];
 
-  const gridTemplate = "32px " + colDef.map(c => colWidths[c.id] + "px").join(" ") + " 36px";
+  // Colonnes fractionnaires : le tableau remplit toute la largeur disponible (pas de scroll horizontal).
+  // Ordre : checkbox · PRIO · FOURNISSEUR · COMPTE · DATE DEM · DEMANDEUR · PAIEMENT EST · MONTANT · STATUT · actions
+  const gridTemplate = "28px 38px minmax(120px,2.4fr) 64px 78px minmax(80px,1.3fr) 92px minmax(90px,1.1fr) 92px 32px";
 
   const HeaderCell = ({ col }) => (
-    <div style={{ display: "flex", alignItems: "center", gap: 2, position: "relative", userSelect: "none", justifyContent: col.alignRight ? "flex-end" : "flex-start" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 2, userSelect: "none", justifyContent: col.id === "amount" ? "flex-end" : "flex-start", paddingRight: col.id === "amount" ? 8 : 0 }}>
       <span onClick={() => handleSort(col.id)} style={{ fontSize: 9, fontWeight: 700, color: "white", fontFamily: "'Lora',serif", cursor: "pointer", whiteSpace: "nowrap" }}>
         {col.label}{sortField === col.id ? (sortAsc ? " ▲" : " ▼") : ""}
       </span>
-      <div onMouseDown={(e) => startResize(col.id, e)}
-        style={{ position: "absolute", right: -4, top: 0, bottom: 0, width: 8, cursor: "col-resize", zIndex: 1 }} />
     </div>
   );
 
@@ -16879,9 +16879,9 @@ function PaymentsView({ settings }) {
             </div>
           )}
 
-          <div style={{ overflowX: "auto" }}>
+          <div>
             {/* En-têtes */}
-            <div style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "3px 10px", background: "#102A63", borderBottom: "1px solid #102A63", minWidth: "fit-content" }}>
+            <div style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "3px 10px", background: "#102A63", borderBottom: "1px solid #102A63" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <input type="checkbox"
                   checked={filtered.length > 0 && filtered.every(p => selectedIds.includes(p.id))}
@@ -16902,7 +16902,7 @@ function PaymentsView({ settings }) {
               return (
                 <div key={p.id}
                   style={{ display: "grid", gridTemplateColumns: gridTemplate, padding: "3px 10px", borderBottom: "1px solid #F5F5F5",
-                    background: selectedIds.includes(p.id) ? "#EEF2FF" : i % 2 === 0 ? "white" : "#FAFAFA", minWidth: "fit-content", alignItems: "center", cursor: "pointer" }}
+                    background: selectedIds.includes(p.id) ? "#EEF2FF" : i % 2 === 0 ? "white" : "#FAFAFA", alignItems: "center", cursor: "pointer" }}
                   onClick={(e) => { if(!e.target.closest('input[type="checkbox"]')) setModal(p); }}>
                   {/* Checkbox sélection */}
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }} onClick={e => e.stopPropagation()}>
@@ -16926,7 +16926,7 @@ function PaymentsView({ settings }) {
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: urg ? "#C0392B" : "#555", fontWeight: urg ? 700 : 400 }}>
                     {p.estimatedDate ? p.estimatedDate.split("-").reverse().join("/") : "—"}
                   </div>
-                  <div style={{ fontSize: 12, fontFamily: _DM, color: "#2C3E50", fontWeight: 500, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", whiteSpace: "nowrap", overflow: "hidden" }}>{fmtEuro(p.amount)}</div>
+                  <div style={{ fontSize: 12, fontFamily: _FL, color: "#2C3E50", fontWeight: 600, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden" }}>{fmtEuro(p.amount)}</div>
                   <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <button onClick={(e) => { e.stopPropagation(); setNoteModal(p); }}
@@ -16945,11 +16945,11 @@ function PaymentsView({ settings }) {
           </div>
 
           {filtered.length > 0 && (
-            <div style={{ padding: "6px 10px", background: "#F8F9FB", borderTop: "2px solid #ECEAE5", overflowX: "auto" }}>
-              <div style={{ display: "grid", gridTemplateColumns: gridTemplate, minWidth: "fit-content" }}>
+            <div style={{ padding: "6px 10px", background: "#F8F9FB", borderTop: "2px solid #ECEAE5" }}>
+              <div style={{ display: "grid", gridTemplateColumns: gridTemplate }}>
                 <div /><div /><div /><div /><div /><div />
                 <div style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "\'Lora\',serif", display: "flex", alignItems: "center" }}>TOTAL AFFICHÉ</div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#102A63", fontFamily: _DM, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", letterSpacing: "0.02em", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#102A63", fontFamily: _FL, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
                 <div /><div />
@@ -17957,7 +17957,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.650{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.651{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
