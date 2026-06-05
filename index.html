@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v653-1779107496"/>
+  <meta name="app-version" content="v654-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12123,44 +12123,48 @@ function CreditBailView({ tasks, onEdit, settings }) {
           <CBComparateur dossiers={dossiers} fmtE={fmtE} onOpen={d=>setModal(d)} />
         )}
         {!showTrash && activeTab==="offres" && (
-          <div style={{ flex:1, overflowY:"auto", padding:"20px 24px", background:"#F7F6F3" }}>
-            <div style={{ marginBottom:18 }}>
-              <div style={{ fontSize:20, fontWeight:700, fontFamily:_FL, color:"#102A63" }}>📨 Offres reçues</div>
-              <div style={{ fontSize:12, fontFamily:_FL, color:"#888", marginTop:3 }}>Dossiers en « Demande de cotation » — récapitulatif des offres pour validation avant signature.</div>
+          <div style={{ flex:1, overflowY:"auto", padding:"14px 18px", background:"#F7F6F3" }}>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:17, fontWeight:700, fontFamily:_FL, color:"#102A63" }}>📨 Offres reçues</div>
+              <div style={{ fontSize:11, fontFamily:_FL, color:"#888", marginTop:2 }}>Dossiers en « Demande de cotation » — récapitulatif pour validation avant signature.</div>
             </div>
             {(()=>{
               const offres = dossiers.filter(d=>d.statut==="negociation");
-              if (offres.length===0) return <div style={{ textAlign:"center", padding:"60px 20px", color:"#CBD5E1", fontFamily:_FL, fontSize:14 }}>Aucune offre en cours de cotation.</div>;
+              if (offres.length===0) return <div style={{ textAlign:"center", padding:"50px 20px", color:"#CBD5E1", fontFamily:_FL, fontSize:14 }}>Aucune offre en cours de cotation.</div>;
+              const gridCols = "1.5fr 1fr 0.55fr 0.55fr 0.55fr 0.75fr 1fr 1.1fr";
+              const cell = (content, opts) => <div style={{ fontSize:11.5, color:(opts&&opts.color)||"#555", fontWeight:(opts&&opts.weight)||400, padding:"4px 8px", borderBottom:"1px solid #F5F5F5", textAlign:"right", fontVariantNumeric:"tabular-nums", background:(opts&&opts.best)?"#F0FDF4":"white" }}>{content}</div>;
               return offres.map(d => {
-                const rows = (d.financeurs||[]).map(f => ({ f, c: calcCBRow({ ...f, montantHT: f.montantHT || d.montantHT }) }));
+                const mht = parseNum(d.montantHT)||0;
+                const rows = (d.financeurs||[]).map(f => ({ f, c: calcCBRow({ ...f, montantHT: d.montantHT }) }));
                 const tegs = rows.map(r=>r.c.teg12).filter(v=>v!==null && !isNaN(v));
                 const bestTeg = tegs.length ? Math.min(...tegs) : null;
-                const mht = parseNum(d.montantHT)||0;
-                const cell = (content, opts) => <div style={{ fontSize:12, color:(opts&&opts.color)||"#555", fontWeight:(opts&&opts.weight)||400, padding:"7px 10px", borderBottom:"1px solid #F5F5F5", textAlign:"right", fontVariantNumeric:"tabular-nums", background:(opts&&opts.best)?"#F0FDF4":"white" }}>{content}</div>;
                 return (
-                  <div key={d.id} style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:14, marginBottom:16, overflow:"hidden", boxShadow:"0 1px 4px rgba(0,0,0,0.04)" }}>
-                    <div onClick={()=>setModal(d)} style={{ padding:"12px 16px", borderBottom:"1px solid #F0F0F0", display:"flex", alignItems:"center", gap:10, cursor:"pointer", background:"#FAFAF8" }}>
-                      <span style={{ width:8, height:8, borderRadius:"50%", background:"#A16207", flexShrink:0 }} />
+                  <div key={d.id} style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, marginBottom:10, overflow:"hidden", boxShadow:"0 1px 3px rgba(0,0,0,0.04)" }}>
+                    <div onClick={()=>setModal(d)} style={{ padding:"7px 14px", borderBottom:"1px solid #F0F0F0", display:"flex", alignItems:"center", gap:9, cursor:"pointer", background:"#FAFAF8" }}>
+                      <span style={{ width:7, height:7, borderRadius:"50%", background:"#A16207", flexShrink:0 }} />
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:14, fontWeight:700, fontFamily:_FL, color:"#102A63", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.intitule||"(sans intitulé)"}</div>
-                        <div style={{ fontSize:10, fontFamily:_FL, color:"#94A3B8", marginTop:2 }}>{d.reference||""}{d.fournisseur?" · "+d.fournisseur:""}</div>
+                        <div style={{ fontSize:13, fontWeight:700, fontFamily:_FL, color:"#102A63", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.intitule||"(sans intitulé)"}</div>
+                        <div style={{ fontSize:9.5, fontFamily:_FL, color:"#94A3B8", marginTop:1 }}>{d.reference||""}{d.fournisseur?" · "+d.fournisseur:""}{d.site?" · 📍 "+d.site:""}</div>
                       </div>
-                      {d.typeInvestissement && <span style={{ fontSize:10, fontWeight:700, background:"#E0F7FA", color:"#0E7490", borderRadius:6, padding:"3px 9px", fontFamily:_FL, whiteSpace:"nowrap" }}>{d.typeInvestissement}</span>}
+                      {d.typeInvestissement && <span style={{ fontSize:9.5, fontWeight:700, background:"#E0F7FA", color:"#0E7490", borderRadius:6, padding:"2px 8px", fontFamily:_FL, whiteSpace:"nowrap" }}>{d.typeInvestissement}</span>}
                       <span style={{ fontSize:12, fontWeight:700, fontFamily:_FL, color:"#102A63", whiteSpace:"nowrap", fontVariantNumeric:"tabular-nums" }}>{fmtE(mht)} HT</span>
                     </div>
                     {rows.length===0 ? (
-                      <div style={{ padding:"14px 16px", fontSize:12, fontFamily:_FL, color:"#AAA", fontStyle:"italic" }}>Aucun financeur renseigné pour ce dossier.</div>
+                      <div style={{ padding:"10px 14px", fontSize:11.5, fontFamily:_FL, color:"#AAA", fontStyle:"italic" }}>Aucun financeur renseigné pour ce dossier.</div>
                     ) : (
-                      <div style={{ display:"grid", gridTemplateColumns:"1.5fr 1.1fr 0.7fr 0.9fr 1.1fr 1.2fr", fontFamily:_FL }}>
-                        {["FINANCEUR","LOYER HT / mois","COEFF","TEG","LOYER MAJORÉ","COÛT TOTAL"].map((h,i)=>(
-                          <div key={h} style={{ fontSize:9, fontWeight:700, color:"#fff", background:"#102A63", padding:"6px 10px", letterSpacing:"0.04em", textAlign:i===0?"left":"right" }}>{h}</div>
+                      <div style={{ display:"grid", gridTemplateColumns:gridCols, fontFamily:_FL }}>
+                        {["FINANCEUR","LOYER HT/m","COEFF","DURÉE","VR %","TEG","L. MAJORÉ","COÛT TOTAL"].map((h,i)=>(
+                          <div key={h} style={{ fontSize:8.5, fontWeight:700, color:"#fff", background:"#102A63", padding:"5px 8px", letterSpacing:"0.03em", textAlign:i===0?"left":"right", whiteSpace:"nowrap" }}>{h}</div>
                         ))}
                         {rows.map((r,idx)=>{
                           const isBest = bestTeg!==null && r.c.teg12===bestTeg && tegs.length>1;
+                          const vrPct = (parseNum(r.f.tauxVR)||0) > 0 ? parseNum(r.f.tauxVR) : (mht>0 && r.c.vr>0 ? r.c.vr/mht*100 : 0);
                           return [
-                            <div key={"f"+idx} style={{ fontSize:12, fontWeight:600, color:"#2C3E50", padding:"7px 10px", borderBottom:"1px solid #F5F5F5", background:isBest?"#F0FDF4":"white", display:"flex", alignItems:"center", gap:5 }}>{r.f.financeur||"—"}{isBest && <span style={{ fontSize:8, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:3, padding:"1px 5px" }}>✓ MEILLEUR</span>}</div>,
+                            <div key={"f"+idx} style={{ fontSize:11.5, fontWeight:600, color:"#2C3E50", padding:"4px 8px", borderBottom:"1px solid #F5F5F5", background:isBest?"#F0FDF4":"white", display:"flex", alignItems:"center", gap:5, overflow:"hidden" }}><span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.f.financeur||"—"}</span>{isBest && <span style={{ fontSize:7.5, fontWeight:700, background:"#D1FAE5", color:"#065F46", borderRadius:3, padding:"1px 4px", flexShrink:0 }}>✓</span>}</div>,
                             cell(r.c.loyerHT>0?fmtE(r.c.loyerHT):"—", {best:isBest, color:"#2C3E50"}),
                             cell(r.f.coeff?r.f.coeff+" %":"—", {best:isBest}),
+                            cell(r.f.nbLoyers?r.f.nbLoyers+" m":"—", {best:isBest}),
+                            cell(vrPct>0?vrPct.toFixed(1)+" %":"—", {best:isBest}),
                             cell(r.c.teg12!==null?r.c.teg12.toFixed(2)+" %":"—", {best:isBest, weight:700, color:isBest?"#065F46":"#A16207"}),
                             cell(r.c.loyerMaj>0?fmtE(r.c.loyerMaj):"—", {best:isBest}),
                             cell(r.c.coutTotal!==null?fmtE(r.c.coutTotal):"—", {best:isBest}),
@@ -18010,7 +18014,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.653{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.654{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
