@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v654-1779107496"/>
+  <meta name="app-version" content="v655-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -12124,9 +12124,22 @@ function CreditBailView({ tasks, onEdit, settings }) {
         )}
         {!showTrash && activeTab==="offres" && (
           <div style={{ flex:1, overflowY:"auto", padding:"14px 18px", background:"#F7F6F3" }}>
-            <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:17, fontWeight:700, fontFamily:_FL, color:"#102A63" }}>📨 Offres reçues</div>
-              <div style={{ fontSize:11, fontFamily:_FL, color:"#888", marginTop:2 }}>Dossiers en « Demande de cotation » — récapitulatif pour validation avant signature.</div>
+            <div style={{ marginBottom:12, display:"flex", justifyContent:"space-between", alignItems:"flex-end", gap:16, flexWrap:"wrap" }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:700, fontFamily:_FL, color:"#102A63" }}>📨 Offres reçues</div>
+                <div style={{ fontSize:11, fontFamily:_FL, color:"#888", marginTop:2 }}>Dossiers en « Demande de cotation » — récapitulatif pour validation avant signature.</div>
+              </div>
+              {(()=>{
+                const off = dossiers.filter(d=>d.statut==="negociation");
+                const totMht = off.reduce((s,d)=>s+(parseNum(d.montantHT)||0),0);
+                return (
+                  <div style={{ background:"white", border:"1px solid #FED7AA", borderRadius:10, padding:"8px 16px", textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:9, fontWeight:700, color:"#A16207", fontFamily:_FL, letterSpacing:"0.06em" }}>TOTAL OFFRES REÇUES</div>
+                    <div style={{ fontSize:18, fontWeight:700, color:"#C2410C", fontFamily:_FL, fontVariantNumeric:"tabular-nums", marginTop:2 }}>{fmtE(totMht)} HT</div>
+                    <div style={{ fontSize:10, color:"#94A3B8", fontFamily:_FL, marginTop:1 }}>{off.length} dossier{off.length>1?"s":""} en cotation</div>
+                  </div>
+                );
+              })()}
             </div>
             {(()=>{
               const offres = dossiers.filter(d=>d.statut==="negociation");
@@ -18014,7 +18027,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.654{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.655{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
