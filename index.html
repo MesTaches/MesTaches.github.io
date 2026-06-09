@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v656-1779107496"/>
+  <meta name="app-version" content="v657-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9153,7 +9153,8 @@ async function saveCBDossiersIDB(dossiers) {
        → users/{uid}/cbfiles/{cle}_{index}
    Fusion par dossier sur le timestamp _mtime (dernière modif gagne).
    ═══════════════════════════════════════════════════════════ */
-const CB_FS_CHUNK = 700000; // caractères base64 par morceau (< 1 MiB encodé)
+const CB_FS_CHUNK = 600000; // caractères base64 par morceau (marge sous 1 MiB)
+const _cbSleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 function _cbHasFs() {
   return (typeof _db !== "undefined") && (typeof _auth !== "undefined") && _auth.currentUser;
@@ -9162,6 +9163,19 @@ function _cbFsKey(ref) {
   const s = String(ref || "");
   let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; }
   return s.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 90) + "__" + h.toString(36);
+}
+// Écriture Firestore résiliente : réessaie avec backoff si la file d'écritures est saturée (resource-exhausted)
+async function _cbSet(docRef, payload) {
+  for (let attempt = 0; attempt < 7; attempt++) {
+    try { await docRef.set(payload); return; }
+    catch(e) {
+      if (e && (e.code === "resource-exhausted" || e.code === "unavailable" || e.code === "deadline-exceeded") && attempt < 6) {
+        await _cbSleep(600 * Math.pow(2, attempt)); // 0.6s, 1.2s, 2.4s… jusqu'à ~38s
+        continue;
+      }
+      throw e;
+    }
+  }
 }
 async function cbFsPushFile(uid, ref, data) {
   if (!data) return;
@@ -9173,10 +9187,11 @@ async function cbFsPushFile(uid, ref, data) {
     if (head.exists && head.data().size === data.length && head.data().total === total) return; // déjà uploadé à l'identique
   } catch(e) {}
   for (let i = 0; i < total; i++) {
-    await col.doc(key + "_" + i).set({
+    await _cbSet(col.doc(key + "_" + i), {
       ref: ref, idx: i, total: total, size: data.length,
       d: data.slice(i * CB_FS_CHUNK, (i + 1) * CB_FS_CHUNK)
     });
+    await _cbSleep(60); // pacing : laisse la file d'écriture se vider
   }
 }
 async function cbFsPullFile(uid, ref) {
@@ -9202,10 +9217,11 @@ async function cbSyncPush() {
   if (metaJson.length > 950000) {
     console.warn("CB sync: métadonnées > 950 Ko — sync des métadonnées ignorée.");
   } else {
-    await _db.collection("users").doc(uid).collection("cb").doc("meta").set({ value: metaJson, ts: Date.now(), n: metas.length });
+    await _cbSet(_db.collection("users").doc(uid).collection("cb").doc("meta"), { value: metaJson, ts: Date.now(), n: metas.length });
   }
   for (const doc of docs) {
     try { await cbFsPushFile(uid, doc.id, doc.data || ""); } catch(e) { console.warn("CB push blob", doc.id, e && e.message); }
+    await _cbSleep(80); // pacing entre fichiers
   }
   return { ok: true, n: metas.length, blobs: docs.length };
 }
@@ -18181,7 +18197,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.656{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.657{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
