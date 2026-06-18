@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v659-1779107496"/>
+  <meta name="app-version" content="v660-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -983,12 +983,21 @@ async function dailyFirestoreSnapshot() {
   if (localStorage.getItem(lastKey) === today) return; // déjà fait aujourd'hui
   const data = await exportAllDataJSON();
   let blob = JSON.stringify(data);
-  // Limite Firestore 1 MiB par doc — si trop gros, on tronque les stores volumineux
+  // Limite Firestore 1 MiB par doc — si trop gros, on retire les stores LES PLUS VOLUMINEUX
+  // un par un, jusqu'à repasser sous la limite. On préserve ainsi un maximum de données
+  // (notamment l'échéancier, petit, qui était auparavant jeté systématiquement).
   if (blob.length > 950000) {
-    console.warn("Snapshot > 950 Ko, exclusion des stores volumineux");
-    delete data.stores.contentieux;
-    delete data.stores.echeancier;
-    blob = JSON.stringify(data);
+    const sizes = Object.keys(data.stores)
+      .map(k => ({ k, size: JSON.stringify(data.stores[k] || "").length }))
+      .sort((a, b) => b.size - a.size);
+    const dropped = [];
+    for (const { k } of sizes) {
+      if (blob.length <= 950000) break;
+      delete data.stores[k];
+      dropped.push(k);
+      blob = JSON.stringify(data);
+    }
+    console.warn("Snapshot > 950 Ko — stores exclus du backup cloud :", dropped.join(", ") || "(aucun)");
   }
   await _db.collection("users").doc(uid).collection("snapshots").doc(today).set({
     createdAt: Date.now(),
@@ -14218,22 +14227,36 @@ function EcheancierView({ tasks, settings }) {
   const [activeTab, setActiveTab] = React.useState("dashboard");
   const [modal, setModal] = React.useState(null);
 
+  // skipNextSave protège contre l'écrasement : si le chargement ne ramène AUCUNE donnée
+  // (lecture IDB transitoirement nulle, ex. pendant une montée de version de la base),
+  // on saute la 1ʳᵉ sauvegarde automatique pour ne PAS réécrire [] par-dessus les données existantes.
+  const echSkipNextSave = React.useRef(false);
   React.useEffect(()=>{
     appDbGet("echeancier").then(v=>{
-      if(v && Array.isArray(v)) {
-        // Recalcule chaque dossier au chargement (re-numérotation N°, dureeAuto, taux par catégorie…)
-        // sans cela les dossiers importés AVANT v.0.634 gardent leurs N° séquentiels d'origine
-        // jusqu'à ce qu'on les édite manuellement.
+      let loaded = false;
+      if(v && Array.isArray(v) && v.length > 0) {
         const recalc = v.map(d => {
           try { return window.calcDossierAuto ? window.calcDossierAuto(d) : d; } catch(e) { return d; }
         });
         setDossiers(recalc);
+        loaded = true;
+      } else {
+        // Repli : tente le localStorage legacy avant d'abandonner
+        try {
+          const ls = localStorage.getItem("echeancier_dossiers_v1");
+          if (ls) { const p = JSON.parse(ls); if (Array.isArray(p) && p.length) { setDossiers(p); loaded = true; } }
+        } catch(e) {}
       }
+      if (!loaded) echSkipNextSave.current = true; // n'écrase pas l'IDB avec du vide
       setEchReady(true);
-    }).catch(()=>setEchReady(true));
+    }).catch(()=>{ echSkipNextSave.current = true; setEchReady(true); });
   },[]);
 
-  React.useEffect(()=>{ if(echReady) saveEchDossiers(dossiers); },[dossiers, echReady]);
+  React.useEffect(()=>{
+    if (!echReady) return;
+    if (echSkipNextSave.current) { echSkipNextSave.current = false; return; }
+    saveEchDossiers(dossiers);
+  },[dossiers, echReady]);
 
   const saveDossier = raw => { const d=calcDossierAuto(raw); setDossiers(p => p.find(x=>x.id===d.id)?p.map(x=>x.id===d.id?d:x):[d,...p]); };
 
@@ -18197,7 +18220,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.659{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.660{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
