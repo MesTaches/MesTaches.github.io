@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v660-1779107496"/>
+  <meta name="app-version" content="v661-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -947,6 +947,74 @@ async function downloadBackupJSON() {
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 200);
   try { localStorage.setItem("last_local_backup_at", new Date().toISOString()); } catch {}
   return data;
+}
+
+/* ─── Sauvegarde automatique vers un dossier du PC (File System Access API) ───
+   L'utilisateur choisit UN dossier une fois ; l'app y écrit ensuite la sauvegarde
+   automatiquement (fichier daté + un "latest" écrasé), sans pop-up à chaque fois.
+   Chrome/Edge uniquement ; peut être bloqué par une politique d'entreprise. */
+function bkFsSupported() { return typeof window !== "undefined" && "showDirectoryPicker" in window; }
+function _bkOpenDb() {
+  return new Promise((resolve, reject) => {
+    const q = indexedDB.open("mestaches_fs_db", 1);
+    q.onupgradeneeded = e => { const db = e.target.result; if (!db.objectStoreNames.contains("handles")) db.createObjectStore("handles"); };
+    q.onsuccess = e => resolve(e.target.result);
+    q.onerror = e => reject(e.target.error);
+  });
+}
+async function bkSaveDirHandle(h) {
+  const db = await _bkOpenDb();
+  return new Promise((res, rej) => { const tx = db.transaction("handles","readwrite"); tx.objectStore("handles").put(h, "backupDir"); tx.oncomplete = () => res(); tx.onerror = e => rej(e.target.error); });
+}
+async function bkGetDirHandle() {
+  try {
+    const db = await _bkOpenDb();
+    return await new Promise((res) => { const tx = db.transaction("handles","readonly"); const r = tx.objectStore("handles").get("backupDir"); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); });
+  } catch(e) { return null; }
+}
+async function bkClearDirHandle() {
+  try { const db = await _bkOpenDb(); const tx = db.transaction("handles","readwrite"); tx.objectStore("handles").delete("backupDir"); } catch(e) {}
+}
+async function bkEnsurePermission(handle, interactive) {
+  if (!handle) return false;
+  const opt = { mode: "readwrite" };
+  try {
+    if ((await handle.queryPermission(opt)) === "granted") return true;
+    if (interactive && (await handle.requestPermission(opt)) === "granted") return true;
+  } catch(e) {}
+  return false;
+}
+async function bkWriteToFolder(handle) {
+  const data = await exportAllDataJSON();
+  const json = JSON.stringify(data, null, 2);
+  const today = new Date().toISOString().split("T")[0];
+  const write = async (name) => {
+    const fh = await handle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(new Blob([json], { type: "application/json" }));
+    await w.close();
+  };
+  await write("mestaches_backup_" + today + ".json"); // archive datée du jour
+  await write("mestaches_backup_latest.json");          // toujours la dernière
+  try { localStorage.setItem("auto_backup_last", new Date().toISOString()); } catch {}
+  return data;
+}
+async function autoBackupIfDue() {
+  try {
+    if (localStorage.getItem("auto_backup_enabled") !== "1") return;
+    if (!bkFsSupported()) return;
+    const freq = localStorage.getItem("auto_backup_freq") || "weekly";
+    const last = localStorage.getItem("auto_backup_last") || "";
+    const lastMs = last ? new Date(last).getTime() : 0;
+    const dueMs = freq === "daily" ? 20 * 3600 * 1000 : 6.5 * 24 * 3600 * 1000; // ~quotidien / ~hebdo
+    if (Date.now() - lastMs < dueMs) return;
+    const handle = await bkGetDirHandle();
+    if (!handle) return;
+    const ok = await bkEnsurePermission(handle, false); // silencieux : pas de pop-up au démarrage
+    if (!ok) { console.info("Sauvegarde auto : permission dossier non accordée (à ré-autoriser dans Paramètres)."); return; }
+    await bkWriteToFolder(handle);
+    console.info("✓ Sauvegarde automatique écrite dans le dossier choisi.");
+  } catch(e) { console.warn("autoBackupIfDue:", e && e.message); }
 }
 
 async function importBackupJSON(file) {
@@ -7519,6 +7587,51 @@ function BackupView() {
   const lastLocal = (() => { try { return localStorage.getItem("last_local_backup_at"); } catch { return null; } })();
   const lastSnap = (() => { try { return localStorage.getItem("last_firestore_snapshot_date"); } catch { return null; } })();
 
+  // ── Sauvegarde automatique vers un dossier du PC ──
+  const fsSupported = bkFsSupported();
+  const [autoEnabled, setAutoEnabled] = React.useState(() => { try { return localStorage.getItem("auto_backup_enabled") === "1"; } catch { return false; } });
+  const [autoFreq, setAutoFreq] = React.useState(() => { try { return localStorage.getItem("auto_backup_freq") || "weekly"; } catch { return "weekly"; } });
+  const [folderName, setFolderName] = React.useState(null);
+  const [autoLast, setAutoLast] = React.useState(() => { try { return localStorage.getItem("auto_backup_last") || null; } catch { return null; } });
+  React.useEffect(() => { bkGetDirHandle().then(h => { if (h) setFolderName(h.name); }); }, []);
+
+  const chooseFolder = async () => {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite", id: "mestaches-backup" });
+      const ok = await bkEnsurePermission(handle, true);
+      if (!ok) { setMsg({ type:"err", text:"Permission d'écriture refusée sur ce dossier." }); return; }
+      await bkSaveDirHandle(handle);
+      setFolderName(handle.name);
+      localStorage.setItem("auto_backup_enabled", "1");
+      setAutoEnabled(true);
+      // 1ère sauvegarde immédiate
+      await bkWriteToFolder(handle);
+      setAutoLast(new Date().toISOString());
+      setMsg({ type:"ok", text:"Dossier de sauvegarde configuré. Première sauvegarde écrite dans « " + handle.name + " »." });
+    } catch(e) {
+      if (e && e.name === "AbortError") return; // l'utilisateur a annulé le sélecteur
+      setMsg({ type:"err", text:"Impossible de configurer le dossier : " + (e.message || e) });
+    }
+  };
+  const backupToFolderNow = async () => {
+    try {
+      const handle = await bkGetDirHandle();
+      if (!handle) { setMsg({ type:"err", text:"Choisis d'abord un dossier de sauvegarde." }); return; }
+      const ok = await bkEnsurePermission(handle, true);
+      if (!ok) { setMsg({ type:"err", text:"Permission refusée. Re-sélectionne le dossier." }); return; }
+      await bkWriteToFolder(handle);
+      setAutoLast(new Date().toISOString());
+      setMsg({ type:"ok", text:"Sauvegarde écrite dans « " + handle.name + " »." });
+    } catch(e) { setMsg({ type:"err", text:"Erreur : " + (e.message || e) }); }
+  };
+  const toggleAuto = () => {
+    const next = !autoEnabled;
+    setAutoEnabled(next);
+    try { localStorage.setItem("auto_backup_enabled", next ? "1" : "0"); } catch {}
+  };
+  const changeFreq = (f) => { setAutoFreq(f); try { localStorage.setItem("auto_backup_freq", f); } catch {} };
+  const disconnectFolder = async () => { await bkClearDirHandle(); setFolderName(null); setAutoEnabled(false); try { localStorage.setItem("auto_backup_enabled","0"); } catch {} setMsg({ type:"info", text:"Dossier déconnecté. Sauvegarde automatique désactivée." }); };
+
   return (
     <div>
       <div style={{ fontSize: 12, color: "#888", fontFamily: _DM, marginBottom: 16 }}>
@@ -7535,6 +7648,43 @@ function BackupView() {
           <button onClick={()=>setMsg(null)} style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:16, color:"inherit", lineHeight:1 }}>×</button>
         </div>
       )}
+
+      {/* Sauvegarde automatique vers un dossier du PC */}
+      <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"16px 18px", marginBottom:18 }}>
+        <div style={{ fontSize: 13, fontWeight:700, fontFamily:_FL, color:"#065F46", marginBottom:6 }}>🔄 Sauvegarde automatique sur le PC</div>
+        {!fsSupported ? (
+          <div style={{ fontSize:11, color:"#92400E", fontFamily:_FL, background:"#FEF9C3", border:"1px solid #FCD34D", borderRadius:8, padding:"8px 10px" }}>
+            ⚠ Ton navigateur ne supporte pas l'écriture automatique dans un dossier (fonction Chrome/Edge sur ordinateur). Utilise le téléchargement manuel ci-dessous.
+          </div>
+        ) : (<>
+          <div style={{ fontSize:11, color:"#065F46", fontFamily:_FL, marginBottom:12, opacity:0.85 }}>
+            Choisis un dossier une fois : l'app y écrira automatiquement une sauvegarde (datée + « latest ») à chaque ouverture, selon la fréquence choisie. Aucun téléchargement, aucun pop-up.
+          </div>
+          {folderName ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                <span style={{ fontSize:11, fontFamily:_FL, color:"#065F46" }}>📁 Dossier : <strong>{folderName}</strong></span>
+                <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:11, fontFamily:_FL, color:"#065F46", userSelect:"none" }}>
+                  <input type="checkbox" checked={autoEnabled} onChange={toggleAuto} style={{ accentColor:"#065F46", cursor:"pointer", width:14, height:14 }} />
+                  Activée
+                </label>
+                <select value={autoFreq} onChange={e=>changeFreq(e.target.value)} style={{ border:"1px solid #BBF7D0", borderRadius:6, padding:"3px 8px", fontSize:11, fontFamily:_FL, background:"white", color:"#065F46", cursor:"pointer" }}>
+                  <option value="daily">Chaque jour</option>
+                  <option value="weekly">Chaque semaine</option>
+                </select>
+                {autoLast && <span style={{ fontSize:10, fontFamily:_DM, color:"#16A34A", opacity:0.8 }}>Dernière : {new Date(autoLast).toLocaleString("fr-FR")}</span>}
+              </div>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                <button onClick={backupToFolderNow} style={{ ...S.btn("#16A34A"), fontSize:12 }}>💾 Sauvegarder maintenant</button>
+                <button onClick={chooseFolder} style={{ ...S.ghost, fontSize:12, borderColor:"#16A34A", color:"#16A34A" }}>📁 Changer de dossier</button>
+                <button onClick={disconnectFolder} style={{ ...S.ghost, fontSize:12, borderColor:"#E0E0E0", color:"#888" }}>Déconnecter</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={chooseFolder} style={{ ...S.btn("#16A34A"), fontSize:12 }}>📁 Choisir un dossier de sauvegarde</button>
+          )}
+        </>)}
+      </div>
 
       {/* Sauvegarde manuelle (téléchargement JSON) */}
       <div style={{ background:"#F0F8FF", border:"1px solid #BAE6FD", borderRadius:12, padding:"16px 18px", marginBottom:18 }}>
@@ -17794,6 +17944,7 @@ function App() {
       setAppReady(true);
       // Snapshot Firestore quotidien (différé pour ne pas bloquer le démarrage)
       setTimeout(() => { dailyFirestoreSnapshot().catch(()=>{}); }, 4000);
+      setTimeout(() => { autoBackupIfDue().catch(()=>{}); }, 7000);
     })();
   }, []);
 
@@ -18220,7 +18371,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.660{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.661{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
