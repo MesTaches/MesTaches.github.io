@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v661-1779107496"/>
+  <meta name="app-version" content="v662-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -461,48 +461,50 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
                         tauxGarantie2, dureeGarantie1, carenceCapitalisee,
                         differFin, fluxPeriode) {
   const K = parseFloat(montant) || 0;
-  const r  = (parseFloat(tauxAnnuel)||0) / 100 / 12;
-  const rGar  = (parseFloat(tauxGarantie)||0) / 100 / 12;
-  const rGar2 = (parseFloat(tauxGarantie2)||0) / 100 / 12;
-  const rDif  = (tauxDiffere !== null && tauxDiffere !== undefined && tauxDiffere !== "") ? (parseFloat(tauxDiffere)||0)/100/12 : r;
-  const rCap  = (parseFloat(tauxCapita)||0)/100/12 || r;
+  const periodM = Math.max(1, parseInt(fluxPeriode) || 1); // mois par échéance : 1=mensuel, 3=trim, 6=sem, 12=annuel
+  // Taux ramenés à la PÉRIODE (et non plus au mois)
+  const r     = (parseFloat(tauxAnnuel)||0) / 100 * periodM / 12;
+  const rGar  = (parseFloat(tauxGarantie)||0) / 100 * periodM / 12;
+  const rGar2 = (parseFloat(tauxGarantie2)||0) / 100 * periodM / 12;
+  const rDif  = (tauxDiffere !== null && tauxDiffere !== undefined && tauxDiffere !== "") ? (parseFloat(tauxDiffere)||0)/100*periodM/12 : r;
+  const rCap  = ((parseFloat(tauxCapita)||0)/100*periodM/12) || r;
   const nbMois     = parseInt(duree)||0;
-  const carenceM   = parseInt(carence)||0;
-  const differeM   = parseInt(differe)||0;
-  const inFineM    = parseInt(differFin)||0;
-  const assu       = parseFloat(assuranceMensuelle)||0;
-  const dureeGar1  = parseInt(dureeGarantie1)||0;
+  const assuM      = parseFloat(assuranceMensuelle)||0;
+  const assu       = assuM * periodM; // assurance mensuelle → par échéance
+  const dureeGar1M = parseInt(dureeGarantie1)||0;
   if (!K || !nbMois || !dateDebut) return [];
 
+  // Conversion durées (en mois) → nombre d'ÉCHÉANCES
+  const nbPeriods = Math.max(1, Math.round(nbMois / periodM));
+  const carenceP  = Math.round((parseInt(carence)||0) / periodM);
+  const differeP  = Math.round((parseInt(differe)||0) / periodM);
+  const inFineP   = Math.round((parseInt(differFin)||0) / periodM);
+  const dureeGar1P= Math.round(dureeGar1M / periodM);
+  const amortP    = Math.max(1, nbPeriods - carenceP - differeP - inFineP);
+
+  // Échéance d'amortissement (annuités constantes) — par période
+  let echAmort;
+  if (r > 0) echAmort = K * r / (1 - Math.pow(1+r, -amortP));
+  else       echAmort = K / amortP;
+  const capCte = K / amortP; // capital constant par échéance (si typeAmort = "capital")
+
   const startDate = new Date(dateDebut + "T00:00:00");
-  // Nombre de mois d'amortissement réel (entre la fin du différé et le début du in fine)
-  const monthsAmort = Math.max(1, nbMois - carenceM - differeM - inFineM);
-
-  // Mensualité d'amortissement (annuités constantes)
-  let mensualite;
-  if (r > 0) mensualite = K * r / (1 - Math.pow(1+r, -monthsAmort));
-  else       mensualite = K / monthsAmort;
-
-  // Capital remboursé constant (si typeAmort = "capital")
-  const capCte = K / monthsAmort;
-
   const rows = [];
   let capitalRestant = K;
   let cumulInt = 0;
 
-  for (let i = 0; i < nbMois; i++) {
+  for (let i = 0; i < nbPeriods; i++) {
     const d = new Date(startDate);
-    d.setMonth(startDate.getMonth() + i);
+    d.setMonth(startDate.getMonth() + i * periodM);
     const dateStr = d.toISOString().split("T")[0];
 
     let capRbt = 0, inter = 0, ech = 0, comm = 0;
     let estCarence = false, estDiffere = false, estDifferFin = false, estCapita = false, estAmort = false, estSansFlux = false;
     let typeLabel = "";
 
-    if (i < carenceM) {
+    if (i < carenceP) {
       // Phase carence
       if (carenceCapitalisee) {
-        // Intérêts capitalisés : ajoutent au capital restant
         const intCap = capitalRestant * rCap;
         capitalRestant += intCap;
         inter = intCap;
@@ -512,16 +514,16 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
         estCarence = true;
         typeLabel = "Carence";
       }
-    } else if (i < carenceM + differeM) {
+    } else if (i < carenceP + differeP) {
       // Phase différé partiel — intérêts payés, capital inchangé
       inter = capitalRestant * rDif;
       ech = inter + assu;
       estDiffere = true;
       typeLabel = "Différé";
-    } else if (i >= nbMois - inFineM) {
-      // Phase in fine — intérêts payés, capital remboursé au dernier mois
+    } else if (i >= nbPeriods - inFineP) {
+      // Phase in fine — intérêts payés, capital remboursé à la dernière échéance
       inter = capitalRestant * r;
-      if (i === nbMois - 1) {
+      if (i === nbPeriods - 1) {
         capRbt = capitalRestant;
         capitalRestant = 0;
       }
@@ -535,7 +537,7 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
         inter = capitalRestant * r;
       } else {
         inter = capitalRestant * r;
-        capRbt = mensualite - inter;
+        capRbt = echAmort - inter;
       }
       if (capRbt > capitalRestant) capRbt = capitalRestant;
       capitalRestant -= capRbt;
@@ -544,8 +546,8 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
       typeLabel = "Amortissement";
     }
 
-    // Commission de garantie sur le capital restant — change au bout de dureeGar1 mois
-    if (dureeGar1 > 0 && i < dureeGar1) {
+    // Commission de garantie sur le capital restant
+    if (dureeGar1P > 0 && i < dureeGar1P) {
       comm = capitalRestant * rGar;
     } else if (rGar2 > 0) {
       comm = capitalRestant * rGar2;
@@ -564,7 +566,7 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
       interets: Math.round(inter * 100) / 100,
       cumulInterets: Math.round(cumulInt * 100) / 100,
       commGarantie: Math.round(comm * 100) / 100,
-      assurance: assu,
+      assurance: Math.round(assu * 100) / 100,
       echeance: Math.round(ech * 100) / 100,
       echeanceGlobale: Math.round((ech + comm) * 100) / 100,
       capitalRestant: Math.round(Math.max(0, capitalRestant) * 100) / 100,
@@ -13614,8 +13616,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             {(!localDos.lignes||localDos.lignes.length===0) ? (<>
               <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="100 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lblL("Taux annuel (%)")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="4.5" style={inpL}/></div>
-              <div>{lblL("Durée (mois)")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} placeholder="120" style={inpL}/></div>
-              <div>{lblL("Date début")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
+              <div>{lblL("Durée (mois)","Durée totale en mois, toutes périodicités confondues")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} placeholder="84" style={inpL}/></div>
+              <div>{lblL("Périodicité","Fréquence des échéances")}<select value={localDos.fluxPeriode||"1"} onChange={e=>setL("fluxPeriode",e.target.value)} style={inpL}><option value="1">Mensuelle</option><option value="3">Trimestrielle</option><option value="6">Semestrielle</option><option value="12">Annuelle</option></select></div>
+              <div>{lblL("Date 1ʳᵉ échéance")}<input type="date" value={localDos.dateDebut||""} onChange={e=>setL("dateDebut",e.target.value)} style={inpL}/></div>
               <div>{lblL("Type amort.")}<select value={localDos.typeAmort||"annuites"} onChange={e=>setL("typeAmort",e.target.value)} style={inpL}><option value="annuites">Annuités ctes</option><option value="capital">Capital cte</option></select></div>
               <div>{lblL("Assurance (€/m)")}<input type="text" value={localDos.assuranceMensuelle||""} onChange={e=>setL("assuranceMensuelle",e.target.value)} placeholder="0" style={inpL}/></div>
               <div>{lblL("Différé (mois)","Phase initiale où seuls les intérêts sont payés")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="0" style={inpL}/></div>
@@ -18371,7 +18374,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.661{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.662{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
