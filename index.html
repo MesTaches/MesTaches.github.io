@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v668-1779107496"/>
+  <meta name="app-version" content="v669-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -579,6 +579,62 @@ function calcEcheancier(montant, tauxAnnuel, duree, dateDebut,
   return rows;
 }
 window.calcEcheancier = calcEcheancier;
+
+/* ─── calcTEGActuariel — taux actuariel (IRR) d'un échéancier ───────────────
+   Résout : montantVerse = Σ echeanceGlobale_i / (1+r_mensuel)^t_i
+   par Newton-Raphson. Retourne le taux nominal annuel (r×12×100) et effectif.
+   Pour un prêt sans frais, donne exactement le taux nominal (ex: 3.85 %).    */
+function calcTEGActuariel(lignes, montantVerse) {
+  if (!lignes || !lignes.length) return null;
+  var versL = lignes.filter(function(r){ return r.estVersement; });
+  var paysL = lignes.filter(function(r){ return !r.estVersement && ((r.echeanceGlobale||0)+(r.echeance||0)) > 0; });
+  if (!paysL.length) return null;
+
+  var refDate;
+  if (versL.length && versL[0].date) {
+    refDate = new Date(versL[0].date + "T00:00:00");
+  } else {
+    refDate = new Date(paysL[0].date + "T00:00:00");
+    refDate.setMonth(refDate.getMonth() - 1);
+  }
+
+  var flows = [];
+  if (versL.length) {
+    versL.forEach(function(r) {
+      var d = new Date(r.date + "T00:00:00");
+      var t = (d.getFullYear()-refDate.getFullYear())*12 + (d.getMonth()-refDate.getMonth());
+      flows.push({t:t, v: r.versement||r.capitalRestant||montantVerse||0});
+    });
+  } else {
+    flows.push({t:0, v: montantVerse||0});
+  }
+  paysL.forEach(function(r) {
+    var d = new Date(r.date + "T00:00:00");
+    var t = (d.getFullYear()-refDate.getFullYear())*12 + (d.getMonth()-refDate.getMonth());
+    flows.push({t:t, v: -((r.echeanceGlobale||0)||(r.echeance||0))});
+  });
+
+  var r = 0.003;
+  for (var i = 0; i < 300; i++) {
+    var f = 0, df = 0;
+    for (var j = 0; j < flows.length; j++) {
+      var t = flows[j].t, v = flows[j].v;
+      var disc = Math.pow(1+r, t);
+      f  += v / disc;
+      df -= t * v / (disc * (1+r));
+    }
+    if (Math.abs(df) < 1e-20) break;
+    var nr = r - f/df;
+    if (nr < -0.999) nr = 0.001;
+    if (Math.abs(nr-r) < 1e-12) { r = nr; break; }
+    r = nr;
+  }
+  return {
+    tegNom: (r * 12 * 100).toFixed(2),
+    tegEff: ((Math.pow(1+r,12)-1)*100).toFixed(2)
+  };
+}
+window.calcTEGActuariel = calcTEGActuariel;
 
 /* exportEchPDF → déplacée dans jsx-source */
 /* exportRCFPDF, exportSingleRCFPDF, _rcfPrintIframe → déplacées dans jsx-source */</script>
@@ -13573,17 +13629,9 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const totalGlob  = lignes.reduce((a,r)=>a+(r.echeanceGlobale||0),0);
   const prochaine=lignes.find(r=>r.date>now);
   const tegDossier = (() => {
-    const lgN = lignes.filter(r=>r.date&&r.n&&!r.estVersement&&!r.estSansFlux);
-    const dMin = lgN.length ? lgN[0].date : null;
-    const dMax = lgN.length ? lgN[lgN.length-1].date : null;
-    const dur = dMin&&dMax
-      ? Math.max((new Date(dMax)-new Date(dMin))/(1000*60*60*24*365.25), 0.08)
-      : (lgN.length||12)/12;
-    const tI = lignes.reduce((a,r)=>a+(r.interets||0),0);
-    const tG = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
-    const lgAct = lignes.filter(r=>!r.estVersement&&(r.capitalRestant||0)>0);
-    const capMoy = lgAct.length>0 ? lgAct.reduce((a,r)=>a+(r.capitalRestant||0),0)/lgAct.length : 0;
-    return capMoy>0 && dur>0 ? ((tI+tG)/capMoy/dur*100).toFixed(2)+"%" : "—";
+    const mv = lignes.filter(r=>r.estVersement).reduce((a,r)=>a+(r.versement||r.capitalRestant||0),0) || parseNum(localDos.montant) || 0;
+    const irr = calcTEGActuariel(lignes, mv);
+    return irr ? irr.tegNom+"%" : "—";
   })();
   const hasCap=parseNum(localDos.tauxCapita)>0;
   const car=parseInt(localDos.carence)||0;
@@ -13798,15 +13846,12 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                 ? Math.max((new Date(dateMax2)-new Date(dateMin2))/(1000*60*60*24*365.25), 0.08)
                 : (lgNum2.length||12)/12;
 
-              const lgActives2 = lg2.filter(r=>!r.estVersement && r.capitalRestant!=null && r.capitalRestant>0);
-              const capitalMoyen = lgActives2.length > 0
-                ? lgActives2.reduce((a,r)=>a+(r.capitalRestant||0),0) / lgActives2.length
-                : montantVerse;
-
-              const totalInteretsPct = capitalMoyen>0 && dureeAns2>0
-                ? (totalInterets / capitalMoyen / dureeAns2 * 100).toFixed(2) : "—";
-              const tegPct = capitalMoyen>0 && dureeAns2>0
-                ? ((totalInterets + totalGarantieAll) / capitalMoyen / dureeAns2 * 100).toFixed(2) : "—";
+              const irrInt = calcTEGActuariel(
+                lg2.map(r=>r.estVersement?r:{...r,echeanceGlobale:r.echeance||0}),
+                montantVerse);
+              const irrTEG = calcTEGActuariel(lg2, montantVerse);
+              const totalInteretsPct = irrInt ? irrInt.tegNom : "—";
+              const tegPct = irrTEG ? irrTEG.tegNom : "—";
 
               return (<>
                 {intDispo>0   && <TauxRow label="Intérêts — Disponibilité"        taux={tpc["dispo"]   || localDos.tauxAnnuel}  montant={intDispo}/>}
@@ -18418,7 +18463,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.668{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.669{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
