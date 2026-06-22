@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v667-1779107496"/>
+  <meta name="app-version" content="v668-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14110,13 +14110,13 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
                               if (row.estCarence) return <span style={{...BS,background:"#FEE2E2",color:"#B91C1C"}}>Carence</span>;
                               if (row.estDifferFin) return <span style={{...BS,background:"#FFF7ED",color:"#C2410C"}}>In fine</span>;
                               if (row.estDiffere) return <span style={{...BS,background:"#FEF9C3",color:"#A16207"}}>Différé</span>;
-                              if (row.estVersement) return <span style={{...BS,background:"#DCFCE7",color:"#15803D"}}>Versement</span>;
+                              if (row.estVersement) return <span style={{...BS,background:"#DBEAFE",color:"#1D4ED8"}}>Versement</span>;
                               // Détection sur le texte importé (passe avant estAmort pour préserver le libellé du tableau d'amortissement)
                               if (tS.includes("disponib") || tS.includes("dispo")) return <span style={{...BS,background:"#CFFAFE",color:"#155E75"}}>{row.type}</span>;
                               if (tS.includes("amort"))  return <span style={{...BS,background:"#D1FAE5",color:"#065F46"}}>{row.type}</span>;
                               if (tS.includes("fine"))   return <span style={{...BS,background:"#FFF7ED",color:"#C2410C"}}>{row.type}</span>;
                               if (tS.includes("differ")) return <span style={{...BS,background:"#FEF9C3",color:"#A16207"}}>{row.type}</span>;
-                              if (tS.includes("vers"))   return <span style={{...BS,background:"#DCFCE7",color:"#15803D"}}>{row.type}</span>;
+                              if (tS.includes("vers"))   return <span style={{...BS,background:"#DBEAFE",color:"#1D4ED8"}}>{row.type}</span>;
                               if (tS.includes("capital")) return <span style={{...BS,background:"#EDE9FE",color:"#6D28D9"}}>{row.type}</span>;
                               if (row.estAmort) return <span style={{...BS,background:"#D1FAE5",color:"#065F46"}}>Amortissement</span>;
                               if (row.type && String(row.type).trim()) return <span style={{...BS,background:"#E0E7FF",color:"#3730A3"}}>{row.type}</span>;
@@ -18418,7 +18418,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.667{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.668{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
