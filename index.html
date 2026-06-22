@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v663-1779107496"/>
+  <meta name="app-version" content="v664-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13613,8 +13613,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
             <div>{lblL("Banque / Organisme")}<input value={localDos.banque||""} onChange={e=>setL("banque",e.target.value)} style={inpL}/></div>
             <div style={{gridColumn:"1/-1"}}>{lblL("Objet")}<input value={localDos.objet||""} onChange={e=>setL("objet",e.target.value)} placeholder="Achat, travaux..." style={inpL}/></div>
             <div>{lblL("N° contrat")}<input value={localDos.numContrat||""} onChange={e=>setL("numContrat",e.target.value)} style={inpL}/></div>
-            {(!localDos.lignes||localDos.lignes.length===0) ? (<>
-              <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="100 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
+            <div>{lblL("Montant (€)")}<div style={{position:"relative"}}><input type="text" value={localDos.montant||""} onChange={e=>setL("montant",e.target.value)} placeholder="100 000" style={{...inpL,paddingRight:20}}/><span style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",fontSize:10,color:"#AAA",pointerEvents:"none"}}>€</span></div></div>
               <div>{lblL("Taux annuel (%)")}<input type="text" value={localDos.tauxAnnuel||""} onChange={e=>setL("tauxAnnuel",e.target.value)} placeholder="4.5" style={inpL}/></div>
               <div>{lblL("Durée (mois)","Durée totale en mois, toutes périodicités confondues")}<input type="text" value={localDos.duree||""} onChange={e=>setL("duree",e.target.value)} placeholder="84" style={inpL}/></div>
               <div>{lblL("Périodicité","Fréquence des échéances")}<select value={localDos.fluxPeriode||"1"} onChange={e=>setL("fluxPeriode",e.target.value)} style={inpL}><option value="1">Mensuelle</option><option value="3">Trimestrielle</option><option value="6">Semestrielle</option><option value="12">Annuelle</option></select></div>
@@ -13624,32 +13623,31 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               <div>{lblL("Différé (mois)","Phase initiale où seuls les intérêts sont payés")}<input type="text" value={localDos.differe||""} onChange={e=>setL("differe",e.target.value)} placeholder="0" style={inpL}/></div>
               <div>{lblL("In fine (mois)","Mois en fin où le capital est remboursé en bloc")}<input type="text" value={localDos.differFin||""} onChange={e=>setL("differFin",e.target.value)} placeholder="0" style={inpL}/></div>
               <div>{lblL("Garantie")}<select value={localDos.garantie||""} onChange={e=>setL("garantie",e.target.value)} style={inpL}><option value="">—</option>{ECH_GARANTIE_OPTIONS.map(o=><option key={o}>{o}</option>)}</select></div>
-              {/* Bouton Générer (prêts simples — pour les complexes, importer depuis la modale + Nouvel échéancier) */}
-              <div style={{gridColumn:"1/-1",marginTop:6}}>
-                <button onClick={regenererLocal}
+              {(localDos.lignes&&localDos.lignes.length>0) && (
+                <div style={{gridColumn:"1/-1",background:"#F0FDF4",borderRadius:6,padding:"6px 10px",border:"1px solid #BBF7D0",fontSize:10,fontFamily:_FL,color:"#065F46"}}>
+                  {(()=>{const nVers=(localDos.lignes||[]).filter(r=>r.estVersement).length;const nMens=(localDos.lignes||[]).length-nVers;return <>✓ {localDos.lignes.length} lignes · {nMens} mensualité{nMens>1?"s":""}{nVers>0?" + "+nVers+" versement"+(nVers>1?"s":""):""}</>;})()}
+                </div>
+              )}
+              <div style={{gridColumn:"1/-1",marginTop:4}}>
+                <button onClick={()=>{
+                  const hasLignes=localDos.lignes&&localDos.lignes.length>0;
+                  if(hasLignes&&!window.confirm("Recalculer l'echéancier avec ces paramètres ?\nLes statuts de paiement saisis seront conservés, mais toutes les lignes seront recalculées."))return;
+                  regenererLocal();
+                }}
                   disabled={!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut}
                   style={{
                     width:"100%", padding:"8px 14px", fontSize:11, fontWeight:700, fontFamily:_FL,
-                    background: (!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut) ? "#E5E7EB" : "#102A63",
+                    background: (!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut) ? "#E5E7EB" : (localDos.lignes&&localDos.lignes.length>0 ? "#A16207" : "#102A63"),
                     color: (!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut) ? "#9CA3AF" : "white",
                     border:"none", borderRadius:8,
                     cursor:(!localDos.montant || !localDos.tauxAnnuel || !localDos.duree || !localDos.dateDebut) ? "not-allowed" : "pointer",
                   }}>
-                  🔄 Générer l'échéancier
+                  {(localDos.lignes&&localDos.lignes.length>0) ? "🔄 Recalculer l'échéancier" : "🔄 Générer l'échéancier"}
                 </button>
                 <div style={{fontSize:9,color:"#888",fontFamily:_FL,marginTop:4,textAlign:"center"}}>
-                  Renseigne au minimum montant, taux, durée et date début pour calculer l'échéancier.
+                  {(localDos.lignes&&localDos.lignes.length>0) ? "Modifie les paramètres puis recalcule — les statuts de paiement sont conservés." : "Renseigne au minimum montant, taux, durée et date début."}
                 </div>
               </div>
-            </>) : (
-              <div style={{gridColumn:"1/-1",background:"#F0FDF4",borderRadius:6,padding:"8px 10px",border:"1px solid #BBF7D0",fontSize:10,fontFamily:_FL,color:"#065F46"}}>
-                {(()=>{
-                  const nVers = (localDos.lignes||[]).filter(r=>r.estVersement).length;
-                  const nMens = (localDos.lignes||[]).length - nVers;
-                  return <>✓ {localDos.lignes.length} lignes importées · {nMens} mensualité{nMens>1?"s":""}{nVers>0 ? " + "+nVers+" versement"+(nVers>1?"s":"") : ""} · Durée : {localDos.duree||"calculée"} mois</>;
-                })()}
-              </div>
-            )}
           </div>
 
           {/* ── Bloc dates / durée / périodicité ── */}
@@ -18387,7 +18385,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.663{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.664{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
