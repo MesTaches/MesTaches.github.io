@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v664-1779107496"/>
+  <meta name="app-version" content="v665-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13596,7 +13596,15 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const regenererLocal=()=>{
     const rows=calcEcheancier(parseNum(localDos.montant),parseNum(localDos.tauxAnnuel),parseInt(localDos.duree)||0,localDos.dateDebut,parseNum(localDos.assuranceMensuelle)||0,parseInt(localDos.carence)||0,parseNum(localDos.tauxGarantie)||0,localDos.tauxDiffere?parseNum(localDos.tauxDiffere):null,parseNum(localDos.tauxCapita)||0,parseInt(localDos.differe)||0,localDos.typeAmort||"annuites",parseNum(localDos.tauxGarantie2)||0,parseInt(localDos.dureeGarantie1)||0,localDos.carenceCapitalisee||false,parseInt(localDos.differFin)||0,parseInt(localDos.fluxPeriode)||1);
     const merged=rows.map((r,i)=>{const ex=(localDos.lignes||[])[i]||{};return{...r,paye:ex.paye||false,datePaiement:ex.datePaiement||"",commentaire:ex.commentaire||""};});
-    const updated={...localDos,lignes:merged};setLocalDos(updated);saveDossier(updated);
+    const versements=(localDos.versements||[]).filter(v=>v.date&&v.montant);
+    let final=[...merged];
+    versements.forEach(v=>{
+      const dateIso=v.date;
+      let pos=final.findIndex(r=>r.date>dateIso);
+      if(pos===-1) pos=final.length;
+      final.splice(pos,0,{n:0,date:dateIso,echeance:0,capital:0,interets:0,cumulInterets:0,commGarantie:0,assurance:0,echeanceGlobale:0,capitalRestant:parseNum(v.montant),versement:parseNum(v.montant),estCarence:false,estCapita:false,estDiffere:false,estVersement:true,paye:false,datePaiement:"",commentaire:v.commentaire||"Versement de fonds"});
+    });
+    const updated={...localDos,lignes:final};setLocalDos(updated);saveDossier(updated);
   };
   return (
     <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
@@ -13691,6 +13699,31 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
               </div>
             );
           })()}
+
+          {/* ── Versement(s) de fonds ── */}
+          <div style={{background:"#EFF6FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
+            <div style={{fontSize:9,fontWeight:700,color:"#1D4ED8",fontFamily:_FL,letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span>VERSEMENT(S) DE FONDS</span>
+              <button onClick={()=>{const vs=[...(localDos.versements||[]),{id:uid(),date:"",montant:String(localDos.montant||""),commentaire:"Versement de fonds"}];setLocalDos(p=>({...p,versements:vs}));saveDossier({...localDos,versements:vs});}} style={{fontSize:10,background:"#1D4ED8",color:"white",border:"none",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontFamily:_FL,fontWeight:700}}>+ Ajouter</button>
+            </div>
+            {(localDos.versements||[]).length===0 && <div style={{fontSize:10,color:"#93C5FD",fontFamily:_FL,fontStyle:"italic"}}>Aucun versement saisi — cliquez + Ajouter pour enregistrer la date de réception des fonds.</div>}
+            {(localDos.versements||[]).map((v,vi)=>(
+              <div key={v.id||vi} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:5,marginBottom:5,alignItems:"end"}}>
+                <div>
+                  {vi===0&&<div style={{fontSize:9,color:"#1D4ED8",fontFamily:_FL,fontWeight:600,marginBottom:2}}>Date</div>}
+                  <input type="date" value={v.date||""} onChange={e=>{const vs=(localDos.versements||[]).map((x,i)=>i===vi?{...x,date:e.target.value}:x);setLocalDos(p=>({...p,versements:vs}));saveDossier({...localDos,versements:vs});}} style={{...inpL,fontSize:10}}/>
+                </div>
+                <div>
+                  {vi===0&&<div style={{fontSize:9,color:"#1D4ED8",fontFamily:_FL,fontWeight:600,marginBottom:2}}>Montant (€)</div>}
+                  <input type="text" value={v.montant||""} placeholder="0" onChange={e=>{const vs=(localDos.versements||[]).map((x,i)=>i===vi?{...x,montant:e.target.value}:x);setLocalDos(p=>({...p,versements:vs}));saveDossier({...localDos,versements:vs});}} style={{...inpL,fontSize:10}}/>
+                </div>
+                <button onClick={()=>{const vs=(localDos.versements||[]).filter((_,i)=>i!==vi);setLocalDos(p=>({...p,versements:vs}));saveDossier({...localDos,versements:vs});}} style={{fontSize:12,background:"none",border:"none",color:"#EF4444",cursor:"pointer",padding:"4px 6px",lineHeight:1}}>✕</button>
+              </div>
+            ))}
+            {(localDos.versements||[]).some(v=>v.date&&v.montant) && (
+              <div style={{fontSize:9,color:"#1D4ED8",fontFamily:_FL,marginTop:4,fontStyle:"italic"}}>Cliquez "Recalculer l'échéancier" pour insérer les versements dans le tableau.</div>
+            )}
+          </div>
 
           <div style={{background:"#F0F5FF",borderRadius:8,padding:"8px 10px",border:"1px solid #BFDBFE"}}>
             <div style={{fontSize:9,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
@@ -18385,7 +18418,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.664{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.665{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
