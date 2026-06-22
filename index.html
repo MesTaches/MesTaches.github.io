@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v671-1779107496"/>
+  <meta name="app-version" content="v672-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -14418,7 +14418,7 @@ window.calcDossierAuto = function calcDossierAuto(dos) {
   else if (statutAmort && commParStatut[statutAmort]) commAuto = commParStatut[statutAmort];
 
   var payeN = lg.filter(function(r){ return r.date <= nowS; }).length;
-  var capitalRestantActuel = (lg[payeN] && lg[payeN].capitalRestant) || 0;
+  var capitalRestantActuel = payeN > 0 ? ((lg[payeN-1] && lg[payeN-1].capitalRestant) || 0) : (parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",",".")) || 0);
 
   var hasMontantSaisi   = dos.montant && parseFloat(String(dos.montant).replace(/\s/g,"").replace(",",".")) > 0;
   var hasTauxSaisi      = dos.tauxAnnuel && String(dos.tauxAnnuel).trim() !== "";
@@ -14523,7 +14523,7 @@ function EcheancierView({ tasks, settings }) {
     const lignes = d.lignes||[];
     const nowT=new Date().toISOString().split("T")[0];
     const payeT = lignes.filter(r=>r.date<=nowT).length;
-    return a + (lignes[payeT]?.capitalRestant||0);
+    return a + (payeT>0?(lignes[payeT-1]?.capitalRestant||0):(parseFloat(String((d.montant||"0")).replace(/\s/g,"").replace(",","."))||0));
   },0);
   const totalEcheancesAnnee = dossiers.reduce((a,d)=>{
     const annee = new Date().getFullYear();
@@ -14670,7 +14670,7 @@ function EcheancierView({ tasks, settings }) {
                       const nowT5=new Date().toISOString().split("T")[0];
                       const paye=lignes.filter(r=>r.date<=nowT5).length;
                       const pct=lignes.length>0?Math.round(paye/lignes.length*100):0;
-                      const restantDu=lignes[paye]?.capitalRestant||0;
+                      const restantDu=paye>0?(lignes[paye-1]?.capitalRestant||0):(parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",","."))||0);
                       const isD=dragIdx===i;
                       return (
                         <tr key={dos.id} draggable
@@ -14741,7 +14741,7 @@ function EcheancierView({ tasks, settings }) {
                   const nowT3=new Date().toISOString().split("T")[0];
                   const paye=lignes.filter(r=>r.date<=nowT3).length;
                   const pct=lignes.length>0?Math.round(paye/lignes.length*100):0;
-                  const restantDu=lignes[paye]?.capitalRestant||0;
+                  const restantDu=paye>0?(lignes[paye-1]?.capitalRestant||0):(parseFloat(String(dos.montant||"0").replace(/\s/g,"").replace(",","."))||0);
                   const prochaine=lignes.find(r=>r.date>nowT3);
                   const enRetardDos=0;
                   const countType = test => lignes.filter(test).length;
@@ -18463,7 +18463,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.671{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.672{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
