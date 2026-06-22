@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v670-1779107496"/>
+  <meta name="app-version" content="v671-1779107496"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -13621,7 +13621,7 @@ function EchDossierTab({ dos, saveDossier, deleteDossier, fmtE }) {
   const lignes=dos.lignes||[];
   const payeAuto=lignes.filter(r=>r.date<=now).length;
   const pct=lignes.length>0?Math.round(payeAuto/lignes.length*100):0;
-  const restantDu=lignes[payeAuto]?.capitalRestant||(lignes.length>0?lignes[lignes.length-1].capitalRestant:0);
+  const restantDu=payeAuto>0?(lignes[payeAuto-1]?.capitalRestant??0):(parseNum(localDos.montant)||0);
   const totalInt   = lignes.reduce((a,r)=>a+(r.estCapita?0:(r.interets||0)),0);
   const totalCap   = lignes.reduce((a,r)=>a+(r.capital||0),0);
   const totalGar   = lignes.reduce((a,r)=>a+(r.commGarantie||0),0);
@@ -18463,7 +18463,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.670{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.671{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
