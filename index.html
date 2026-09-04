@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v675-1788534276"/>
+  <meta name="app-version" content="v676-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17298,7 +17298,7 @@ function PaymentsView({ settings }) {
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
   const PAY_COL_WIDTHS_KEY = "taskmanager_payments_colwidths_v1";
-  const DEFAULT_PAY_COL_WIDTHS = { priority: 132, supplier: 260, account: 110, requestDate: 112, requester: 130, estimatedDate: 132, amount: 150, status: 128, meetingDate: 132, arbitrationDecision: 150 };
+  const DEFAULT_PAY_COL_WIDTHS = { priority: 118, supplier: 230, account: 90, requestDate: 96, requester: 110, estimatedDate: 112, amount: 130, status: 108, meetingDate: 112, arbitrationDecision: 128 };
   const [colWidths, setColWidths] = React.useState(() => {
     try { const s = localStorage.getItem(PAY_COL_WIDTHS_KEY); return s ? { ...DEFAULT_PAY_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PAY_COL_WIDTHS; }
     catch { return DEFAULT_PAY_COL_WIDTHS; }
@@ -17419,7 +17419,40 @@ function PaymentsView({ settings }) {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 16, alignItems: "start" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {/* ── Widgets compacts (au-dessus du tableau) ── */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ background: "linear-gradient(135deg, #102A63 0%, #1a3d8f 100%)", borderRadius: 12, padding: "9px 16px", color: "white", boxShadow: "0 2px 10px rgba(16,42,99,0.25)", display: "flex", alignItems: "center", gap: 14, flexShrink: 0 }}>
+            <div>
+              <div style={{ fontSize: 9, fontFamily: "'Lora',serif", opacity: 0.7, whiteSpace: "nowrap" }}>TOTAL EN ATTENTE</div>
+              <div style={{ fontSize: 19, fontWeight: 700, fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{fmtEuro(totalPending)}</div>
+            </div>
+            <div style={{ width: 1, alignSelf: "stretch", background: "rgba(255,255,255,0.2)" }} />
+            <div style={{ fontSize: 9, fontFamily: "'Lora',serif", opacity: 0.65, whiteSpace: "nowrap", lineHeight: 1.6 }}>
+              {pending.length} paiement{pending.length > 1 ? "s" : ""}<br />{payments.filter(p => p.status === "paid").length} payé{payments.filter(p => p.status === "paid").length > 1 ? "s" : ""}
+            </div>
+          </div>
+          <div style={{ flex: 1, minWidth: 220, background: "white", border: "1px solid #ECEAE5", borderRadius: 12, padding: "8px 14px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)", display: "flex", alignItems: "center", gap: 8, overflowX: "auto" }}>
+            <span style={{ fontSize: 9, fontWeight: 700, color: "#AAA", fontFamily: "'Lora',serif", letterSpacing: "0.06em", flexShrink: 0 }}>PAR DATE</span>
+            {sortedDates.length === 0 ? (
+              <span style={{ fontSize: 10, color: "#CCC", fontFamily: "'Lora',serif" }}>Aucun paiement en attente</span>
+            ) : sortedDates.map(date => {
+              const grp = byDate[date];
+              const isPast = date !== "Sans date" && date < today_str;
+              const isSoon = date !== "Sans date" && !isPast && (new Date(date) - new Date()) / 86400000 <= 7;
+              return (
+                <div key={date} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "#F8F9FB", borderRadius: 8, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}`, flexShrink: 0, whiteSpace: "nowrap" }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'Lora',serif" }}>
+                    {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}{date === "Sans date" ? "Sans date" : date.split("-").reverse().join("/")}
+                  </span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(grp.total)}</span>
+                  <span style={{ fontSize: 9, color: "#AAA", fontFamily: "'Lora',serif" }}>({grp.count})</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* ── Tableau principal ── */}
         <div style={{ minWidth: 0, background: "white", borderRadius: 16, border: "1px solid #ECEAE5", overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
           {/* Filtres */}
@@ -17548,36 +17581,6 @@ function PaymentsView({ settings }) {
                 <div />
               </div>
             )}
-          </div>
-        </div>
-
-        {/* ── Synthèse latérale ── */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ background: "linear-gradient(135deg, #102A63 0%, #1a3d8f 100%)", borderRadius: 16, padding: "16px", color: "white", boxShadow: "0 4px 16px rgba(16,42,99,0.3)" }}>
-            <div style={{ fontSize: 10, fontFamily: "'Lora',serif", opacity: 0.7, marginBottom: 4 }}>TOTAL EN ATTENTE</div>
-            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: "'Lora',serif" }}>{fmtEuro(totalPending)}</div>
-            <div style={{ fontSize: 9, fontFamily: "'Lora',serif", opacity: 0.6, marginTop: 4 }}>{pending.length} paiement{pending.length > 1 ? "s" : ""} · {payments.filter(p => p.status === "paid").length} payé{payments.filter(p => p.status === "paid").length > 1 ? "s" : ""}</div>
-          </div>
-          <div style={{ background: "white", borderRadius: 14, border: "1px solid #ECEAE5", padding: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-            <div style={{ fontSize: 10, fontWeight: 700, fontFamily: "'Lora',serif", color: "#AAA", marginBottom: 10, letterSpacing: "0.06em" }}>PAR DATE ESTIMÉE</div>
-            {sortedDates.length === 0 ? (
-              <div style={{ fontSize: 10, color: "#CCC", fontFamily: "'Lora',serif", textAlign: "center", padding: "10px 0" }}>Aucun paiement en attente</div>
-            ) : sortedDates.map(date => {
-              const grp = byDate[date];
-              const isPast = date !== "Sans date" && date < today_str;
-              const isSoon = date !== "Sans date" && !isPast && (new Date(date) - new Date()) / 86400000 <= 7;
-              return (
-                <div key={date} style={{ marginBottom: 8, padding: isMobile?"12px 14px":"8px 10px", background: "#F8F9FB", borderRadius: 8, borderLeft: `3px solid ${isPast ? "#E74C3C" : isSoon ? "#E67E22" : "#102A63"}` }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: isPast ? "#C0392B" : isSoon ? "#E67E22" : "#2C3E50", fontFamily: "'Lora',serif" }}>
-                      {isPast ? "🚨 " : isSoon ? "⚠️ " : "📅 "}{date === "Sans date" ? "Sans date" : date.split("-").reverse().join("/")}
-                    </div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#102A63", fontFamily: "'Lora',serif" }}>{fmtEuro(grp.total)}</div>
-                  </div>
-                  <div style={{ fontSize: 9, color: "#888", fontFamily: "'Lora',serif", marginTop: 2 }}>{grp.count} paiement{grp.count > 1 ? "s" : ""} · {grp.items.slice(0,2).join(", ")}{grp.items.length > 2 ? "…" : ""}</div>
-                </div>
-              );
-            })}
           </div>
         </div>
       </div>
@@ -18551,7 +18554,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.675{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.676{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
