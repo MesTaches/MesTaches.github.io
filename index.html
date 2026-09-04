@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v673-1779107496"/>
+  <meta name="app-version" content="v674-1788532410"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,6 +61,7 @@ input::placeholder, textarea::placeholder {
     }
   </script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
@@ -9057,6 +9058,13 @@ const PAYMENT_PRIORITIES = [
   { id: "normal",      label: "Normal",      icon: "▬ P3", color: "#7F8C8D" },
   { id: "faible",      label: "Faible",      icon: "▼ P4", color: "#27AE60" },
 ];
+// Décision prise en réunion d'arbitrage sur une demande de paiement (relance/appel interne)
+const ARBITRATION_DECISIONS = [
+  { id: "en_attente", label: "En attente", bg: "#FEF9C3", color: "#A16207", icon: "⏳" },
+  { id: "valide",     label: "Validé",     bg: "#DBEAFE", color: "#1D4ED8", icon: "✓"  },
+  { id: "reporte",    label: "Reporté",    bg: "#FFE8CC", color: "#9A5B13", icon: "↻"  },
+  { id: "refuse",     label: "Refusé",     bg: "#FEE2E2", color: "#B91C1C", icon: "✗"  },
+];
 
 // Convertit un HTML enrichi (RichTextArea) en texte brut structuré pour un mail :
 // - <br>, <p>, <div>     → saut de ligne
@@ -9137,7 +9145,7 @@ function savePayments(p) { appDbSet("payments", p); }
 
 function PaymentModal({ payment, onSave, onClose, settings }) {
     const isMobile = useIsMobile();
-  const [d, setD] = React.useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", priority: "normal", isClientSupplier: false, notes: "" });
+  const [d, setD] = React.useState(payment || { id: uid(), supplier: "", requestDate: today(), requester: "", estimatedDate: "", amount: "", status: "pending", priority: "normal", isClientSupplier: false, notes: "", meetingDate: "", arbitrationDecision: "" });
   const [amountDisplay, setAmountDisplay] = React.useState(payment && payment.amount ? fmtAmountInput(payment.amount) : "");
 
   const handleAmountChange = (e) => {
@@ -9193,6 +9201,15 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>{lblD("Date demande")}<input type="date" value={d.requestDate} onChange={e=>setD(p=>({...p, requestDate:e.target.value}))} onClick={e=>{try{e.currentTarget.showPicker();}catch(_){}}} style={inp} /></div>
               <div>{lblD("Date estimée")}<input type="date" value={d.estimatedDate} onChange={e=>setD(p=>({...p, estimatedDate:e.target.value}))} onClick={e=>{try{e.currentTarget.showPicker();}catch(_){}}} style={inp} /></div>
+            </div>
+          </ModalSection>
+          <ModalSection title="Arbitrage">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>{lblD("Réunion arbitrage")}<input type="date" value={d.meetingDate||""} onChange={e=>setD(p=>({...p, meetingDate:e.target.value}))} onClick={e=>{try{e.currentTarget.showPicker();}catch(_){}}} style={inp} /></div>
+              <div>{lblD("Décision arbitrage")}<select value={d.arbitrationDecision||""} onChange={e=>setD(p=>({...p, arbitrationDecision:e.target.value}))} style={inp}>
+                <option value="">—</option>
+                {ARBITRATION_DECISIONS.map(a=><option key={a.id} value={a.id}>{a.icon} {a.label}</option>)}
+              </select></div>
             </div>
           </ModalSection>
           <ModalSection title="Notes">
@@ -17350,11 +17367,13 @@ function PaymentsView({ settings }) {
     { id: "estimatedDate", label: "PAIEMENT EST." },
     { id: "amount",        label: "MONTANT" },
     { id: "status",        label: "STATUT" },
+    { id: "meetingDate",         label: "RÉUNION ARB." },
+    { id: "arbitrationDecision", label: "DÉCISION ARB." },
   ];
 
   // Colonnes fractionnaires : le tableau remplit toute la largeur disponible (pas de scroll horizontal).
-  // Ordre : checkbox · PRIO · FOURNISSEUR · COMPTE · DATE DEM · DEMANDEUR · PAIEMENT EST · MONTANT · STATUT · actions
-  const gridTemplate = "28px 38px minmax(120px,2.4fr) 64px 78px minmax(80px,1.3fr) 92px minmax(90px,1.1fr) 92px 32px";
+  // Ordre : checkbox · PRIO · FOURNISSEUR · COMPTE · DATE DEM · DEMANDEUR · PAIEMENT EST · MONTANT · STATUT · RÉUNION ARB. · DÉCISION ARB. · actions
+  const gridTemplate = "28px 38px minmax(120px,2.4fr) 64px 78px minmax(80px,1.3fr) 92px minmax(90px,1.1fr) 92px 92px 96px 32px";
 
   const HeaderCell = ({ col }) => (
     <div style={{ display: "flex", alignItems: "center", gap: 2, userSelect: "none", justifyContent: col.id === "amount" ? "flex-end" : "flex-start", paddingRight: col.id === "amount" ? 8 : 0 }}>
@@ -17434,6 +17453,7 @@ function PaymentsView({ settings }) {
             ) : filtered.map((p, i) => {
               const st   = PAYMENT_STATUSES.find(s => s.id === p.status) || PAYMENT_STATUSES[0];
               const prio = PAYMENT_PRIORITIES.find(pr => pr.id === (p.priority || "normal")) || PAYMENT_PRIORITIES[2];
+              const arb  = ARBITRATION_DECISIONS.find(a => a.id === p.arbitrationDecision);
               const urg  = getUrgency(p);
               return (
                 <div key={p.id}
@@ -17464,6 +17484,10 @@ function PaymentsView({ settings }) {
                   </div>
                   <div style={{ fontSize: 12, fontFamily: _FL, color: "#2C3E50", fontWeight: 600, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden" }}>{fmtEuro(p.amount)}</div>
                   <div><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
+                  {/* Réunion arbitrage */}
+                  <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#555" }}>{p.meetingDate ? p.meetingDate.split("-").reverse().join("/") : "—"}</div>
+                  {/* Décision arbitrage */}
+                  <div>{arb ? <span style={{ fontSize: 9, fontWeight: 700, background: arb.bg, color: arb.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{arb.icon} {arb.label}</span> : <span style={{ fontSize: 11, color: "#DDD", fontFamily: "'Lora',serif" }}>—</span>}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <button onClick={(e) => { e.stopPropagation(); setNoteModal(p); }}
                       title={p.notes ? "Voir/modifier la note" : "Ajouter une note"}
@@ -17488,7 +17512,7 @@ function PaymentsView({ settings }) {
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#102A63", fontFamily: _FL, textAlign: "right", paddingRight: 8, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
                   {fmtEuro(filtered.reduce((s, p) => s + (parseFloat(String(p.amount).replace(/\\s/g,"").replace(",",".")) || 0), 0))}
                 </div>
-                <div /><div />
+                <div /><div /><div /><div />
               </div>
             </div>
           )}
@@ -18494,7 +18518,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.673{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.674{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -18745,42 +18769,157 @@ function App() {
 
 
 <script>
-window.exportPaymentsCSV = function(payments) {
+// Export Excel mis en forme (thème KP1 #102A63) — reprend la charte du fichier
+// "Suivi des relances fournisseurs". Utilise ExcelJS (contrairement à SheetJS,
+// gère les couleurs/remplissages de cellules).
+window.exportPaymentsCSV = async function(payments) {
   try {
-    var statusMap = {"pending":"En attente","approved":"Approuvé","paid":"Payé","rejected":"Rejeté","scheduled":"Planifié"};
-    var prioMap = {"urgent":"Urgent","high":"Haute","normal":"Normale","low":"Basse"};
+    if (typeof ExcelJS === "undefined") { alert("La bibliothèque d'export Excel n'a pas fini de charger, réessayez dans quelques secondes."); return; }
+
+    var NAVY      = "FF102A63";
+    var NAVY_DARK = "FF0B1F49";
+    var WHITE     = "FFFFFFFF";
+    var BAND      = "FFEEF1F8";
+    var GOLD      = "FFC9A227";
+    var GREY_TXT  = "FF5B6172";
+
+    var statusMap = {
+      pending:  { label:"En attente", bg:"FFFEF9C3", color:"FFA16207" },
+      approved: { label:"Validé",     bg:"FFDBEAFE", color:"FF1D4ED8" },
+      paid:     { label:"Payé",       bg:"FFD1FAE5", color:"FF065F46" },
+      rejected: { label:"Refusé",     bg:"FFFEE2E2", color:"FFB91C1C" },
+      urgent:   { label:"Urgent",     bg:"FFFDEDEC", color:"FFC0392B" },
+    };
+    var prioMap = { prioritaire:"Prioritaire", urgent:"Urgent", normal:"Normal", faible:"Faible" };
+    var arbMap = {
+      en_attente: { label:"En attente", bg:"FFFEF9C3", color:"FFA16207" },
+      valide:     { label:"Validé",     bg:"FFDBEAFE", color:"FF1D4ED8" },
+      reporte:    { label:"Reporté",    bg:"FFFFE8CC", color:"FF9A5B13" },
+      refuse:     { label:"Refusé",     bg:"FFFEE2E2", color:"FFB91C1C" },
+    };
+    var fmtDateFR = function(s){ return s ? s.split("-").reverse().join("/") : ""; };
+
     var toExport = (payments || []).filter(function(p){ return p.status !== "paid"; });
     if (toExport.length === 0) { alert("Aucun paiement à exporter."); return; }
-    var wsData = [["Priorité","Fournisseur","Compte","Date demande","Demandeur","Paiement estimé","Montant","Statut","Notes"]];
-    toExport.forEach(function(p){
-      var rawAmount = p.amount ? String(p.amount).replace(/[^0-9.,]/g,"").replace(",",".") : "";
-      var numAmount = rawAmount ? parseFloat(rawAmount) : "";
-      wsData.push([
-        prioMap[p.priority||"normal"]||"",
-        p.supplier||"", p.account||"",
-        p.requestDate||"", p.requester||"", p.estimatedDate||"",
-        numAmount,
-        statusMap[p.status]||p.status||"",
-        (p.notes||"").replace(/[\r\n]+/g," ")
-      ]);
-    });
-    var ws = XLSX.utils.aoa_to_sheet(wsData);
-    // Format numérique français pour la colonne Montant (colonne G = index 6)
-    var fmtFR = "# ##0,00";
-    for (var r = 1; r < wsData.length; r++) {
-      var cellRef = XLSX.utils.encode_cell({r: r, c: 6});
-      if (ws[cellRef] && typeof ws[cellRef].v === "number") {
-        ws[cellRef].z = "#,##0.00";
-        ws[cellRef].t = "n";
-      }
-    }
-    // Largeurs colonnes
-    ws["!cols"] = [
-      {wch:10},{wch:22},{wch:10},{wch:14},{wch:12},{wch:16},{wch:14},{wch:14},{wch:40}
+
+    var HEADERS = [
+      ["N°", 6], ["Code fournisseur", 16], ["Raison sociale", 28], ["Montant à verser", 16],
+      ["Date de la demande", 14], ["Demandeur", 14], ["Date prévisionnelle\npaiement", 16],
+      ["Réunion arbitrage", 15], ["Décision arbitrage", 15], ["Statut", 13],
+      ["Priorité", 12], ["Commentaire", 42],
     ];
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Paiements");
-    XLSX.writeFile(wb, "paiements_" + new Date().toISOString().split("T")[0] + ".xlsx");
+    var N = HEADERS.length;
+
+    var wb = new ExcelJS.Workbook();
+    wb.creator = "Mes Tâches — KP1";
+    wb.created = new Date();
+    var ws = wb.addWorksheet("Paiements", { views: [{ showGridLines: false }] });
+    ws.columns = HEADERS.map(function(h){ return { width: h[1] }; });
+
+    // ── Titre ──
+    ws.mergeCells(1, 1, 1, N);
+    var title = ws.getCell(1, 1);
+    title.value = "KP1  —  Paiements fournisseurs (hors payés)";
+    title.font = { name: "Calibri", size: 16, bold: true, color: { argb: WHITE } };
+    title.alignment = { vertical: "middle", horizontal: "left", indent: 1 };
+    ws.getRow(1).height = 30;
+    for (var c1 = 1; c1 <= N; c1++) ws.getCell(1, c1).fill = { type:"pattern", pattern:"solid", fgColor:{argb:NAVY} };
+
+    // ── Sous-titre ──
+    ws.mergeCells(2, 1, 2, N);
+    var sub = ws.getCell(2, 1);
+    var now = new Date();
+    sub.value = "Export du " + now.toLocaleDateString("fr-FR") + " à " + now.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}) + "  ·  " + toExport.length + " paiement" + (toExport.length>1?"s":"") + " en attente";
+    sub.font = { name:"Calibri", size:10, italic:true, color:{argb:WHITE} };
+    sub.alignment = { vertical:"middle", horizontal:"left", indent:1 };
+    ws.getRow(2).height = 18;
+    for (var c2 = 1; c2 <= N; c2++) ws.getCell(2, c2).fill = { type:"pattern", pattern:"solid", fgColor:{argb:NAVY_DARK} };
+
+    ws.getRow(3).height = 6;
+
+    // ── En-têtes ──
+    var HEADER_ROW = 4;
+    HEADERS.forEach(function(h, idx){
+      var cell = ws.getCell(HEADER_ROW, idx+1);
+      cell.value = h[0];
+      cell.font = { name:"Calibri", size:10.5, bold:true, color:{argb:WHITE} };
+      cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:NAVY} };
+      cell.alignment = { vertical:"middle", horizontal:"center", wrapText:true };
+      cell.border = { top:{style:"thin",color:{argb:"FFC9CFDE"}}, bottom:{style:"thin",color:{argb:"FFC9CFDE"}}, left:{style:"thin",color:{argb:"FFC9CFDE"}}, right:{style:"thin",color:{argb:"FFC9CFDE"}} };
+    });
+    ws.getRow(HEADER_ROW).height = 28;
+    ws.views = [{ state:"frozen", ySplit: HEADER_ROW, showGridLines:false }];
+
+    // ── Lignes ──
+    toExport.forEach(function(p, i){
+      var r = HEADER_ROW + 1 + i;
+      var rawAmount = p.amount ? String(p.amount).replace(/[^0-9.,]/g,"").replace(",",".") : "";
+      var numAmount = rawAmount ? parseFloat(rawAmount) : null;
+      var st = statusMap[p.status] || { label: p.status || "", bg:"FFF3F3F3", color:"FF888888" };
+      var arb = arbMap[p.arbitrationDecision];
+      var vals = [
+        i + 1,
+        p.account || "",
+        p.supplier || "",
+        numAmount,
+        fmtDateFR(p.requestDate),
+        p.requester || "",
+        fmtDateFR(p.estimatedDate),
+        fmtDateFR(p.meetingDate),
+        arb ? arb.label : "",
+        st.label,
+        prioMap[p.priority || "normal"] || "",
+        (p.notes || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(),
+      ];
+      vals.forEach(function(v, ci){
+        var cell = ws.getCell(r, ci+1);
+        cell.value = v === "" ? "" : v;
+        cell.font = { name:"Calibri", size:10, color:{argb:"FF1B1F2B"} };
+        cell.alignment = { vertical:"middle", horizontal: (ci===2||ci===11) ? "left" : "center", wrapText: ci===11 };
+        cell.border = { top:{style:"thin",color:{argb:"FFE3E7F0"}}, bottom:{style:"thin",color:{argb:"FFE3E7F0"}}, left:{style:"thin",color:{argb:"FFE3E7F0"}}, right:{style:"thin",color:{argb:"FFE3E7F0"}} };
+        cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb: i % 2 === 1 ? BAND : WHITE} };
+      });
+      ws.getCell(r, 4).numFmt = '#,##0.00 €'; // Montant
+      // Statut / Décision arbitrage : badge coloré
+      var stCell = ws.getCell(r, 10);
+      stCell.font = { name:"Calibri", size:10, bold:true, color:{argb:st.color} };
+      stCell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:st.bg} };
+      if (arb) {
+        var arbCell = ws.getCell(r, 9);
+        arbCell.font = { name:"Calibri", size:10, bold:true, color:{argb:arb.color} };
+        arbCell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:arb.bg} };
+      }
+      ws.getRow(r).height = 18;
+    });
+
+    // ── Total ──
+    var lastDataRow = HEADER_ROW + toExport.length;
+    var totalRow = lastDataRow + 1;
+    ws.mergeCells(totalRow, 1, totalRow, 3);
+    var totalLbl = ws.getCell(totalRow, 1);
+    totalLbl.value = "TOTAL EN ATTENTE";
+    totalLbl.font = { name:"Calibri", size:10, bold:true, color:{argb:GREY_TXT} };
+    totalLbl.alignment = { vertical:"middle", horizontal:"right", indent:1 };
+    var totalVal = ws.getCell(totalRow, 4);
+    totalVal.value = { formula: "SUM(D" + (HEADER_ROW+1) + ":D" + lastDataRow + ")" };
+    totalVal.numFmt = '#,##0.00 €';
+    totalVal.font = { name:"Calibri", size:11, bold:true, color:{argb:NAVY} };
+    totalVal.alignment = { vertical:"middle", horizontal:"center" };
+    for (var ct = 1; ct <= N; ct++) {
+      ws.getCell(totalRow, ct).border = { top:{style:"medium",color:{argb:GOLD}} };
+    }
+    ws.getRow(totalRow).height = 20;
+
+    var buffer = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement("a");
+    a.href = url;
+    a.download = "paiements_fournisseurs_KP1_" + new Date().toISOString().split("T")[0] + ".xlsx";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
   } catch(e) { alert("Erreur export: " + e.message); }
 };
 </script>
