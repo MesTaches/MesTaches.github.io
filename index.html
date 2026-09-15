@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v678-1788534750"/>
+  <meta name="app-version" content="v679-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9065,6 +9065,15 @@ const PAYMENT_PRIORITIES = [
   { id: "normal",      label: "Normal",      icon: "▬ P3", color: "#7F8C8D", num: 3 },
   { id: "faible",      label: "Faible",      icon: "▼ P4", color: "#27AE60", num: 4 },
 ];
+// Tranche de retard d'un paiement (délai par rapport à l'échéance)
+const PAYMENT_TRANCHES = [
+  { id: "proforma",  label: "Proforma",              bg: "#EDE9FE", color: "#6D28D9" },
+  { id: "anticipe",  label: "Paiement anticipé",     bg: "#DBEAFE", color: "#1D4ED8" },
+  { id: "moins15",   label: "Inférieur à 15 jours",  bg: "#D1FAE5", color: "#065F46" },
+  { id: "j16_30",    label: "Retard de 16 à 30 jours", bg: "#FEF9C3", color: "#A16207" },
+  { id: "j31_60",    label: "Retard de 31 à 60 jours", bg: "#FFE8CC", color: "#9A5B13" },
+  { id: "plus60",    label: "Retard + 60 jours",     bg: "#FEE2E2", color: "#B91C1C" },
+];
 // Décision prise en réunion d'arbitrage sur une demande de paiement (relance/appel interne)
 const ARBITRATION_DECISIONS = [
   { id: "en_attente", label: "En attente", bg: "#FEF9C3", color: "#A16207", icon: "⏳" },
@@ -9203,6 +9212,10 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
               <div>{lblD("Statut")}<select value={d.status} onChange={e=>setD(p=>({...p, status:e.target.value}))} style={inp}>{PAYMENT_STATUSES.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select></div>
               <div>{lblD("Priorité")}<select value={d.priority||"normal"} onChange={e=>setD(p=>({...p, priority:e.target.value}))} style={inp}>{PAYMENT_PRIORITIES.map(p=><option key={p.id} value={p.id}>{p.icon} {p.label}</option>)}</select></div>
             </div>
+            <div style={{marginTop:10}}>{lblD("Tranche retard")}<select value={d.tranche||""} onChange={e=>setD(p=>({...p, tranche:e.target.value}))} style={inp}>
+              <option value="">—</option>
+              {PAYMENT_TRANCHES.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+            </select></div>
           </ModalSection>
           <ModalSection title="Dates">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -17305,7 +17318,7 @@ function PaymentsView({ settings }) {
   const [sortField, setSortField] = React.useState("estimatedDate");
   const [sortAsc, setSortAsc] = React.useState(true);
   const PAY_COL_WIDTHS_KEY = "taskmanager_payments_colwidths_v1";
-  const DEFAULT_PAY_COL_WIDTHS = { priority: 118, supplier: 230, account: 90, requestDate: 96, requester: 110, estimatedDate: 112, amount: 130, status: 108, meetingDate: 112, arbitrationDecision: 128 };
+  const DEFAULT_PAY_COL_WIDTHS = { priority: 118, supplier: 230, account: 90, requestDate: 96, requester: 110, estimatedDate: 112, amount: 130, status: 108, tranche: 150, meetingDate: 112, arbitrationDecision: 128 };
   const [colWidths, setColWidths] = React.useState(() => {
     try { const s = localStorage.getItem(PAY_COL_WIDTHS_KEY); return s ? { ...DEFAULT_PAY_COL_WIDTHS, ...JSON.parse(s) } : DEFAULT_PAY_COL_WIDTHS; }
     catch { return DEFAULT_PAY_COL_WIDTHS; }
@@ -17370,6 +17383,11 @@ function PaymentsView({ settings }) {
         va = (PAYMENT_PRIORITIES.find(pr => pr.id === (a.priority||"normal"))||PAYMENT_PRIORITIES[2]).num;
         vb = (PAYMENT_PRIORITIES.find(pr => pr.id === (b.priority||"normal"))||PAYMENT_PRIORITIES[2]).num;
       }
+      if (sortField === "tranche") {
+        // Ordre logique (proforma → anticipé → <15j → 16-30 → 31-60 → +60), les non renseignés en dernier
+        const rank = t => { const i = PAYMENT_TRANCHES.findIndex(x => x.id === t); return i < 0 ? 999 : i; };
+        va = rank(a.tranche); vb = rank(b.tranche);
+      }
       const cmp = va < vb ? -1 : va > vb ? 1 : 0;
       return sortAsc ? cmp : -cmp;
     });
@@ -17396,6 +17414,7 @@ function PaymentsView({ settings }) {
     { id: "estimatedDate", label: "PAIEMENT EST." },
     { id: "amount",        label: "MONTANT" },
     { id: "status",        label: "STATUT" },
+    { id: "tranche",       label: "TRANCHE RETARD" },
     { id: "meetingDate",         label: "RÉUNION ARB." },
     { id: "arbitrationDecision", label: "DÉCISION ARB." },
   ];
@@ -17563,6 +17582,8 @@ function PaymentsView({ settings }) {
                   </div>
                   <div style={{ fontSize: 12, fontFamily: _FL, color: "#2C3E50", fontWeight: 600, textAlign: "right", padding: "0 8px", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap", overflow: "hidden", height: "100%", display: "flex", alignItems: "center", justifyContent: "flex-end", borderRight: cellBorderRight, boxSizing: "border-box" }}>{fmtEuro(p.amount)}</div>
                   <div style={{ padding: "0 8px", height: "100%", display: "flex", alignItems: "center", borderRight: cellBorderRight, boxSizing: "border-box" }}><span style={{ fontSize: 9, fontWeight: 700, background: st.bg, color: st.color, borderRadius: 20, padding: "2px 6px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{st.icon} {st.label}</span></div>
+                  {/* Tranche retard */}
+                  <div style={{ padding: "0 8px", height: "100%", display: "flex", alignItems: "center", borderRight: cellBorderRight, boxSizing: "border-box" }}>{(() => { const tr = PAYMENT_TRANCHES.find(t => t.id === p.tranche); return tr ? <span style={{ fontSize: 9, fontWeight: 700, background: tr.bg, color: tr.color, borderRadius: 20, padding: "2px 8px", fontFamily: "'Lora',serif", whiteSpace: "nowrap" }}>{tr.label}</span> : <span style={{ fontSize: 11, color: "#DDD", fontFamily: "'Lora',serif" }}>—</span>; })()}</div>
                   {/* Réunion arbitrage */}
                   <div style={{ fontSize: 11, fontFamily: "'Lora',serif", color: "#555", padding: "0 8px", height: "100%", display: "flex", alignItems: "center", borderRight: cellBorderRight, boxSizing: "border-box" }}>{p.meetingDate ? p.meetingDate.split("-").reverse().join("/") : "—"}</div>
                   {/* Décision arbitrage */}
@@ -18571,7 +18592,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.678{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.679{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
