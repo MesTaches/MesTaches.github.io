@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v679-1788534750"/>
+  <meta name="app-version" content="v680-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18592,7 +18592,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.679{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.680{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -18876,6 +18876,14 @@ window.exportPaymentsCSV = async function(payments) {
       reporte:    { label:"Reporté",    bg:"FFFFE8CC", color:"FF9A5B13" },
       refuse:     { label:"Refusé",     bg:"FFFEE2E2", color:"FFB91C1C" },
     };
+    var trancheMap = {
+      proforma: { label:"Proforma",              bg:"FFEDE9FE", color:"FF6D28D9" },
+      anticipe: { label:"Paiement anticipé",     bg:"FFDBEAFE", color:"FF1D4ED8" },
+      moins15:  { label:"Inférieur à 15 jours",  bg:"FFD1FAE5", color:"FF065F46" },
+      j16_30:   { label:"Retard de 16 à 30 jours", bg:"FFFEF9C3", color:"FFA16207" },
+      j31_60:   { label:"Retard de 31 à 60 jours", bg:"FFFFE8CC", color:"FF9A5B13" },
+      plus60:   { label:"Retard + 60 jours",     bg:"FFFEE2E2", color:"FFB91C1C" },
+    };
     var fmtDateFR = function(s){ return s ? s.split("-").reverse().join("/") : ""; };
 
     var toExport = (payments || []).filter(function(p){ return p.status !== "paid"; });
@@ -18885,7 +18893,7 @@ window.exportPaymentsCSV = async function(payments) {
       ["N°", 6], ["Code fournisseur", 16], ["Raison sociale", 28], ["Montant à verser", 16],
       ["Date de la demande", 14], ["Demandeur", 14], ["Date prévisionnelle\npaiement", 16],
       ["Réunion arbitrage", 15], ["Décision arbitrage", 15], ["Statut", 13],
-      ["Priorité", 12], ["Commentaire", 42],
+      ["Tranche retard", 20], ["Priorité", 12], ["Commentaire", 42],
     ];
     var N = HEADERS.length;
 
@@ -18936,6 +18944,7 @@ window.exportPaymentsCSV = async function(payments) {
       var numAmount = rawAmount ? parseFloat(rawAmount) : null;
       var st = statusMap[p.status] || { label: p.status || "", bg:"FFF3F3F3", color:"FF888888" };
       var arb = arbMap[p.arbitrationDecision];
+      var tr = trancheMap[p.tranche];
       var vals = [
         i + 1,
         p.account || "",
@@ -18947,6 +18956,7 @@ window.exportPaymentsCSV = async function(payments) {
         fmtDateFR(p.meetingDate),
         arb ? arb.label : "",
         st.label,
+        tr ? tr.label : "",
         prioMap[p.priority || "normal"] || "",
         (p.notes || "").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim(),
       ];
@@ -18954,12 +18964,12 @@ window.exportPaymentsCSV = async function(payments) {
         var cell = ws.getCell(r, ci+1);
         cell.value = v === "" ? "" : v;
         cell.font = { name:"Calibri", size:10, color:{argb:"FF1B1F2B"} };
-        cell.alignment = { vertical:"middle", horizontal: (ci===2||ci===11) ? "left" : "center", wrapText: ci===11 };
+        cell.alignment = { vertical:"middle", horizontal: (ci===2||ci===12) ? "left" : "center", wrapText: ci===12 };
         cell.border = { top:{style:"thin",color:{argb:"FFE3E7F0"}}, bottom:{style:"thin",color:{argb:"FFE3E7F0"}}, left:{style:"thin",color:{argb:"FFE3E7F0"}}, right:{style:"thin",color:{argb:"FFE3E7F0"}} };
         cell.fill = { type:"pattern", pattern:"solid", fgColor:{argb: i % 2 === 1 ? BAND : WHITE} };
       });
       ws.getCell(r, 4).numFmt = '#,##0.00 €'; // Montant
-      // Statut / Décision arbitrage : badge coloré
+      // Statut / Décision arbitrage / Tranche : badge coloré
       var stCell = ws.getCell(r, 10);
       stCell.font = { name:"Calibri", size:10, bold:true, color:{argb:st.color} };
       stCell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:st.bg} };
@@ -18967,6 +18977,11 @@ window.exportPaymentsCSV = async function(payments) {
         var arbCell = ws.getCell(r, 9);
         arbCell.font = { name:"Calibri", size:10, bold:true, color:{argb:arb.color} };
         arbCell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:arb.bg} };
+      }
+      if (tr) {
+        var trCell = ws.getCell(r, 11);
+        trCell.font = { name:"Calibri", size:10, bold:true, color:{argb:tr.color} };
+        trCell.fill = { type:"pattern", pattern:"solid", fgColor:{argb:tr.bg} };
       }
       ws.getRow(r).height = 18;
     });
