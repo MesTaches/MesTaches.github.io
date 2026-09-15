@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v680-1788534750"/>
+  <meta name="app-version" content="v681-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9074,6 +9074,19 @@ const PAYMENT_TRANCHES = [
   { id: "j31_60",    label: "Retard de 31 à 60 jours", bg: "#FFE8CC", color: "#9A5B13" },
   { id: "plus60",    label: "Retard + 60 jours",     bg: "#FEE2E2", color: "#B91C1C" },
 ];
+// Catégorie d'achat d'un paiement
+const PAYMENT_CATEGORIES = [
+  { id: "matieres_premieres", label: "Matières premières" },
+  { id: "negoce",             label: "Négoce" },
+  { id: "transport",          label: "Transport" },
+  { id: "frais_generaux",     label: "Frais généraux" },
+  { id: "consommables",       label: "Consommables" },
+  { id: "capex",              label: "Capex" },
+  { id: "commerce",           label: "Commerce" },
+  { id: "it",                 label: "IT" },
+  { id: "autres",             label: "Autres" },
+  { id: "energie_fluides",    label: "Énergie et fluides" },
+];
 // Décision prise en réunion d'arbitrage sur une demande de paiement (relance/appel interne)
 const ARBITRATION_DECISIONS = [
   { id: "en_attente", label: "En attente", bg: "#FEF9C3", color: "#A16207", icon: "⏳" },
@@ -9212,10 +9225,16 @@ function PaymentModal({ payment, onSave, onClose, settings }) {
               <div>{lblD("Statut")}<select value={d.status} onChange={e=>setD(p=>({...p, status:e.target.value}))} style={inp}>{PAYMENT_STATUSES.map(s=><option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}</select></div>
               <div>{lblD("Priorité")}<select value={d.priority||"normal"} onChange={e=>setD(p=>({...p, priority:e.target.value}))} style={inp}>{PAYMENT_PRIORITIES.map(p=><option key={p.id} value={p.id}>{p.icon} {p.label}</option>)}</select></div>
             </div>
-            <div style={{marginTop:10}}>{lblD("Tranche retard")}<select value={d.tranche||""} onChange={e=>setD(p=>({...p, tranche:e.target.value}))} style={inp}>
-              <option value="">—</option>
-              {PAYMENT_TRANCHES.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
-            </select></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}}>
+              <div>{lblD("Tranche retard")}<select value={d.tranche||""} onChange={e=>setD(p=>({...p, tranche:e.target.value}))} style={inp}>
+                <option value="">—</option>
+                {PAYMENT_TRANCHES.map(t=><option key={t.id} value={t.id}>{t.label}</option>)}
+              </select></div>
+              <div>{lblD("Catégorie achat")}<select value={d.category||""} onChange={e=>setD(p=>({...p, category:e.target.value}))} style={inp}>
+                <option value="">—</option>
+                {PAYMENT_CATEGORIES.map(c=><option key={c.id} value={c.id}>{c.label}</option>)}
+              </select></div>
+            </div>
           </ModalSection>
           <ModalSection title="Dates">
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
@@ -18592,7 +18611,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.680{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.681{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
