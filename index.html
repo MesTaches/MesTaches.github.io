@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v683-1788534750"/>
+  <meta name="app-version" content="v684-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -816,7 +816,7 @@ function useIsMobile() {
    APP_DB  —  couche IndexedDB universelle (tous modules)
    ════════════════════════════════════════════════════════ */
 const APP_DB_NAME    = "app_main_db";
-const APP_DB_VERSION = 5;
+const APP_DB_VERSION = 6;
 
 const APP_STORES = [
   "tasks",          // Tâches principales (STORAGE_KEY)
@@ -841,6 +841,7 @@ const APP_STORES = [
   "trash_contentieux",
   "trash_cotations",
   "trash_reporting",
+  "trash_suivi360", // Corbeille Suivi 360° (30 jours), ajouté v6
 ];
 
 const LS_TO_STORE = {
@@ -16538,12 +16539,10 @@ function RecouvrementView({ settings }) {
 }
 
 /* ═══════════════════════════════════════════════
-   SUIVI 360° — fusion de Suivi clients + Recouvrement
-   Un seul endroit pour tout suivi client : retard de paiement, risque crédit,
-   encours significatif, demande de la direction, litige… Tableau synthétique
-   (type, gravité, statut) + fiche détaillée avec notes de suivi.
-   Nouvel onglet autonome — les deux anciens (Suivi clients / Recouvrement)
-   restent actifs en parallèle tant que celui-ci n'est pas validé.
+   SUIVI 360° — tableau de suivi clients, simple et pratique
+   Client, code, type de suivi, priorité, statut, date de prochain suivi,
+   notes de suivi (via l'icône commentaire), suppression avec confirmation +
+   annulation 10s + corbeille 30 jours.
 ═══════════════════════════════════════════════ */
 const SUIVI360_TYPES = [
   { id:"retard",    name:"Retard de paiement",   color:"#C0392B", bg:"#FDEDEC" },
@@ -16555,30 +16554,16 @@ const SUIVI360_TYPES = [
   { id:"autre",     name:"Autre",                color:"#6B7280", bg:"#F3F4F6" },
 ];
 const SUIVI360_STATUTS = [
-  { id:"a_traiter",      name:"À traiter",         color:"#6B7280", bg:"#F3F4F6" },
-  { id:"relance",        name:"Relance amiable",   color:"#1D4ED8", bg:"#DBEAFE" },
-  { id:"miseendemeure",  name:"Mise en demeure",   color:"#C2410C", bg:"#FFEDD5" },
-  { id:"precontentieux", name:"Pré-contentieux",   color:"#9333EA", bg:"#F3E8FF" },
-  { id:"plan",           name:"Plan d'apurement",  color:"#0891B2", bg:"#CFFAFE" },
-  { id:"resolu",         name:"Résolu",            color:"#15803D", bg:"#DCFCE7" },
-];
-const SUIVI360_CHEZQUI = [
-  { id:"moi",        name:"Moi" },
-  { id:"commercial", name:"Commercial" },
-  { id:"juridique",  name:"Juridique" },
-  { id:"direction",  name:"Direction" },
-  { id:"avocat",     name:"Avocat" },
-  { id:"client",     name:"Client (attente réponse)" },
+  { id:"a_traiter", name:"À traiter",         color:"#6B7280", bg:"#F3F4F6" },
+  { id:"en_cours",  name:"En cours",          color:"#1D4ED8", bg:"#DBEAFE" },
+  { id:"attente",   name:"En attente retour", color:"#A16207", bg:"#FEF9C3" },
+  { id:"resolu",    name:"Résolu",            color:"#15803D", bg:"#DCFCE7" },
 ];
 function _mkSuivi360() {
   return {
-    id: uid(), clientName:"", clientCode:"", comptes:[], cotation:"",
-    typeSuivi:"retard", gravite:"surveillance", statut:"a_traiter", chezQui:"moi",
-    encoursTotal:"", montantEchu:"", plafond:"", dateEcheanceAncienne:"",
-    typeGarantie:"", montantGarantie:"", assuranceCredit:"",
-    litige:false, litigeNature:"",
-    dateProchainSuivi:"", reminderDate:"", dateMiseEnDemeure:"", dateLimite:"",
-    notes:"", subtasks:[], attachments:[], closed:false, linkedTaskId:null,
+    id: uid(), clientName:"", clientCode:"",
+    typeSuivi:"retard", gravite:"surveillance", statut:"a_traiter",
+    dateProchainSuivi:"", notes:"",
     createdAt:new Date().toISOString(),
   };
 }
@@ -16642,20 +16627,20 @@ async function migrateToSuivi360() {
   } catch(e) { console.warn("migrateToSuivi360:", e && e.message); }
 }
 
-function SuiviUnifieView({ settings, tasks, addTask, updTask, delTask }) {
+function SuiviUnifieView({ settings }) {
   const isMobile = useIsMobile();
-  const today0 = today();
   const [dossiers, setDossiers] = React.useState([]);
   const [ready, setReady] = React.useState(false);
   const [selId, setSelId] = React.useState(null);
   const [search, setSearch] = React.useState("");
-  const [filterType, setFilterType] = React.useState("Tous");
-  const [filterGravite, setFilterGravite] = React.useState("Tous");
-  const [filterStatut, setFilterStatut] = React.useState("Actifs");
+  const [hideResolved, setHideResolved] = React.useState(false);
   const [sortCol, setSortCol] = React.useState(null);
   const [sortDir, setSortDir] = React.useState("asc");
   const [undoDel, setUndoDel] = React.useState(null);
   const undoTimerRef = React.useRef(null);
+  const [showTrash, setShowTrash] = React.useState(false);
+  const [trash, setTrash] = React.useState([]);
+  const [confirmDelId, setConfirmDelId] = React.useState(null);
 
   const reload = React.useCallback(async () => {
     try {
@@ -16674,110 +16659,61 @@ function SuiviUnifieView({ settings, tasks, addTask, updTask, delTask }) {
     window.addEventListener("idbStoreUpdated", h);
     return () => window.removeEventListener("idbStoreUpdated", h);
   }, [reload]);
+  React.useEffect(() => { appDbGet("trash_suivi360").then(t => { if (Array.isArray(t)) setTrash(t); }).catch(()=>{}); }, []);
 
   const save = (list) => { if (!ready) return; setDossiers(list); appDbSet("suivi_unifie", list); };
+  const saveTrash = (list) => { setTrash(list); appDbSet("trash_suivi360", list); };
   const sel = dossiers.find(d => d.id === selId) || null;
-
-  // ── Intégration Tâches/Calendrier/Ma journée : la date "Prochain suivi" pilote une tâche liée ──
-  const canSyncTasks = typeof addTask === "function" && typeof updTask === "function";
-  const taskPriorityFromGravite = (g) => g === "critique" ? "urgente" : g === "tension" ? "haute" : "normale";
-  const syncLinkedTask = (d) => {
-    if (!canSyncTasks) return d;
-    const title = "Suivi : " + (d.clientName || "(sans nom)");
-    const existing = d.linkedTaskId ? (tasks||[]).find(t => t.id === d.linkedTaskId) : null;
-    if (d.closed || !d.dateProchainSuivi) {
-      // Pas de suivi actif à planifier : la tâche liée (si elle existe) est marquée faite, pas supprimée.
-      if (existing && !existing.completed) updTask({ ...existing, completed: true, status: "done" });
-      return d;
-    }
-    if (existing) {
-      updTask({ ...existing, title, dueDate: d.dateProchainSuivi, completed: false, status: existing.status === "done" ? "todo" : existing.status, priority: taskPriorityFromGravite(d.gravite) });
-      return d;
-    }
-    const newTask = {
-      id: uid(), title, category: "Suivi client", type: "", dueDate: d.dateProchainSuivi,
-      priority: taskPriorityFromGravite(d.gravite), status: "todo", notes: "",
-      completed: false, reminder: "none", recurrence: "none", subtasks: [], labels: [],
-      createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false,
-    };
-    addTask(newTask);
-    return { ...d, linkedTaskId: newTask.id };
-  };
-
-  const updSel = (patch) => {
-    if (!sel) return;
-    let updated = { ...sel, ...patch };
-    if ("dateProchainSuivi" in patch || "closed" in patch || "clientName" in patch) updated = syncLinkedTask(updated);
-    save(dossiers.map(d => d.id === sel.id ? updated : d));
-  };
+  const updSel = (patch) => { if (!sel) return; save(dossiers.map(d => d.id === sel.id ? {...d, ...patch} : d)); };
   const addNew = () => { const r = _mkSuivi360(); save([r, ...dossiers]); setSelId(r.id); };
-  const del = (id) => {
+
+  // ── Suppression : confirmation → bandeau undo 10s → corbeille 30 jours ──
+  const askDelete = (id) => setConfirmDelId(id);
+  const confirmDelete = () => {
+    const id = confirmDelId; setConfirmDelId(null);
     const found = dossiers.find(d => d.id === id); if (!found) return;
     save(dossiers.filter(d => d.id !== id));
-    if (found.linkedTaskId && typeof delTask === "function") delTask(found.linkedTaskId);
+    const trashed = { ...found, deletedAt: new Date().toISOString() };
+    saveTrash([trashed, ...trash]);
     if (selId === id) setSelId(null);
-    setUndoDel(found);
+    setUndoDel(trashed);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => setUndoDel(null), 10000);
   };
   const undoDelete = () => {
     if (!undoDel) return;
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
-    save([undoDel, ...dossiers]);
-    setSelId(undoDel.id);
+    const { deletedAt, ...restored } = undoDel;
+    save([restored, ...dossiers]);
+    saveTrash(trash.filter(x => x.id !== undoDel.id));
+    setSelId(restored.id);
     setUndoDel(null);
   };
-  const transferToContentieux = async (d) => {
-    if (!d) return;
-    if (!window.confirm("Transférer « " + (d.clientName||"ce dossier") + " » en Contentieux ?\nLe dossier sera créé dans l'onglet Contentieux. Tu pourras le solder ici ensuite.")) return;
-    try {
-      const existing = await appDbGet("contentieux");
-      const list = Array.isArray(existing) ? existing : [];
-      const cx = {
-        id: Math.random().toString(36).substr(2,9),
-        reference: "", clientName: d.clientName||"", montant: String(parseNum(d.montantEchu)||""),
-        category: "credit", type: "", status: "identification", suiviStatus: "a_engager",
-        priority: "haute", labels: [], subtasks: [], attachments: [],
-        notes: (d.notes||"") + (d.clientCode ? "<p><em>Code client : "+d.clientCode+"</em></p>" : ""),
-        avocat: "", dateOuverture: today(), dateEcheance: "", dateCloture: "",
-        procedureCollective: "", dateDeclarationCreance: "",
-      };
-      await appDbSet("contentieux", [cx, ...list]);
-      window.dispatchEvent(new CustomEvent("idbStoreUpdated", { detail: { key: "contentieux_dossiers_v1" } }));
-      alert("✓ Dossier transféré dans l'onglet Contentieux.");
-    } catch(e) { alert("Erreur lors du transfert : " + (e.message||e)); }
+  const restoreFromTrash = (id) => {
+    const found = trash.find(x => x.id === id); if (!found) return;
+    const { deletedAt, ...restored } = found;
+    save([restored, ...dossiers]);
+    saveTrash(trash.filter(x => x.id !== id));
   };
+  const purgeFromTrash = (id) => saveTrash(trash.filter(x => x.id !== id));
 
   const typeObj = (t) => SUIVI360_TYPES.find(x => x.id === t) || SUIVI360_TYPES[SUIVI360_TYPES.length-1];
   const gravObj = (g) => REC_GRAVITE.find(x => x.id === g) || REC_GRAVITE[2];
   const statObj = (s) => SUIVI360_STATUTS.find(x => x.id === s) || SUIVI360_STATUTS[0];
-  const ancienneteJours = (d) => {
-    if (!d.dateEcheanceAncienne) return null;
-    const diff = Math.floor((new Date(today0) - new Date(d.dateEcheanceAncienne)) / 86400000);
-    return diff >= 0 ? diff : null;
-  };
-  const depassement = (d) => {
-    const enc = parseNum(d.encoursTotal) || 0, pla = parseNum(d.plafond) || 0;
-    return (pla > 0 && enc > pla) ? enc - pla : 0;
-  };
-  const dupCode = (d) => d.clientCode && d.clientCode.trim() && dossiers.some(x => x.id !== d.id && !x.closed && (x.clientCode||"").trim().toLowerCase() === d.clientCode.trim().toLowerCase());
 
   const filtered = dossiers.filter(d => {
-    if (filterStatut === "Actifs" && d.closed) return false;
-    if (filterStatut === "Clôturés" && !d.closed) return false;
-    if (filterType !== "Tous" && d.typeSuivi !== filterType) return false;
-    if (filterGravite !== "Tous" && d.gravite !== filterGravite) return false;
+    if (hideResolved && d.statut === "resolu") return false;
     if (search && ![d.clientName, d.clientCode].some(v => (v||"").toLowerCase().includes(search.toLowerCase()))) return false;
     return true;
   }).sort((a,b) => {
-    if (!!a.closed !== !!b.closed) return a.closed ? 1 : -1;
+    const ar = a.statut === "resolu", br = b.statut === "resolu";
+    if (ar !== br) return ar ? 1 : -1; // les résolus vont toujours en bas
     if (!sortCol) {
       const ra = gravObj(a.gravite).rank, rb = gravObj(b.gravite).rank;
       if (ra !== rb) return ra - rb;
-      return (parseNum(b.montantEchu)||0) - (parseNum(a.montantEchu)||0);
+      return (a.dateProchainSuivi||"9999") < (b.dateProchainSuivi||"9999") ? -1 : 1;
     }
     if (sortCol === "gravite") { const d2 = gravObj(a.gravite).rank - gravObj(b.gravite).rank; return sortDir==="asc" ? d2 : -d2; }
-    if (sortCol === "montantEchu") { const d2 = (parseNum(a.montantEchu)||0) - (parseNum(b.montantEchu)||0); return sortDir==="asc" ? d2 : -d2; }
     if (sortCol === "dateProchainSuivi") {
       const ea = !a.dateProchainSuivi, eb = !b.dateProchainSuivi;
       if (ea !== eb) return ea ? 1 : -1;
@@ -16791,11 +16727,6 @@ function SuiviUnifieView({ settings, tasks, addTask, updTask, delTask }) {
   });
   const handleSort = (col) => { if (sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
 
-  const actifs = dossiers.filter(d => !d.closed);
-  const totalEncours = actifs.reduce((s,d) => s + (parseNum(d.encoursTotal)||0), 0);
-  const totalEchu = actifs.reduce((s,d) => s + (parseNum(d.montantEchu)||0), 0);
-  const nbCritiques = actifs.filter(d => d.gravite === "critique").length;
-
   const inp = { border:"1px solid #E8E8E8", borderRadius:6, padding:"6px 9px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"white" };
   const lbl = (t) => <div style={{ fontSize:9, fontWeight:700, color:"#102A63", fontFamily:_FL, marginBottom:3, letterSpacing:"0.05em" }}>{t}</div>;
 
@@ -16807,292 +16738,178 @@ function SuiviUnifieView({ settings, tasks, addTask, updTask, delTask }) {
 
   if (!ready) return <div style={{ padding:40, fontFamily:_FL, color:"#94A3B8" }}>Chargement…</div>;
 
-  const gridTpl = "minmax(170px,2.4fr) 90px minmax(150px,1.5fr) 56px minmax(130px,1.3fr) 115px 95px 40px";
+  const activeTrash = trash.filter(r => Date.now() - new Date(r.deletedAt).getTime() < 30*86400000);
+  const trashDaysLeft = r => Math.max(0, Math.ceil((new Date(r.deletedAt).getTime() + 30*86400000 - Date.now())/86400000));
+
+  const gridTpl = "minmax(170px,2.2fr) 90px minmax(150px,1.4fr) 50px minmax(130px,1.2fr) 100px 40px 40px";
 
   return (
     <div style={{ display:"flex", width:"100%", height:"100%", minHeight:"calc(100vh - 56px)", fontFamily:_FL, background:"#F7F6F3", flexDirection:"column" }}>
 
-      {/* KPI bar */}
-      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"12px 20px", display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, flexShrink:0 }}>
-        {[
-          { label:"Dossiers actifs", val:actifs.length, color:"#102A63" },
-          { label:"Encours à risque", val:fmtEuro(totalEncours), color:"#1D4ED8" },
-          { label:"Échu impayé", val:fmtEuro(totalEchu), color:"#C0392B" },
-          { label:"Critiques", val:nbCritiques, color:"#B91C1C" },
-        ].map(k => (
-          <div key={k.label} style={{ textAlign:"center" }}>
-            <div style={{ fontSize:9, color:"#AAA", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:2 }}>{k.label}</div>
-            <div style={{ fontSize:16, fontWeight:700, color:k.color, fontFamily:_FL, fontVariantNumeric:"tabular-nums" }}>{k.val}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filtres */}
-      <div style={{ background:"white", borderBottom:"1px solid #F0F0F0", padding:"8px 16px", display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...inp, width:180, flexShrink:0 }} />
-        {["Actifs","Clôturés","Tous"].map(f => (
-          <button key={f} onClick={()=>setFilterStatut(f)} style={{ border:"1px solid "+(filterStatut===f?"#102A63":"#E0E0E0"), background:filterStatut===f?"#102A63":"white", color:filterStatut===f?"white":"#666", borderRadius:20, padding:"3px 10px", fontSize:10, cursor:"pointer", fontFamily:_FL, fontWeight:filterStatut===f?700:400, flexShrink:0 }}>{f}</button>
-        ))}
-        <div style={{ width:1, height:18, background:"#E8E8E8" }} />
-        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...inp, width:170, flexShrink:0, cursor:"pointer" }}>
-          <option value="Tous">Tous les types</option>
-          {SUIVI360_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <div style={{ display:"flex", gap:4 }}>
-          <button onClick={()=>setFilterGravite("Tous")} style={{ border:"1px solid "+(filterGravite==="Tous"?"#102A63":"#E0E0E0"), background:filterGravite==="Tous"?"#102A63":"white", color:filterGravite==="Tous"?"white":"#666", borderRadius:20, padding:"3px 10px", fontSize:10, cursor:"pointer", fontFamily:_FL }}>Toutes</button>
-          {REC_GRAVITE.map(g => (
-            <button key={g.id} onClick={()=>setFilterGravite(g.id)} title={g.name} style={{ border:"1px solid "+(filterGravite===g.id?g.color:"#E0E0E0"), background:filterGravite===g.id?g.bg:"white", color:g.color, borderRadius:20, padding:"3px 9px", fontSize:10, cursor:"pointer", fontFamily:_FL }}>{g.dot}</button>
-          ))}
-        </div>
+      {/* Barre d'outils */}
+      <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"10px 16px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...inp, width:200, flexShrink:0 }} />
+        <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:11, fontFamily:_FL, color:"#666", userSelect:"none", flexShrink:0 }}>
+          <input type="checkbox" checked={hideResolved} onChange={e=>setHideResolved(e.target.checked)} style={{ accentColor:"#102A63", cursor:"pointer" }} />
+          Masquer les résolus
+        </label>
         <div style={{ flex:1 }} />
+        <button onClick={()=>setShowTrash(true)} title="Corbeille (30 jours)" style={{ border:"1px solid #E0E0E0", background:"white", color: activeTrash.length>0 ? "#C0392B" : "#999", borderRadius:20, padding:"6px 12px", fontSize:11, cursor:"pointer", fontFamily:_FL, flexShrink:0 }}>
+          🗑 Corbeille{activeTrash.length>0 ? " ("+activeTrash.length+")" : ""}
+        </button>
         <button onClick={addNew} style={{ ...S.btn("#102A63"), padding:"6px 14px", fontSize:11, flexShrink:0 }}>+ Nouveau suivi</button>
       </div>
 
+      {/* Tableau */}
       <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:"white" }}>
-        <div style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"6px 8px", background:"#102A63", flexShrink:0 }}>
+        <div style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"7px 8px", background:"#102A63", flexShrink:0 }}>
           <HeaderCell col="clientName" label="CLIENT" />
           <HeaderCell col="clientCode" label="CODE" />
-          <HeaderCell col="typeSuivi" label="TYPE" />
-          <HeaderCell col="gravite" label="GRAV." align="center" />
+          <HeaderCell col="typeSuivi" label="TYPE DE SUIVI" />
+          <HeaderCell col="gravite" label="PRIO." align="center" />
           <HeaderCell col="statut" label="STATUT" />
-          <HeaderCell col="montantEchu" label="ÉCHU" align="right" />
-          <HeaderCell col="dateProchainSuivi" label="SUIVI" />
+          <HeaderCell col="dateProchainSuivi" label="PROCHAIN SUIVI" />
+          <div />
           <div />
         </div>
         <div style={{ flex:1, overflowY:"auto" }}>
           {filtered.length === 0 ? (
             <div style={{ textAlign:"center", padding:"40px 16px", color:"#CCC", fontFamily:_FL, fontSize:13 }}>
-              {dossiers.length === 0 ? "Aucun dossier — cliquez sur « + Nouveau suivi »" : "Aucun résultat"}
+              {dossiers.length === 0 ? "Aucun suivi — cliquez sur « + Nouveau suivi »" : "Aucun résultat"}
             </div>
           ) : filtered.map((d,i) => {
             const ty = typeObj(d.typeSuivi), g = gravObj(d.gravite), st = statObj(d.statut);
             const active = selId === d.id;
             return (
-              <div key={d.id} onClick={()=>setSelId(d.id)} style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"8px 8px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:d.closed?0.55:1 }}>
-                <div style={{ fontSize:11.5, fontWeight:600, color:d.closed?"#94A3B8":"#1E293B", textDecoration:d.closed?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6 }}>{d.clientName||"(sans nom)"}</div>
-                <div style={{ fontSize:10.5, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientCode||"—"}</div>
-                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9, fontWeight:700, background:ty.bg, color:ty.color, borderRadius:4, padding:"2px 7px", whiteSpace:"nowrap" }}>{ty.name}</span></div>
-                <div style={{ textAlign:"center", fontSize:12 }} title={g.name}>{g.dot}</div>
-                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", whiteSpace:"nowrap" }}>{st.name}</span></div>
-                <div style={{ fontSize:11, fontWeight:700, color:(parseNum(d.montantEchu)||0)>0?"#C0392B":"#CCC", textAlign:"right", paddingRight:8, fontVariantNumeric:"tabular-nums" }}>{(parseNum(d.montantEchu)||0)>0?fmtEuro(d.montantEchu):"—"}</div>
-                <div style={{ fontSize:10.5, color:"#888", whiteSpace:"nowrap" }}>{d.dateProchainSuivi ? d.dateProchainSuivi.split("-").reverse().join("/") : "—"}</div>
-                <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                  <button onClick={e=>{e.stopPropagation();del(d.id);}} title="Supprimer" style={{ border:"none", background:"none", cursor:"pointer", color:"#DDD", fontSize:14 }}>×</button>
+              <div key={d.id} onClick={()=>setSelId(d.id)} style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"9px 8px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", borderLeft:active?"3px solid #102A63":"3px solid transparent" }}>
+                <div style={{ fontSize:12, fontWeight:600, color:"#1E293B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6 }}>{d.clientName||"(sans nom)"}</div>
+                <div style={{ fontSize:11, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientCode||"—"}</div>
+                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9.5, fontWeight:700, background:ty.bg, color:ty.color, borderRadius:4, padding:"2px 8px", whiteSpace:"nowrap" }}>{ty.name}</span></div>
+                <div style={{ display:"flex", justifyContent:"center" }} title={g.name}>
+                  <span style={{ width:12, height:12, borderRadius:"50%", background:g.color, display:"inline-block" }} />
+                </div>
+                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9.5, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 8px", whiteSpace:"nowrap" }}>{st.name}</span></div>
+                <div style={{ fontSize:11, color:"#888", whiteSpace:"nowrap" }}>{d.dateProchainSuivi ? d.dateProchainSuivi.split("-").reverse().join("/") : "—"}</div>
+                <div style={{ display:"flex", justifyContent:"center" }}>
+                  <button onClick={e=>{e.stopPropagation();setSelId(d.id);}} title="Notes de suivi" style={{ border:"none", background:"none", cursor:"pointer", fontSize:14, opacity:d.notes?1:0.35, padding:0 }}>💬</button>
+                </div>
+                <div style={{ display:"flex", justifyContent:"center" }}>
+                  <button onClick={e=>{e.stopPropagation();askDelete(d.id);}} title="Supprimer" style={{ border:"none", background:"none", cursor:"pointer", color:"#DDD", fontSize:15, padding:0 }}
+                    onMouseEnter={e=>e.currentTarget.style.color="#E74C3C"} onMouseLeave={e=>e.currentTarget.style.color="#DDD"}>×</button>
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_FL, color:"#AAA" }}>{filtered.length} dossier{filtered.length!==1?"s":""}</div>
+        <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_FL, color:"#AAA" }}>{filtered.length} suivi{filtered.length!==1?"s":""}</div>
       </div>
 
-      {/* ── Tiroir de détail : s'ouvre au clic sur une ligne, fermable (✕ ou clic en-dehors) ── */}
+      {/* Tiroir de détail — notes de suivi (ouvert par clic sur la ligne ou l'icône 💬, fermable) */}
       {sel && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:1000, display:"flex", alignItems:isMobile?"flex-end":"stretch", justifyContent:"flex-end", backdropFilter:"blur(3px)" }}
           onMouseDown={e=>{ if (e.target===e.currentTarget) e.currentTarget._mdOutside=true; }}
           onMouseUp={e=>{ if (e.target===e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside=false; setSelId(null); } }}>
-          <div style={{ background:"#F7F8FC", width:isMobile?"100%":"min(720px,96vw)", height:isMobile?"92vh":"100%", borderRadius:isMobile?"20px 20px 0 0":0, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
+          <div style={{ background:"#F7F8FC", width:isMobile?"100%":"min(640px,96vw)", height:isMobile?"92vh":"100%", borderRadius:isMobile?"20px 20px 0 0":0, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
 
-            {/* En-tête du tiroir */}
             <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"16px 24px", flexShrink:0 }}>
               <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <input value={sel.clientName} onChange={e=>updSel({clientName:e.target.value})} placeholder="Nom du client" style={{ ...inp, fontSize:18, fontWeight:700, color: sel.closed?"#94A3B8":"#102A63", border:"none", background:"transparent", padding:"2px 0", textDecoration:sel.closed?"line-through":"none" }} />
-                  <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:4, flexWrap:"wrap" }}>
-                    <input value={sel.clientCode} maxLength={7} onChange={e=>updSel({clientCode:e.target.value})} placeholder="Code client" style={{ ...inp, width:92, fontSize:11, padding:"3px 8px", borderColor:dupCode(sel)?"#F59E0B":"#E8E8E8" }} />
-                    {dupCode(sel) && <span style={{ fontSize:9, color:"#B45309" }}>⚠ code déjà utilisé</span>}
-                    <span style={{ fontSize:10, fontFamily:_FL, color:"#AAA" }}>Créé le {fmtDate(sel.createdAt ? sel.createdAt.split("T")[0] : today0)}</span>
-                  </div>
+                  <input value={sel.clientName} onChange={e=>updSel({clientName:e.target.value})} placeholder="Nom du client (raison sociale)" style={{ ...inp, fontSize:17, fontWeight:700, color:"#102A63", border:"none", background:"transparent", padding:"2px 0" }} />
+                  <input value={sel.clientCode} onChange={e=>updSel({clientCode:e.target.value})} placeholder="Code client" style={{ ...inp, width:110, fontSize:11, padding:"3px 8px", marginTop:4 }} />
                 </div>
                 <button onClick={()=>setSelId(null)} title="Fermer" style={{ border:"none", background:"#F0F0F0", borderRadius:"50%", width:28, height:28, cursor:"pointer", fontSize:16, color:"#666", flexShrink:0, lineHeight:1 }}>×</button>
               </div>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:12 }}>
-                <button onClick={()=>{
-                  const subject = encodeURIComponent(`Suivi client - ${sel.clientName}`);
-                  const body = encodeURIComponent(htmlToPlainText(sel.notes||""));
-                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                }} title="Envoyer les notes par mail" style={{ border:"1px solid #E0E0E0", background:"white", color:"#102A63", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>✉ Mail</button>
-                <button onClick={()=>transferToContentieux(sel)} title="Transférer ce dossier en Contentieux"
-                  style={{ border:"1px solid #E0E0E0", background:"white", color:"#9333EA", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>⚖ → Contentieux</button>
-                <button onClick={()=>updSel({closed:!sel.closed})}
-                  style={{ border:sel.closed?"1px solid #BBF7D0":"1px solid #E0E0E0", background:sel.closed?"#F0FDF4":"white", color:sel.closed?"#065F46":"#102A63", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>
-                  {sel.closed ? "↻ Rouvrir" : "✓ Clôturer"}
-                </button>
-                <button onClick={()=>del(sel.id)} title="Supprimer" style={{ border:"1px solid #E0E0E0", background:"white", color:"#C0392B", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>🗑</button>
+              <div style={{ display:"grid", gridTemplateColumns:"1.3fr 0.8fr 1.2fr 1fr", gap:8, marginTop:12 }}>
+                <div>
+                  {lbl("TYPE DE SUIVI")}
+                  <select value={sel.typeSuivi} onChange={e=>updSel({typeSuivi:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
+                    {SUIVI360_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  {lbl("PRIORITÉ")}
+                  <div style={{ display:"flex", gap:4 }}>
+                    {REC_GRAVITE.slice().reverse().map(g => (
+                      <button key={g.id} onClick={()=>updSel({gravite:g.id})} title={g.name}
+                        style={{ flex:1, height:28, border:"1px solid "+(sel.gravite===g.id?g.color:"#E0E0E0"), background:sel.gravite===g.id?g.bg:"white", borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        <span style={{ width:12, height:12, borderRadius:"50%", background:g.color, display:"inline-block" }} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  {lbl("STATUT")}
+                  <select value={sel.statut} onChange={e=>updSel({statut:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
+                    {SUIVI360_STATUTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  {lbl("PROCHAIN SUIVI")}
+                  <input type="date" value={sel.dateProchainSuivi} onChange={e=>updSel({dateProchainSuivi:e.target.value})} style={inp} />
+                </div>
               </div>
             </div>
 
-            {/* Corps défilant du tiroir */}
-            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
-
-              {/* Classification */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>CLASSIFICATION</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                  <div>
-                    {lbl("TYPE DE SUIVI")}
-                    <select value={sel.typeSuivi} onChange={e=>updSel({typeSuivi:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                      {SUIVI360_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    {lbl("STATUT")}
-                    <select value={sel.statut} onChange={e=>updSel({statut:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                      {SUIVI360_STATUTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginTop:10 }}>
-                  <div>
-                    {lbl("PRIORITÉ")}
-                    <div style={{ display:"flex", gap:5 }}>
-                      {REC_GRAVITE.map(g => (
-                        <button key={g.id} onClick={()=>updSel({gravite:g.id})} style={{ flex:1, border:"1px solid "+(sel.gravite===g.id?g.color:"#E0E0E0"), background:sel.gravite===g.id?g.bg:"white", color:g.color, borderRadius:6, padding:"5px 4px", fontSize:9, fontWeight:700, cursor:"pointer", fontFamily:_FL, whiteSpace:"nowrap" }}>{g.dot} {g.name}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    {lbl("CHEZ QUI ?")}
-                    <select value={sel.chezQui} onChange={e=>updSel({chezQui:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                      {SUIVI360_CHEZQUI.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-                <div style={{ marginTop:10 }}>
-                  <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:12, fontFamily:_FL, color:"#555", userSelect:"none" }}>
-                    <input type="checkbox" checked={sel.litige||false} onChange={e=>updSel({litige:e.target.checked})} style={{ accentColor:"#C0392B", cursor:"pointer", width:15, height:15 }} />
-                    Litige en cours
-                  </label>
-                  {sel.litige && (
-                    <input value={sel.litigeNature} onChange={e=>updSel({litigeNature:e.target.value})} placeholder="Nature du litige (contestation facture, qualité, délai…)" style={{ ...inp, marginTop:7 }} />
-                  )}
-                </div>
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px", display:"flex", flexDirection:"column" }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span>💬 NOTES DE SUIVI</span>
+                <span style={{ fontSize:9, color:"#27AE60", fontWeight:600 }}>✓ Auto-sauvegarde</span>
               </div>
-
-              {/* Financier */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>FINANCIER</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-                  <div>{lbl("ENCOURS TOTAL (€)")}<RecAmountInput value={sel.encoursTotal} onChange={v=>updSel({encoursTotal:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
-                  <div>{lbl("ÉCHU IMPAYÉ (€)")}<RecAmountInput value={sel.montantEchu} onChange={v=>updSel({montantEchu:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right", color:"#C0392B" }} /></div>
-                  <div>{lbl("PLAFOND AUTORISÉ (€)")}<RecAmountInput value={sel.plafond} onChange={v=>updSel({plafond:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
-                  <div>{lbl("GARANTIE (€)")}<RecAmountInput value={sel.montantGarantie} onChange={v=>updSel({montantGarantie:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:10, alignItems:"start" }}>
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    <div>{lbl("PLUS VIEILLE ÉCHÉANCE IMPAYÉE")}<input type="date" value={sel.dateEcheanceAncienne} onChange={e=>updSel({dateEcheanceAncienne:e.target.value})} style={inp} /></div>
-                    {depassement(sel) > 0 && (
-                      <div style={{ fontSize:11, fontFamily:_FL, color:"#B91C1C", background:"#FEE2E2", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⚠ Dépassement plafond : {fmtEuro(depassement(sel))}</div>
-                    )}
-                    {ancienneteJours(sel) !== null && (
-                      <div style={{ fontSize:11, fontFamily:_FL, color:"#A16207", background:"#FEF9C3", borderRadius:6, padding:"4px 9px", fontWeight:700 }}>⏱ Retard de {ancienneteJours(sel)} jours</div>
-                    )}
-                  </div>
-                  {(()=>{
-                    const enc = parseNum(sel.encoursTotal) || 0;
-                    const gar = Math.min(parseNum(sel.montantGarantie) || 0, enc);
-                    const nonG = Math.max(0, enc - gar);
-                    if (enc <= 0) return <div style={{ fontSize:10, color:"#CBD5E1", fontFamily:_FL, fontStyle:"italic", alignSelf:"center", textAlign:"center" }}>Renseigne l'encours pour visualiser la couverture</div>;
-                    const pctG = Math.round(gar / enc * 100);
-                    return (
-                      <div>
-                        <div style={{ fontSize:9, fontWeight:700, color:"#102A63", fontFamily:_FL, marginBottom:6, letterSpacing:"0.05em" }}>COUVERTURE DE L'ENCOURS</div>
-                        <div style={{ display:"flex", height:16, borderRadius:8, overflow:"hidden", background:"#F0F0F0" }}>
-                          {gar > 0 && <div style={{ width:pctG+"%", background:"#34D399", display:"flex", alignItems:"center", justifyContent:"center" }} title={"Couvert : "+fmtEuro(gar)}>
-                            {pctG >= 18 && <span style={{ fontSize:8, fontWeight:700, color:"#065F46", fontFamily:_FL }}>{pctG}%</span>}
-                          </div>}
-                          {nonG > 0 && <div style={{ flex:1, background:"#FCA5A5", display:"flex", alignItems:"center", justifyContent:"center" }} title={"Non garanti : "+fmtEuro(nonG)}>
-                            {(100-pctG) >= 18 && <span style={{ fontSize:8, fontWeight:700, color:"#991B1B", fontFamily:_FL }}>{100-pctG}%</span>}
-                          </div>}
-                        </div>
-                        <div style={{ display:"flex", flexDirection:"column", gap:2, marginTop:6 }}>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10, fontFamily:_FL }}>
-                            <span style={{ color:"#065F46" }}>● Couvert</span>
-                            <span style={{ color:"#065F46", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{fmtEuro(gar)}</span>
-                          </div>
-                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", fontSize:10, fontFamily:_FL }}>
-                            <span style={{ color:"#B91C1C" }}>● Non garanti</span>
-                            <span style={{ color:"#B91C1C", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>{fmtEuro(nonG)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              {/* Notes de suivi */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                  <span>NOTES DE SUIVI</span>
-                  <span style={{ fontSize:9, color:"#27AE60", fontWeight:600 }}>✓ Auto-sauvegarde</span>
-                </div>
-                <RichTextArea key={sel.id} value={sel.notes||""} onChange={v=>updSel({notes:v})} placeholder="Journal des échanges, promesses de paiement, décisions, courriers envoyés…" rows={10} showAi={!!(settings&&settings.groqKey)} groqKey={(settings&&settings.groqKey)||""} />
-              </div>
-
-              {/* Sous-tâches */}
-              {(()=>{
-                const ss=[{id:"todo",name:"À faire",color:"#888",bg:"#F0F0F0"},{id:"inprogress",name:"En cours",color:"#1D4ED8",bg:"#DBEAFE"},{id:"waiting",name:"En attente",color:"#A16207",bg:"#FEF9C3"},{id:"blocked",name:"Bloqué",color:"#B91C1C",bg:"#FEE2E2"},{id:"done",name:"Fait",color:"#065F46",bg:"#D1FAE5"},{id:"cancelled",name:"Annulé",color:"#92400E",bg:"#F5E6DC"}];
-                const subtasks = sel.subtasks||[];
-                const done = subtasks.filter(s=>s.completed).length;
-                const updSubs = subs => updSel({subtasks:subs});
-                const addSub  = () => updSubs([...subtasks,{id:String(Date.now()),text:"",status:"todo",completed:false}]);
-                const updSub  = s  => updSubs(subtasks.map(x=>x.id===s.id?s:x));
-                const delSub  = id => updSubs(subtasks.filter(x=>x.id!==id));
-                return (
-                  <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
-                      <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em" }}>SOUS-TÂCHES</div>
-                      {subtasks.length>0 && <span style={{ fontSize:10,color:"#27AE60",fontFamily:_FL,fontWeight:600 }}>{done}/{subtasks.length}</span>}
-                    </div>
-                    {subtasks.map(sub => {
-                      const st2=ss.find(x=>x.id===sub.status)||ss[0];
-                      return (
-                        <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
-                          <button onClick={()=>updSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})}
-                            style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:"2px solid "+(sub.completed?"#27AE60":"#CCC"),background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
-                          <input value={sub.text} onChange={e=>updSub({...sub,text:e.target.value})} placeholder="Sous-tâche…"
-                            style={{ flex:1,border:"none",outline:"none",fontSize:12,fontFamily:_FL,color:sub.completed?"#AAA":"#2C3E50",textDecoration:sub.completed?"line-through":"none",background:"transparent" }} />
-                          <SubStatusSelect value={sub.status} onChange={v=>updSub({...sub,status:v,completed:v==="done"})} />
-                          <button onClick={()=>delSub(sub.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0 }}>×</button>
-                        </div>
-                      );
-                    })}
-                    <button onClick={addSub} style={{ marginTop:8,background:"none",border:"none",padding:"4px 0",fontSize:11,cursor:"pointer",fontFamily:_FL,color:"#BBBBBB",display:"flex",alignItems:"center",gap:5 }}>
-                      <span style={{ fontSize:16,lineHeight:1 }}>+</span> Ajouter une sous-tâche
-                    </button>
-                  </div>
-                );
-              })()}
-
-              {/* Échéances */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>ÉCHÉANCES</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-                  <div>
-                    {lbl("PROCHAIN SUIVI")}
-                    <input type="date" value={sel.dateProchainSuivi} onChange={e=>updSel({dateProchainSuivi:e.target.value})} style={inp} />
-                    {sel.linkedTaskId && !sel.closed && <div style={{ fontSize:9, color:"#27AE60", marginTop:4 }}>🔗 Synchronisé avec Tâches / Calendrier / Ma journée</div>}
-                  </div>
-                  <div>{lbl("RAPPEL")}<input type="date" value={sel.reminderDate} onChange={e=>updSel({reminderDate:e.target.value})} style={inp} /></div>
-                  <div>{lbl("ENVOI MISE EN DEMEURE")}<input type="date" value={sel.dateMiseEnDemeure} onChange={e=>updSel({dateMiseEnDemeure:e.target.value})} style={inp} /></div>
-                  <div>{lbl("DATE LIMITE D'ACTION")}<input type="date" value={sel.dateLimite} onChange={e=>updSel({dateLimite:e.target.value})} style={inp} /></div>
-                </div>
-              </div>
-
-              {/* Pièces jointes */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px" }}>
-                <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em",marginBottom:8 }}>PIÈCES JOINTES</div>
-                <AttachmentZone attachments={sel.attachments||[]} onChange={v=>updSel({attachments:v})} />
+              <div style={{ flex:1 }}>
+                <RichTextArea key={sel.id} value={sel.notes||""} onChange={v=>updSel({notes:v})} placeholder="Journal des échanges, décisions, courriers envoyés…" rows={16} showAi={!!(settings&&settings.groqKey)} groqKey={(settings&&settings.groqKey)||""} />
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* Confirmation de suppression */}
+      {confirmDelId && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:"white", borderRadius:14, width:"100%", maxWidth:400, padding:"22px 24px", boxShadow:"0 20px 60px rgba(0,0,0,0.25)" }}>
+            <div style={{ fontSize:15, fontWeight:700, fontFamily:_FL, color:"#2C3E50", marginBottom:10 }}>Supprimer ce suivi ?</div>
+            <p style={{ fontSize:12, fontFamily:_FL, color:"#666", lineHeight:1.5, marginBottom:18 }}>
+              Le suivi sera déplacé dans la corbeille, où il reste disponible 30 jours.
+            </p>
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:8 }}>
+              <button onClick={()=>setConfirmDelId(null)} style={{ ...S.btn("#F0F0F0","#666"), fontSize:11, padding:"8px 16px" }}>Annuler</button>
+              <button onClick={confirmDelete} style={{ ...S.btn("#C0392B"), fontSize:11, padding:"8px 16px" }}>🗑 Supprimer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Corbeille */}
+      {showTrash && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={()=>setShowTrash(false)}>
+          <div style={{ background:"white", borderRadius:14, width:560, maxWidth:"94vw", maxHeight:"75vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 40px rgba(0,0,0,0.18)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ padding:"18px 24px 14px", borderBottom:"1px solid #F0F0F0", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ fontSize:15, fontWeight:700, fontFamily:_FL, color:"#102A63" }}>🗑 Corbeille <span style={{ fontSize:12, color:"#AAA", fontWeight:400 }}>({activeTrash.length})</span></div>
+              <button onClick={()=>setShowTrash(false)} style={{ border:"none", background:"none", fontSize:18, cursor:"pointer", color:"#AAA" }}>×</button>
+            </div>
+            {activeTrash.length === 0 ? (
+              <div style={{ padding:40, textAlign:"center", color:"#CCC", fontFamily:_FL, fontSize:13 }}>Aucun suivi supprimé dans les 30 derniers jours</div>
+            ) : (
+              <div style={{ overflowY:"auto", flex:1 }}>
+                {activeTrash.map(r => (
+                  <div key={r.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 24px", borderBottom:"1px solid #F8F8F8" }}>
+                    <div style={{ flex:1, overflow:"hidden" }}>
+                      <div style={{ fontSize:12.5, fontFamily:_FL, color:"#2C3E50", fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.clientName||"(sans nom)"}</div>
+                      <div style={{ fontSize:10, fontFamily:_FL, color:"#AAA", marginTop:2 }}>{r.clientCode||""}{r.clientCode?" · ":""}supprimé le {fmtDate(r.deletedAt.split("T")[0])} · {trashDaysLeft(r)} j restants</div>
+                    </div>
+                    <button onClick={()=>restoreFromTrash(r.id)} style={{ ...S.btn("#102A63"), fontSize:10, padding:"6px 12px", flexShrink:0 }}>↶ Restaurer</button>
+                    <button onClick={()=>purgeFromTrash(r.id)} title="Supprimer définitivement" style={{ border:"none", background:"none", color:"#DDD", cursor:"pointer", fontSize:14, flexShrink:0 }} onMouseEnter={e=>e.currentTarget.style.color="#E74C3C"} onMouseLeave={e=>e.currentTarget.style.color="#DDD"}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {undoDel && (
         <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#102A63", color:"#fff", padding:"12px 20px", borderRadius:10, boxShadow:"0 4px 18px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:14, fontFamily:_FL, fontSize:13 }}>
-          <span>Dossier « {undoDel.clientName||"(sans nom)"} » supprimé</span>
+          <span>Suivi « {undoDel.clientName||"(sans nom)"} » supprimé</span>
           <button onClick={undoDelete} style={{ background:"#F4D35E", color:"#102A63", border:"none", borderRadius:6, padding:"6px 14px", fontWeight:700, cursor:"pointer", fontFamily:_FL, fontSize:12 }}>↶ Annuler</button>
         </div>
       )}
@@ -19179,7 +18996,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.683{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.684{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -19253,7 +19070,7 @@ function App() {
             <RecouvrementView settings={settings} />
           )}
           {view === "suivi360" && (
-            <SuiviUnifieView settings={settings} tasks={tasks} addTask={addTask} updTask={updTask} delTask={delTask} />
+            <SuiviUnifieView settings={settings} />
           )}
           {view === "cotation" && (
             <CotationView settings={settings} />
