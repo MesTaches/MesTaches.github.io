@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v682-1788534750"/>
+  <meta name="app-version" content="v683-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16578,7 +16578,7 @@ function _mkSuivi360() {
     typeGarantie:"", montantGarantie:"", assuranceCredit:"",
     litige:false, litigeNature:"",
     dateProchainSuivi:"", reminderDate:"", dateMiseEnDemeure:"", dateLimite:"",
-    notes:"", subtasks:[], attachments:[], closed:false,
+    notes:"", subtasks:[], attachments:[], closed:false, linkedTaskId:null,
     createdAt:new Date().toISOString(),
   };
 }
@@ -16642,7 +16642,7 @@ async function migrateToSuivi360() {
   } catch(e) { console.warn("migrateToSuivi360:", e && e.message); }
 }
 
-function SuiviUnifieView({ settings }) {
+function SuiviUnifieView({ settings, tasks, addTask, updTask, delTask }) {
   const isMobile = useIsMobile();
   const today0 = today();
   const [dossiers, setDossiers] = React.useState([]);
@@ -16656,11 +16656,6 @@ function SuiviUnifieView({ settings }) {
   const [sortDir, setSortDir] = React.useState("asc");
   const [undoDel, setUndoDel] = React.useState(null);
   const undoTimerRef = React.useRef(null);
-  const [colWidths, setColWidths] = React.useState(() => {
-    try { return JSON.parse(localStorage.getItem("taskmanager_suivi360_colwidths_v1")) || { clientName:180, clientCode:80, typeSuivi:150, gravite:70, statut:150, montantEchu:110, dateProchainSuivi:100 }; }
-    catch(e) { return { clientName:180, clientCode:80, typeSuivi:150, gravite:70, statut:150, montantEchu:110, dateProchainSuivi:100 }; }
-  });
-  const saveWidths = (w) => { setColWidths(w); try { localStorage.setItem("taskmanager_suivi360_colwidths_v1", JSON.stringify(w)); } catch(e) {} };
 
   const reload = React.useCallback(async () => {
     try {
@@ -16682,11 +16677,44 @@ function SuiviUnifieView({ settings }) {
 
   const save = (list) => { if (!ready) return; setDossiers(list); appDbSet("suivi_unifie", list); };
   const sel = dossiers.find(d => d.id === selId) || null;
-  const updSel = (patch) => { if (!sel) return; save(dossiers.map(d => d.id === sel.id ? {...d, ...patch} : d)); };
+
+  // ── Intégration Tâches/Calendrier/Ma journée : la date "Prochain suivi" pilote une tâche liée ──
+  const canSyncTasks = typeof addTask === "function" && typeof updTask === "function";
+  const taskPriorityFromGravite = (g) => g === "critique" ? "urgente" : g === "tension" ? "haute" : "normale";
+  const syncLinkedTask = (d) => {
+    if (!canSyncTasks) return d;
+    const title = "Suivi : " + (d.clientName || "(sans nom)");
+    const existing = d.linkedTaskId ? (tasks||[]).find(t => t.id === d.linkedTaskId) : null;
+    if (d.closed || !d.dateProchainSuivi) {
+      // Pas de suivi actif à planifier : la tâche liée (si elle existe) est marquée faite, pas supprimée.
+      if (existing && !existing.completed) updTask({ ...existing, completed: true, status: "done" });
+      return d;
+    }
+    if (existing) {
+      updTask({ ...existing, title, dueDate: d.dateProchainSuivi, completed: false, status: existing.status === "done" ? "todo" : existing.status, priority: taskPriorityFromGravite(d.gravite) });
+      return d;
+    }
+    const newTask = {
+      id: uid(), title, category: "Suivi client", type: "", dueDate: d.dateProchainSuivi,
+      priority: taskPriorityFromGravite(d.gravite), status: "todo", notes: "",
+      completed: false, reminder: "none", recurrence: "none", subtasks: [], labels: [],
+      createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false,
+    };
+    addTask(newTask);
+    return { ...d, linkedTaskId: newTask.id };
+  };
+
+  const updSel = (patch) => {
+    if (!sel) return;
+    let updated = { ...sel, ...patch };
+    if ("dateProchainSuivi" in patch || "closed" in patch || "clientName" in patch) updated = syncLinkedTask(updated);
+    save(dossiers.map(d => d.id === sel.id ? updated : d));
+  };
   const addNew = () => { const r = _mkSuivi360(); save([r, ...dossiers]); setSelId(r.id); };
   const del = (id) => {
     const found = dossiers.find(d => d.id === id); if (!found) return;
     save(dossiers.filter(d => d.id !== id));
+    if (found.linkedTaskId && typeof delTask === "function") delTask(found.linkedTaskId);
     if (selId === id) setSelId(null);
     setUndoDel(found);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -16771,26 +16799,15 @@ function SuiviUnifieView({ settings }) {
   const inp = { border:"1px solid #E8E8E8", borderRadius:6, padding:"6px 9px", fontSize:12, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"white" };
   const lbl = (t) => <div style={{ fontSize:9, fontWeight:700, color:"#102A63", fontFamily:_FL, marginBottom:3, letterSpacing:"0.05em" }}>{t}</div>;
 
-  const HeaderCell = ({ col, label }) => {
-    const w = colWidths[col] || 100;
-    const startResize = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const sx = e.clientX, sw = w;
-      const mm = ev => saveWidths({ ...colWidths, [col]: Math.max(50, sw + ev.clientX - sx) });
-      const mu = () => { document.removeEventListener("mousemove", mm); document.removeEventListener("mouseup", mu); };
-      document.addEventListener("mousemove", mm); document.addEventListener("mouseup", mu);
-    };
-    return (
-      <div onClick={()=>handleSort(col)} style={{ position:"relative", width:w, minWidth:w, maxWidth:w, padding:"0 6px", fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, cursor:"pointer", userSelect:"none", display:"flex", alignItems:"center", gap:3, whiteSpace:"nowrap", boxSizing:"border-box" }}>
-        {label}{sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : ""}
-        <span onMouseDown={startResize} style={{ position:"absolute", right:0, top:0, bottom:0, width:6, cursor:"col-resize" }} />
-      </div>
-    );
-  };
+  const HeaderCell = ({ col, label, align }) => (
+    <div onClick={()=>handleSort(col)} style={{ padding:"0 8px", fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, cursor:"pointer", userSelect:"none", whiteSpace:"nowrap", textAlign: align||"left" }}>
+      {label}{sortCol===col ? (sortDir==="asc"?" ▲":" ▼") : ""}
+    </div>
+  );
 
   if (!ready) return <div style={{ padding:40, fontFamily:_FL, color:"#94A3B8" }}>Chargement…</div>;
 
-  const gridTpl = `30px ${colWidths.clientName}px ${colWidths.clientCode}px ${colWidths.typeSuivi}px ${colWidths.gravite}px ${colWidths.statut}px ${colWidths.montantEchu}px ${colWidths.dateProchainSuivi}px 60px`;
+  const gridTpl = "minmax(170px,2.4fr) 90px minmax(150px,1.5fr) 56px minmax(130px,1.3fr) 115px 95px 40px";
 
   return (
     <div style={{ display:"flex", width:"100%", height:"100%", minHeight:"calc(100vh - 56px)", fontFamily:_FL, background:"#F7F6F3", flexDirection:"column" }}>
@@ -16831,79 +16848,82 @@ function SuiviUnifieView({ settings }) {
         <button onClick={addNew} style={{ ...S.btn("#102A63"), padding:"6px 14px", fontSize:11, flexShrink:0 }}>+ Nouveau suivi</button>
       </div>
 
-      <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
-        {/* ── Tableau synthétique ── */}
-        <div style={{ width:"46%", minWidth:420, flexShrink:0, borderRight:"1px solid #ECEAE5", background:"white", display:"flex", flexDirection:"column" }}>
-          <div style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"6px 8px", background:"#102A63", flexShrink:0, minWidth:"max-content" }}>
-            <div />
-            <HeaderCell col="clientName" label="CLIENT" />
-            <HeaderCell col="clientCode" label="CODE" />
-            <HeaderCell col="typeSuivi" label="TYPE" />
-            <HeaderCell col="gravite" label="GRAV." />
-            <HeaderCell col="statut" label="STATUT" />
-            <HeaderCell col="montantEchu" label="ÉCHU" />
-            <HeaderCell col="dateProchainSuivi" label="SUIVI" />
-            <div />
-          </div>
-          <div style={{ flex:1, overflowY:"auto" }}>
-            {filtered.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"40px 16px", color:"#CCC", fontFamily:_FL, fontSize:13 }}>
-                {dossiers.length === 0 ? "Aucun dossier — cliquez sur « + Nouveau suivi »" : "Aucun résultat"}
+      <div style={{ flex:1, overflow:"hidden", display:"flex", flexDirection:"column", background:"white" }}>
+        <div style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"6px 8px", background:"#102A63", flexShrink:0 }}>
+          <HeaderCell col="clientName" label="CLIENT" />
+          <HeaderCell col="clientCode" label="CODE" />
+          <HeaderCell col="typeSuivi" label="TYPE" />
+          <HeaderCell col="gravite" label="GRAV." align="center" />
+          <HeaderCell col="statut" label="STATUT" />
+          <HeaderCell col="montantEchu" label="ÉCHU" align="right" />
+          <HeaderCell col="dateProchainSuivi" label="SUIVI" />
+          <div />
+        </div>
+        <div style={{ flex:1, overflowY:"auto" }}>
+          {filtered.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"40px 16px", color:"#CCC", fontFamily:_FL, fontSize:13 }}>
+              {dossiers.length === 0 ? "Aucun dossier — cliquez sur « + Nouveau suivi »" : "Aucun résultat"}
+            </div>
+          ) : filtered.map((d,i) => {
+            const ty = typeObj(d.typeSuivi), g = gravObj(d.gravite), st = statObj(d.statut);
+            const active = selId === d.id;
+            return (
+              <div key={d.id} onClick={()=>setSelId(d.id)} style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"8px 8px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:d.closed?0.55:1 }}>
+                <div style={{ fontSize:11.5, fontWeight:600, color:d.closed?"#94A3B8":"#1E293B", textDecoration:d.closed?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6 }}>{d.clientName||"(sans nom)"}</div>
+                <div style={{ fontSize:10.5, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientCode||"—"}</div>
+                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9, fontWeight:700, background:ty.bg, color:ty.color, borderRadius:4, padding:"2px 7px", whiteSpace:"nowrap" }}>{ty.name}</span></div>
+                <div style={{ textAlign:"center", fontSize:12 }} title={g.name}>{g.dot}</div>
+                <div style={{ overflow:"hidden" }}><span style={{ fontSize:9, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 7px", whiteSpace:"nowrap" }}>{st.name}</span></div>
+                <div style={{ fontSize:11, fontWeight:700, color:(parseNum(d.montantEchu)||0)>0?"#C0392B":"#CCC", textAlign:"right", paddingRight:8, fontVariantNumeric:"tabular-nums" }}>{(parseNum(d.montantEchu)||0)>0?fmtEuro(d.montantEchu):"—"}</div>
+                <div style={{ fontSize:10.5, color:"#888", whiteSpace:"nowrap" }}>{d.dateProchainSuivi ? d.dateProchainSuivi.split("-").reverse().join("/") : "—"}</div>
+                <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                  <button onClick={e=>{e.stopPropagation();del(d.id);}} title="Supprimer" style={{ border:"none", background:"none", cursor:"pointer", color:"#DDD", fontSize:14 }}>×</button>
+                </div>
               </div>
-            ) : filtered.map((d,i) => {
-              const ty = typeObj(d.typeSuivi), g = gravObj(d.gravite), st = statObj(d.statut);
-              const active = selId === d.id;
-              return (
-                <div key={d.id} onClick={()=>setSelId(d.id)} style={{ display:"grid", gridTemplateColumns:gridTpl, alignItems:"center", padding:"7px 8px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", borderLeft:active?"3px solid #102A63":"3px solid transparent", opacity:d.closed?0.55:1, minWidth:"max-content" }}>
-                  <span style={{ fontSize:10, textAlign:"center" }}>{g.dot}</span>
-                  <div style={{ fontSize:11, fontWeight:600, color:d.closed?"#94A3B8":"#1E293B", textDecoration:d.closed?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6 }}>{d.clientName||"(sans nom)"}</div>
-                  <div style={{ fontSize:10, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientCode||"—"}</div>
-                  <div style={{ overflow:"hidden" }}><span style={{ fontSize:8.5, fontWeight:700, background:ty.bg, color:ty.color, borderRadius:4, padding:"2px 6px", whiteSpace:"nowrap" }}>{ty.name}</span></div>
-                  <div />
-                  <div style={{ overflow:"hidden" }}><span style={{ fontSize:8.5, fontWeight:700, background:st.bg, color:st.color, borderRadius:4, padding:"2px 6px", whiteSpace:"nowrap" }}>{st.name}</span></div>
-                  <div style={{ fontSize:10.5, fontWeight:700, color:(parseNum(d.montantEchu)||0)>0?"#C0392B":"#CCC", textAlign:"right", paddingRight:8, fontVariantNumeric:"tabular-nums" }}>{(parseNum(d.montantEchu)||0)>0?fmtEuro(d.montantEchu):"—"}</div>
-                  <div style={{ fontSize:10, color:"#888", whiteSpace:"nowrap" }}>{d.dateProchainSuivi ? d.dateProchainSuivi.split("-").reverse().join("/") : "—"}</div>
-                  <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                    <button onClick={e=>{e.stopPropagation();del(d.id);}} title="Supprimer" style={{ border:"none", background:"none", cursor:"pointer", color:"#DDD", fontSize:14 }}>×</button>
+            );
+          })}
+        </div>
+        <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_FL, color:"#AAA" }}>{filtered.length} dossier{filtered.length!==1?"s":""}</div>
+      </div>
+
+      {/* ── Tiroir de détail : s'ouvre au clic sur une ligne, fermable (✕ ou clic en-dehors) ── */}
+      {sel && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.35)", zIndex:1000, display:"flex", alignItems:isMobile?"flex-end":"stretch", justifyContent:"flex-end", backdropFilter:"blur(3px)" }}
+          onMouseDown={e=>{ if (e.target===e.currentTarget) e.currentTarget._mdOutside=true; }}
+          onMouseUp={e=>{ if (e.target===e.currentTarget && e.currentTarget._mdOutside) { e.currentTarget._mdOutside=false; setSelId(null); } }}>
+          <div style={{ background:"#F7F8FC", width:isMobile?"100%":"min(720px,96vw)", height:isMobile?"92vh":"100%", borderRadius:isMobile?"20px 20px 0 0":0, display:"flex", flexDirection:"column", boxShadow:"-8px 0 40px rgba(0,0,0,0.2)", overflow:"hidden" }}>
+
+            {/* En-tête du tiroir */}
+            <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"16px 24px", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <input value={sel.clientName} onChange={e=>updSel({clientName:e.target.value})} placeholder="Nom du client" style={{ ...inp, fontSize:18, fontWeight:700, color: sel.closed?"#94A3B8":"#102A63", border:"none", background:"transparent", padding:"2px 0", textDecoration:sel.closed?"line-through":"none" }} />
+                  <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:4, flexWrap:"wrap" }}>
+                    <input value={sel.clientCode} maxLength={7} onChange={e=>updSel({clientCode:e.target.value})} placeholder="Code client" style={{ ...inp, width:92, fontSize:11, padding:"3px 8px", borderColor:dupCode(sel)?"#F59E0B":"#E8E8E8" }} />
+                    {dupCode(sel) && <span style={{ fontSize:9, color:"#B45309" }}>⚠ code déjà utilisé</span>}
+                    <span style={{ fontSize:10, fontFamily:_FL, color:"#AAA" }}>Créé le {fmtDate(sel.createdAt ? sel.createdAt.split("T")[0] : today0)}</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-          <div style={{ padding:"5px 12px", borderTop:"1px solid #F0F0F0", background:"#F8F9FB", fontSize:10, fontFamily:_FL, color:"#AAA" }}>{filtered.length} dossier{filtered.length!==1?"s":""}</div>
-        </div>
-
-        {/* ── Détail ── */}
-        <div style={{ flex:1, display:"flex", flexDirection:"column", background:"#F7F8FC", overflow:"hidden" }}>
-          {!sel ? (
-            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:14, color:"#AAA" }}>
-              <div style={{ fontSize:40 }}>🧭</div>
-              <div style={{ fontSize:14, fontFamily:_FL, fontStyle:"italic", color:"#9CA3AF" }}>Sélectionnez ou créez un dossier de suivi</div>
-              <button onClick={addNew} style={S.btn("#102A63")}>+ Nouveau suivi</button>
-            </div>
-          ) : (
-            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
-              {/* En-tête */}
-              <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:12, marginBottom:16 }}>
-                <div style={{ flex:1 }}>
-                  <input value={sel.clientName} onChange={e=>updSel({clientName:e.target.value})} placeholder="Nom du client" style={{ ...inp, fontSize:18, fontWeight:700, color: sel.closed?"#94A3B8":"#102A63", border:"none", background:"transparent", padding:"2px 0", textDecoration:sel.closed?"line-through":"none" }} />
-                  <div style={{ fontSize:10, fontFamily:_FL, color:"#AAA", marginTop:2 }}>Créé le {fmtDate(sel.createdAt ? sel.createdAt.split("T")[0] : today0)}</div>
-                </div>
-                <div style={{ display:"flex", gap:6, flexShrink:0, flexWrap:"wrap", justifyContent:"flex-end" }}>
-                  <button onClick={()=>{
-                    const subject = encodeURIComponent(`Suivi client - ${sel.clientName}`);
-                    const body = encodeURIComponent(htmlToPlainText(sel.notes||""));
-                    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-                  }} title="Envoyer les notes par mail" style={{ border:"1px solid #E0E0E0", background:"white", color:"#102A63", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>✉ Mail</button>
-                  <button onClick={()=>transferToContentieux(sel)} title="Transférer ce dossier en Contentieux"
-                    style={{ border:"1px solid #E0E0E0", background:"white", color:"#9333EA", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>⚖ → Contentieux</button>
-                  <button onClick={()=>updSel({closed:!sel.closed})}
-                    style={{ border:sel.closed?"1px solid #BBF7D0":"1px solid #E0E0E0", background:sel.closed?"#F0FDF4":"white", color:sel.closed?"#065F46":"#102A63", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>
-                    {sel.closed ? "↻ Rouvrir" : "✓ Clôturer"}
-                  </button>
-                  <button onClick={()=>del(sel.id)} title="Supprimer" style={{ border:"1px solid #E0E0E0", background:"white", color:"#C0392B", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>🗑</button>
-                </div>
+                <button onClick={()=>setSelId(null)} title="Fermer" style={{ border:"none", background:"#F0F0F0", borderRadius:"50%", width:28, height:28, cursor:"pointer", fontSize:16, color:"#666", flexShrink:0, lineHeight:1 }}>×</button>
               </div>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:12 }}>
+                <button onClick={()=>{
+                  const subject = encodeURIComponent(`Suivi client - ${sel.clientName}`);
+                  const body = encodeURIComponent(htmlToPlainText(sel.notes||""));
+                  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+                }} title="Envoyer les notes par mail" style={{ border:"1px solid #E0E0E0", background:"white", color:"#102A63", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>✉ Mail</button>
+                <button onClick={()=>transferToContentieux(sel)} title="Transférer ce dossier en Contentieux"
+                  style={{ border:"1px solid #E0E0E0", background:"white", color:"#9333EA", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>⚖ → Contentieux</button>
+                <button onClick={()=>updSel({closed:!sel.closed})}
+                  style={{ border:sel.closed?"1px solid #BBF7D0":"1px solid #E0E0E0", background:sel.closed?"#F0FDF4":"white", color:sel.closed?"#065F46":"#102A63", borderRadius:20, padding:"5px 12px", cursor:"pointer", fontFamily:_FL, fontSize:10, fontWeight:600 }}>
+                  {sel.closed ? "↻ Rouvrir" : "✓ Clôturer"}
+                </button>
+                <button onClick={()=>del(sel.id)} title="Supprimer" style={{ border:"1px solid #E0E0E0", background:"white", color:"#C0392B", borderRadius:20, padding:"5px 11px", cursor:"pointer", fontFamily:_FL, fontSize:10 }}>🗑</button>
+              </div>
+            </div>
+
+            {/* Corps défilant du tiroir */}
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
 
               {/* Classification */}
               <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
@@ -16949,59 +16969,14 @@ function SuiviUnifieView({ settings }) {
                 </div>
               </div>
 
-              {/* Identification & garantie */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>IDENTIFICATION & GARANTIE</div>
-                <div style={{ display:"grid", gridTemplateColumns:"90px 150px 1fr 130px", gap:10 }}>
-                  <div>
-                    {lbl("CODE CLIENT")}
-                    <input value={sel.clientCode} maxLength={7} onChange={e=>updSel({clientCode:e.target.value})} style={{ ...inp, textAlign:"center", fontVariantNumeric:"tabular-nums", borderColor:dupCode(sel)?"#F59E0B":"#E8E8E8" }} />
-                    {dupCode(sel) && <div style={{ fontSize:9, color:"#B45309", marginTop:2 }}>⚠ déjà utilisé</div>}
-                  </div>
-                  <div>{lbl("COTATION / NOTE")}<input value={sel.cotation} onChange={e=>updSel({cotation:e.target.value})} placeholder="Ex: Grade 7" style={inp} /></div>
-                  <div>
-                    {lbl("TYPE DE GARANTIE")}
-                    <select value={sel.typeGarantie||""} onChange={e=>updSel({typeGarantie:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                      <option value="">— Aucune —</option>
-                      {REC_GARANTIE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </div>
-                  <div>{lbl("GARANTIE (€)")}<RecAmountInput value={sel.montantGarantie} onChange={v=>updSel({montantGarantie:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
-                </div>
-
-                {(sel.comptes||[]).length > 0 && (
-                  <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:6 }}>
-                    {lbl("AUTRES COMPTES DU GROUPE")}
-                    {(sel.comptes||[]).map((c, i) => (
-                      <div key={i} style={{ display:"flex", gap:6, alignItems:"center" }}>
-                        <input value={c.code||""} maxLength={7} onChange={e=>{ const arr=[...(sel.comptes||[])]; arr[i]={...arr[i],code:e.target.value}; updSel({comptes:arr}); }} placeholder="Code" style={{ ...inp, width:96, flexShrink:0, textAlign:"center" }} />
-                        <input value={c.libelle||""} onChange={e=>{ const arr=[...(sel.comptes||[])]; arr[i]={...arr[i],libelle:e.target.value}; updSel({comptes:arr}); }} placeholder="Libellé / entité" style={inp} />
-                        <button onClick={()=>{ const arr=(sel.comptes||[]).filter((_,j)=>j!==i); updSel({comptes:arr}); }} title="Retirer ce compte" style={{ border:"none", background:"none", color:"#CCC", fontSize:16, cursor:"pointer", flexShrink:0, lineHeight:1 }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <button onClick={()=>updSel({comptes:[...(sel.comptes||[]), {code:"",libelle:""}]})}
-                  style={{ marginTop:8, border:"1.5px dashed #D8D5CD", background:"transparent", borderRadius:8, padding:"6px 12px", fontSize:11, color:"#888", fontFamily:_FL, cursor:"pointer", width:"100%" }}>
-                  + Ajouter un compte client (groupe)
-                </button>
-
-                <div style={{ marginTop:12 }}>
-                  {lbl("ASSURANCE-CRÉDIT")}
-                  <select value={sel.assuranceCredit} onChange={e=>updSel({assuranceCredit:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                    <option value="">— Non renseigné —</option>
-                    {REC_ASSUR.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
               {/* Financier */}
               <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
                 <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>FINANCIER</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
                   <div>{lbl("ENCOURS TOTAL (€)")}<RecAmountInput value={sel.encoursTotal} onChange={v=>updSel({encoursTotal:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
                   <div>{lbl("ÉCHU IMPAYÉ (€)")}<RecAmountInput value={sel.montantEchu} onChange={v=>updSel({montantEchu:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right", color:"#C0392B" }} /></div>
                   <div>{lbl("PLAFOND AUTORISÉ (€)")}<RecAmountInput value={sel.plafond} onChange={v=>updSel({plafond:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
+                  <div>{lbl("GARANTIE (€)")}<RecAmountInput value={sel.montantGarantie} onChange={v=>updSel({montantGarantie:v})} style={{ ...inp, fontVariantNumeric:"tabular-nums", textAlign:"right" }} /></div>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginTop:10, alignItems:"start" }}>
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -17043,17 +17018,6 @@ function SuiviUnifieView({ settings }) {
                       </div>
                     );
                   })()}
-                </div>
-              </div>
-
-              {/* Échéances */}
-              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
-                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>ÉCHÉANCES</div>
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-                  <div>{lbl("PROCHAIN SUIVI")}<input type="date" value={sel.dateProchainSuivi} onChange={e=>updSel({dateProchainSuivi:e.target.value})} style={inp} /></div>
-                  <div>{lbl("RAPPEL")}<input type="date" value={sel.reminderDate} onChange={e=>updSel({reminderDate:e.target.value})} style={inp} /></div>
-                  <div>{lbl("ENVOI MISE EN DEMEURE")}<input type="date" value={sel.dateMiseEnDemeure} onChange={e=>updSel({dateMiseEnDemeure:e.target.value})} style={inp} /></div>
-                  <div>{lbl("DATE LIMITE D'ACTION")}<input type="date" value={sel.dateLimite} onChange={e=>updSel({dateLimite:e.target.value})} style={inp} /></div>
                 </div>
               </div>
 
@@ -17101,15 +17065,30 @@ function SuiviUnifieView({ settings }) {
                 );
               })()}
 
+              {/* Échéances */}
+              <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginBottom:14 }}>
+                <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10 }}>ÉCHÉANCES</div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
+                  <div>
+                    {lbl("PROCHAIN SUIVI")}
+                    <input type="date" value={sel.dateProchainSuivi} onChange={e=>updSel({dateProchainSuivi:e.target.value})} style={inp} />
+                    {sel.linkedTaskId && !sel.closed && <div style={{ fontSize:9, color:"#27AE60", marginTop:4 }}>🔗 Synchronisé avec Tâches / Calendrier / Ma journée</div>}
+                  </div>
+                  <div>{lbl("RAPPEL")}<input type="date" value={sel.reminderDate} onChange={e=>updSel({reminderDate:e.target.value})} style={inp} /></div>
+                  <div>{lbl("ENVOI MISE EN DEMEURE")}<input type="date" value={sel.dateMiseEnDemeure} onChange={e=>updSel({dateMiseEnDemeure:e.target.value})} style={inp} /></div>
+                  <div>{lbl("DATE LIMITE D'ACTION")}<input type="date" value={sel.dateLimite} onChange={e=>updSel({dateLimite:e.target.value})} style={inp} /></div>
+                </div>
+              </div>
+
               {/* Pièces jointes */}
               <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px" }}>
                 <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em",marginBottom:8 }}>PIÈCES JOINTES</div>
                 <AttachmentZone attachments={sel.attachments||[]} onChange={v=>updSel({attachments:v})} />
               </div>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       {undoDel && (
         <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#102A63", color:"#fff", padding:"12px 20px", borderRadius:10, boxShadow:"0 4px 18px rgba(0,0,0,0.25)", display:"flex", alignItems:"center", gap:14, fontFamily:_FL, fontSize:13 }}>
@@ -19200,7 +19179,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.682{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.683{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -19274,7 +19253,7 @@ function App() {
             <RecouvrementView settings={settings} />
           )}
           {view === "suivi360" && (
-            <SuiviUnifieView settings={settings} />
+            <SuiviUnifieView settings={settings} tasks={tasks} addTask={addTask} updTask={updTask} delTask={delTask} />
           )}
           {view === "cotation" && (
             <CotationView settings={settings} />
