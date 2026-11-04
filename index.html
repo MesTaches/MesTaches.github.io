@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v686-1788534750"/>
+  <meta name="app-version" content="v687-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16569,6 +16569,14 @@ function _mkSuivi360() {
 }
 // Sélecteur de priorité : pastille colorée + libellé, liste déroulante au clic (plutôt qu'un cycle au clic).
 // Dédié (ne touche pas InlineSelect, utilisé ailleurs dans l'app) pour ne rien affecter en dehors de Suivi 360°.
+// Pastille avec un petit effet de relief (dégradé glossy + ombre portée) plutôt qu'un simple aplat.
+function _graviteDotStyle(color, size) {
+  return {
+    width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+    background: `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.15) 45%, rgba(0,0,0,0) 65%), ${color}`,
+    boxShadow: `inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 1px rgba(255,255,255,0.5), 0 1px 2px rgba(0,0,0,0.25)`,
+  };
+}
 function GraviteSelect({ value, onChange }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
@@ -16583,7 +16591,7 @@ function GraviteSelect({ value, onChange }) {
     <div ref={ref} style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
       <div onClick={()=>setOpen(o=>!o)}
         style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", padding:"4px 8px", borderRadius:14, background:current.bg, userSelect:"none" }}>
-        <span style={{ width:9, height:9, borderRadius:"50%", background:current.color, flexShrink:0 }} />
+        <span style={_graviteDotStyle(current.color, 10)} />
         <span style={{ fontSize:10.5, fontWeight:700, color:current.color, fontFamily:_FL, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{current.name}</span>
         <span style={{ fontSize:7, color:current.color, opacity:0.6, marginLeft:"auto", flexShrink:0 }}>▾</span>
       </div>
@@ -16595,7 +16603,7 @@ function GraviteSelect({ value, onChange }) {
               style={{ padding:"7px 12px", fontSize:11, fontFamily:_FL, cursor:"pointer", display:"flex", alignItems:"center", gap:8, background: g.id===value ? "#F0F5FF" : "white" }}
               onMouseEnter={e=>e.currentTarget.style.background = g.id===value ? "#E8EFFE" : "#F8F9FB"}
               onMouseLeave={e=>e.currentTarget.style.background = g.id===value ? "#F0F5FF" : "white"}>
-              <span style={{ width:10, height:10, borderRadius:"50%", background:g.color, flexShrink:0 }} />
+              <span style={_graviteDotStyle(g.color, 11)} />
               <span style={{ fontWeight:600, color:"#2C3E50" }}>{g.name}</span>
               {g.id===value && <span style={{ marginLeft:"auto", fontSize:10, color:"#102A63" }}>✓</span>}
             </div>
@@ -19059,7 +19067,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.686{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.687{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
