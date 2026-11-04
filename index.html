@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v687-1788534750"/>
+  <meta name="app-version" content="v688-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16545,25 +16545,27 @@ function RecouvrementView({ settings }) {
    annulation 10s + corbeille 30 jours.
 ═══════════════════════════════════════════════ */
 const SUIVI360_TYPES = [
-  { id:"retard",    name:"Retard de paiement",   color:"#C0392B", bg:"#FDEDEC" },
-  { id:"risque",    name:"Risque crédit",        color:"#E67E22", bg:"#FEF3E2" },
-  { id:"encours",   name:"Encours significatif", color:"#1D4ED8", bg:"#DBEAFE" },
-  { id:"direction", name:"Demande direction",    color:"#9333EA", bg:"#F3E8FF" },
-  { id:"litige",    name:"Litige",               color:"#2980B9", bg:"#EBF5FB" },
-  { id:"cotation",  name:"Cotation",             color:"#27AE60", bg:"#E8F8F5" },
-  { id:"autre",     name:"Autre",                color:"#6B7280", bg:"#F3F4F6" },
+  { id:"retard",      name:"Retard",      color:"#C0392B", bg:"#FDEDEC" },
+  { id:"encours",     name:"Encours",     color:"#1D4ED8", bg:"#DBEAFE" },
+  { id:"litige",      name:"Litige",      color:"#2980B9", bg:"#EBF5FB" },
+  { id:"contentieux", name:"Contentieux", color:"#9333EA", bg:"#F3E8FF" },
+];
+// Priorité : liste dédiée à Suivi 360° (distincte de REC_GRAVITE, utilisée par Recouvrement).
+const SUIVI360_PRIORITES = [
+  { id:"prioritaire", name:"Prioritaire", color:"#B91C1C", bg:"#FEE2E2", rank:0 },
+  { id:"elevee",      name:"Élevée",      color:"#A16207", bg:"#FEF9C3", rank:1 },
+  { id:"normale",     name:"Normale",     color:"#15803D", bg:"#DCFCE7", rank:2 },
 ];
 const SUIVI360_STATUTS = [
-  { id:"a_traiter", name:"À traiter",         color:"#6B7280", bg:"#F3F4F6" },
-  { id:"en_cours",  name:"En cours",          color:"#1D4ED8", bg:"#DBEAFE" },
-  { id:"attente",   name:"En attente retour", color:"#A16207", bg:"#FEF9C3" },
-  { id:"resolu",    name:"Résolu",            color:"#15803D", bg:"#DCFCE7" },
+  { id:"en_cours",  name:"En cours",   color:"#1D4ED8", bg:"#DBEAFE" },
+  { id:"en_attente",name:"En attente", color:"#A16207", bg:"#FEF9C3" },
+  { id:"cloture",   name:"Clôturé",    color:"#15803D", bg:"#DCFCE7" },
 ];
 function _mkSuivi360() {
   return {
     id: uid(), clientName:"", clientCode:"",
-    typeSuivi:"retard", gravite:"surveillance", statut:"a_traiter",
-    dateProchainSuivi:"", assigneA:"", dateAssignation:"", notes:"",
+    typeSuivi:"retard", gravite:"normale", statut:"en_cours",
+    dateProchainSuivi:"", assigneA:"", dateAssignation:"", notes:"", subtasks:[],
     createdAt:new Date().toISOString(),
   };
 }
@@ -16586,7 +16588,7 @@ function GraviteSelect({ value, onChange }) {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
-  const current = REC_GRAVITE.find(g => g.id === value) || REC_GRAVITE[2];
+  const current = SUIVI360_PRIORITES.find(g => g.id === value) || SUIVI360_PRIORITES[2];
   return (
     <div ref={ref} style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
       <div onClick={()=>setOpen(o=>!o)}
@@ -16598,7 +16600,7 @@ function GraviteSelect({ value, onChange }) {
       {open && (
         <div style={{ position:"fixed", zIndex:9900, background:"white", borderRadius:10, boxShadow:"0 12px 32px rgba(0,0,0,0.18)", border:"1px solid #ECEAE5", minWidth:150, overflow:"hidden", padding:"4px 0" }}
           ref={el => { if (el && ref.current) { const r = ref.current.getBoundingClientRect(); el.style.top = (r.bottom+4)+"px"; el.style.left = r.left+"px"; } }}>
-          {REC_GRAVITE.map(g => (
+          {SUIVI360_PRIORITES.map(g => (
             <div key={g.id} onClick={()=>{ onChange(g.id); setOpen(false); }}
               style={{ padding:"7px 12px", fontSize:11, fontFamily:_FL, cursor:"pointer", display:"flex", alignItems:"center", gap:8, background: g.id===value ? "#F0F5FF" : "white" }}
               onMouseEnter={e=>e.currentTarget.style.background = g.id===value ? "#E8EFFE" : "#F8F9FB"}
@@ -16632,18 +16634,18 @@ async function migrateToSuivi360() {
       if (!c.clientName && !c.clientCode) return;
       merged[keyOf(c)] = Object.assign(_mkSuivi360(), {
         id: uid(), clientName: c.clientName||"", clientCode: c.clientCode||"",
-        typeSuivi: ["retard","risque","litige","cotation"].includes(c.suiviType) ? c.suiviType : "autre",
+        typeSuivi: ({ retard:"retard", risque:"encours", litige:"litige", cotation:"encours" })[c.suiviType] || "retard",
         dateProchainSuivi: c.followupDate||"", reminderDate: c.reminderDate||"",
         notes: (scNotes && scNotes[c.id]) || c.notes || "",
         subtasks: c.subtasks||[], attachments: c.attachments||[],
         closed: !!c.closed, createdAt: c.createdAt || new Date().toISOString(),
       });
     });
-    const recStatutMap = { relance:"relance", miseendemeure:"miseendemeure", precontentieux:"precontentieux", plan:"plan", solde:"resolu" };
+    const recStatutMap = { relance:"en_cours", miseendemeure:"en_cours", precontentieux:"en_cours", plan:"en_cours", solde:"cloture" };
     (rec||[]).forEach(d => {
       if (!d.clientName && !d.clientCode) return;
       const k = keyOf(d);
-      const base = merged[k] || Object.assign(_mkSuivi360(), { id: uid(), clientName: d.clientName||"", clientCode: d.clientCode||"", typeSuivi:"risque", createdAt: d.createdAt || new Date().toISOString() });
+      const base = merged[k] || Object.assign(_mkSuivi360(), { id: uid(), clientName: d.clientName||"", clientCode: d.clientCode||"", typeSuivi:"encours", createdAt: d.createdAt || new Date().toISOString() });
       merged[k] = Object.assign({}, base, {
         typeSuivi: d.litige ? "litige" : base.typeSuivi,
         gravite: d.gravite || base.gravite,
@@ -16745,16 +16747,16 @@ function SuiviUnifieView({ settings }) {
   };
   const purgeFromTrash = (id) => saveTrash(trash.filter(x => x.id !== id));
 
-  const typeObj = (t) => SUIVI360_TYPES.find(x => x.id === t) || SUIVI360_TYPES[SUIVI360_TYPES.length-1];
-  const gravObj = (g) => REC_GRAVITE.find(x => x.id === g) || REC_GRAVITE[2];
+  const typeObj = (t) => SUIVI360_TYPES.find(x => x.id === t) || SUIVI360_TYPES[0];
+  const gravObj = (g) => SUIVI360_PRIORITES.find(x => x.id === g) || SUIVI360_PRIORITES[2];
   const statObj = (s) => SUIVI360_STATUTS.find(x => x.id === s) || SUIVI360_STATUTS[0];
 
   const filtered = dossiers.filter(d => {
-    if (hideResolved && d.statut === "resolu") return false;
+    if (hideResolved && d.statut === "cloture") return false;
     if (search && ![d.clientName, d.clientCode].some(v => (v||"").toLowerCase().includes(search.toLowerCase()))) return false;
     return true;
   }).sort((a,b) => {
-    const ar = a.statut === "resolu", br = b.statut === "resolu";
+    const ar = a.statut === "cloture", br = b.statut === "cloture";
     if (ar !== br) return ar ? 1 : -1; // les résolus vont toujours en bas
     if (!sortCol) {
       const ra = gravObj(a.gravite).rank, rb = gravObj(b.gravite).rank;
@@ -16803,7 +16805,7 @@ function SuiviUnifieView({ settings }) {
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client…" style={{ ...inp, width:200, flexShrink:0 }} />
         <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:11, fontFamily:_FL, color:"#666", userSelect:"none", flexShrink:0 }}>
           <input type="checkbox" checked={hideResolved} onChange={e=>setHideResolved(e.target.checked)} style={{ accentColor:"#102A63", cursor:"pointer" }} />
-          Masquer les résolus
+          Masquer les clôturés
         </label>
         <div style={{ flex:1 }} />
         <button onClick={()=>setShowTrash(true)} title="Corbeille (30 jours)" style={{ border:"1px solid #E0E0E0", background:"white", color: activeTrash.length>0 ? "#C0392B" : "#999", borderRadius:20, padding:"6px 12px", fontSize:11, cursor:"pointer", fontFamily:_FL, flexShrink:0 }}>
@@ -16859,7 +16861,14 @@ function SuiviUnifieView({ settings }) {
                   <input type="date" value={d.dateAssignation||""} onChange={e=>updRow(d.id,{dateAssignation:e.target.value})} style={cellInp} />
                 </div>
                 <div style={{ display:"flex", justifyContent:"center" }}>
-                  <button onClick={e=>{e.stopPropagation();setSelId(d.id);}} title="Notes de suivi" style={{ border:"none", background:"none", cursor:"pointer", fontSize:14, opacity:d.notes?1:0.35, padding:0 }}>💬</button>
+                  <div style={{ position:"relative", display:"inline-flex" }}>
+                    <button onClick={e=>{e.stopPropagation();setSelId(d.id);}} title="Notes de suivi" style={{ border:"none", background:"none", cursor:"pointer", fontSize:14, opacity:d.notes?1:0.35, padding:0 }}>💬</button>
+                    {(d.subtasks||[]).length > 0 && (
+                      <span title={d.subtasks.filter(s=>s.completed).length+"/"+d.subtasks.length+" sous-tâches"} style={{ position:"absolute", top:-6, right:-10, fontSize:7.5, fontWeight:700, color:"white", background:"#102A63", borderRadius:7, padding:"1px 4px", minWidth:13, textAlign:"center", lineHeight:1.3, fontFamily:_DM }}>
+                        {d.subtasks.filter(s=>s.completed).length}/{d.subtasks.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div style={{ display:"flex", justifyContent:"center" }}>
                   <button onClick={e=>{e.stopPropagation();askDelete(d.id);}} title="Supprimer" style={{ border:"none", background:"none", cursor:"pointer", color:"#DDD", fontSize:15, padding:0 }}
@@ -16921,14 +16930,47 @@ function SuiviUnifieView({ settings }) {
               </div>
             </div>
 
-            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px", display:"flex", flexDirection:"column" }}>
+            <div style={{ flex:1, overflowY:"auto", padding:"18px 24px" }}>
               <div style={{ fontSize:10, fontWeight:700, color:"#102A63", fontFamily:_FL, letterSpacing:"0.06em", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span>💬 NOTES DE SUIVI</span>
                 <span style={{ fontSize:9, color:"#27AE60", fontWeight:600 }}>✓ Auto-sauvegarde</span>
               </div>
-              <div style={{ flex:1 }}>
-                <RichTextArea key={sel.id} value={sel.notes||""} onChange={v=>updSel({notes:v})} placeholder="Journal des échanges, décisions, courriers envoyés…" rows={16} showAi={!!(settings&&settings.groqKey)} groqKey={(settings&&settings.groqKey)||""} />
-              </div>
+              <RichTextArea key={sel.id} value={sel.notes||""} onChange={v=>updSel({notes:v})} placeholder="Journal des échanges, décisions, courriers envoyés…" rows={12} showAi={!!(settings&&settings.groqKey)} groqKey={(settings&&settings.groqKey)||""} />
+
+              {/* Sous-tâches */}
+              {(()=>{
+                const ss=[{id:"todo",name:"À faire",color:"#888",bg:"#F0F0F0"},{id:"inprogress",name:"En cours",color:"#1D4ED8",bg:"#DBEAFE"},{id:"waiting",name:"En attente",color:"#A16207",bg:"#FEF9C3"},{id:"blocked",name:"Bloqué",color:"#B91C1C",bg:"#FEE2E2"},{id:"done",name:"Fait",color:"#065F46",bg:"#D1FAE5"},{id:"cancelled",name:"Annulé",color:"#92400E",bg:"#F5E6DC"}];
+                const subtasks = sel.subtasks||[];
+                const done = subtasks.filter(s=>s.completed).length;
+                const updSubs = subs => updSel({subtasks:subs});
+                const addSub  = () => updSubs([...subtasks,{id:String(Date.now()),text:"",status:"todo",completed:false}]);
+                const updSub  = s  => updSubs(subtasks.map(x=>x.id===s.id?s:x));
+                const delSub  = id => updSubs(subtasks.filter(x=>x.id!==id));
+                return (
+                  <div style={{ background:"white", border:"1px solid #ECEAE5", borderRadius:12, padding:"14px 16px", marginTop:16 }}>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8 }}>
+                      <div style={{ fontSize:10,fontWeight:700,color:"#102A63",fontFamily:_FL,letterSpacing:"0.06em" }}>SOUS-TÂCHES</div>
+                      {subtasks.length>0 && <span style={{ fontSize:10,color:"#27AE60",fontFamily:_FL,fontWeight:600 }}>{done}/{subtasks.length}</span>}
+                    </div>
+                    {subtasks.map(sub => {
+                      const st2=ss.find(x=>x.id===sub.status)||ss[0];
+                      return (
+                        <div key={sub.id} style={{ display:"flex",alignItems:"center",gap:6,padding:"5px 0",borderBottom:"1px solid #F5F5F5" }}>
+                          <button onClick={()=>updSub({...sub,completed:!sub.completed,status:sub.completed?"todo":"done"})}
+                            style={{ width:16,height:16,borderRadius:"50%",flexShrink:0,border:"2px solid "+(sub.completed?"#27AE60":"#CCC"),background:sub.completed?"#27AE60":"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,color:"white" }}>{sub.completed?"✓":""}</button>
+                          <input value={sub.text} onChange={e=>updSub({...sub,text:e.target.value})} placeholder="Sous-tâche…"
+                            style={{ flex:1,border:"none",outline:"none",fontSize:12,fontFamily:_FL,color:sub.completed?"#AAA":"#2C3E50",textDecoration:sub.completed?"line-through":"none",background:"transparent" }} />
+                          <SubStatusSelect value={sub.status} onChange={v=>updSub({...sub,status:v,completed:v==="done"})} />
+                          <button onClick={()=>delSub(sub.id)} style={{ border:"none",background:"none",color:"#E8A0A0",cursor:"pointer",fontSize:14,padding:"0 2px",flexShrink:0 }}>×</button>
+                        </div>
+                      );
+                    })}
+                    <button onClick={addSub} style={{ marginTop:8,background:"none",border:"none",padding:"4px 0",fontSize:11,cursor:"pointer",fontFamily:_FL,color:"#BBBBBB",display:"flex",alignItems:"center",gap:5 }}>
+                      <span style={{ fontSize:16,lineHeight:1 }}>+</span> Ajouter une sous-tâche
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
@@ -19067,7 +19109,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.687{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.688{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
