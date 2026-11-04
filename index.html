@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v688-1788534750"/>
+  <meta name="app-version" content="v689-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16545,10 +16545,10 @@ function RecouvrementView({ settings }) {
    annulation 10s + corbeille 30 jours.
 ═══════════════════════════════════════════════ */
 const SUIVI360_TYPES = [
-  { id:"retard",      name:"Retard",      color:"#C0392B", bg:"#FDEDEC" },
-  { id:"encours",     name:"Encours",     color:"#1D4ED8", bg:"#DBEAFE" },
-  { id:"litige",      name:"Litige",      color:"#2980B9", bg:"#EBF5FB" },
-  { id:"contentieux", name:"Contentieux", color:"#9333EA", bg:"#F3E8FF" },
+  { id:"retard",      name:"Retard",      color:"#C2410C", bg:"#FFEDD5" }, // orange
+  { id:"encours",     name:"Encours",     color:"#1D4ED8", bg:"#DBEAFE" }, // bleu
+  { id:"litige",      name:"Litige",      color:"#A16207", bg:"#FEF9C3" }, // jaune
+  { id:"contentieux", name:"Contentieux", color:"#B91C1C", bg:"#FEE2E2" }, // rouge
 ];
 // Priorité : liste dédiée à Suivi 360° (distincte de REC_GRAVITE, utilisée par Recouvrement).
 const SUIVI360_PRIORITES = [
@@ -16571,14 +16571,15 @@ function _mkSuivi360() {
 }
 // Sélecteur de priorité : pastille colorée + libellé, liste déroulante au clic (plutôt qu'un cycle au clic).
 // Dédié (ne touche pas InlineSelect, utilisé ailleurs dans l'app) pour ne rien affecter en dehors de Suivi 360°.
-// Pastille avec un petit effet de relief (dégradé glossy + ombre portée) plutôt qu'un simple aplat.
-function _graviteDotStyle(color, size) {
+// Pastille/puce avec un petit effet de relief (dégradé glossy + ombre portée) plutôt qu'un simple aplat.
+function _reliefSwatchStyle(color, size, radius) {
   return {
-    width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-block",
+    width: size, height: size, borderRadius: radius, flexShrink: 0, display: "inline-block",
     background: `radial-gradient(circle at 32% 28%, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.15) 45%, rgba(0,0,0,0) 65%), ${color}`,
     boxShadow: `inset -1px -1px 2px rgba(0,0,0,0.3), inset 1px 1px 1px rgba(255,255,255,0.5), 0 1px 2px rgba(0,0,0,0.25)`,
   };
 }
+function _graviteDotStyle(color, size) { return _reliefSwatchStyle(color, size, "50%"); }
 function GraviteSelect({ value, onChange }) {
   const [open, setOpen] = React.useState(false);
   const ref = React.useRef(null);
@@ -16608,6 +16609,45 @@ function GraviteSelect({ value, onChange }) {
               <span style={_graviteDotStyle(g.color, 11)} />
               <span style={{ fontWeight:600, color:"#2C3E50" }}>{g.name}</span>
               {g.id===value && <span style={{ marginLeft:"auto", fontSize:10, color:"#102A63" }}>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+// Sélecteur générique badge + liste déroulante moderne (puce relief carrée + libellé), utilisé pour
+// Type de suivi et Statut. Même interaction que GraviteSelect, réutilisable avec n'importe quelle
+// liste de {id, name, color, bg}.
+function BadgeSelect({ value, options, onChange }) {
+  const [open, setOpen] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (!open) return;
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const current = options.find(o => o.id === value) || options[0];
+  return (
+    <div ref={ref} style={{ position:"relative" }} onClick={e=>e.stopPropagation()}>
+      <div onClick={()=>setOpen(o=>!o)}
+        style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", padding:"4px 8px", borderRadius:8, background:current.bg, userSelect:"none" }}>
+        <span style={_reliefSwatchStyle(current.color, 9, 3)} />
+        <span style={{ fontSize:10.5, fontWeight:700, color:current.color, fontFamily:_FL, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{current.name}</span>
+        <span style={{ fontSize:7, color:current.color, opacity:0.6, marginLeft:"auto", flexShrink:0 }}>▾</span>
+      </div>
+      {open && (
+        <div style={{ position:"fixed", zIndex:9900, background:"white", borderRadius:10, boxShadow:"0 12px 32px rgba(0,0,0,0.18)", border:"1px solid #ECEAE5", minWidth:150, overflow:"hidden", padding:"4px 0" }}
+          ref={el => { if (el && ref.current) { const r = ref.current.getBoundingClientRect(); el.style.top = (r.bottom+4)+"px"; el.style.left = r.left+"px"; } }}>
+          {options.map(o => (
+            <div key={o.id} onClick={()=>{ onChange(o.id); setOpen(false); }}
+              style={{ padding:"7px 12px", fontSize:11, fontFamily:_FL, cursor:"pointer", display:"flex", alignItems:"center", gap:8, background: o.id===value ? "#F0F5FF" : "white" }}
+              onMouseEnter={e=>e.currentTarget.style.background = o.id===value ? "#E8EFFE" : "#F8F9FB"}
+              onMouseLeave={e=>e.currentTarget.style.background = o.id===value ? "#F0F5FF" : "white"}>
+              <span style={_reliefSwatchStyle(o.color, 10, 3)} />
+              <span style={{ fontWeight:600, color:"#2C3E50" }}>{o.name}</span>
+              {o.id===value && <span style={{ marginLeft:"auto", fontSize:10, color:"#102A63" }}>✓</span>}
             </div>
           ))}
         </div>
@@ -16795,7 +16835,6 @@ function SuiviUnifieView({ settings }) {
   const gridTpl = "minmax(140px,1.6fr) 65px minmax(125px,1.2fr) minmax(128px,1.1fr) minmax(110px,1fr) 108px minmax(95px,0.9fr) 108px 32px 32px";
   const gridGap = 10;
   const cellInp = { border:"1px solid #E8E8E8", borderRadius:4, padding:"3px 5px", fontSize:10.5, outline:"none", width:"100%", boxSizing:"border-box", fontFamily:_FL, color:"#2C3E50", background:"white" };
-  const cellSelect = (bg, color) => ({ fontSize:9.5, fontWeight:700, background:bg, color:color, border:"none", borderRadius:4, padding:"3px 6px", cursor:"pointer", fontFamily:_FL, width:"100%", outline:"none" });
 
   return (
     <div style={{ display:"flex", width:"100%", height:"100%", minHeight:"calc(100vh - 56px)", fontFamily:_FL, background:"#F7F6F3", flexDirection:"column" }}>
@@ -16834,23 +16873,14 @@ function SuiviUnifieView({ settings }) {
               {dossiers.length === 0 ? "Aucun suivi — cliquez sur « + Nouveau suivi »" : "Aucun résultat"}
             </div>
           ) : filtered.map((d,i) => {
-            const ty = typeObj(d.typeSuivi), st = statObj(d.statut);
             const active = selId === d.id;
             return (
               <div key={d.id} onClick={()=>setSelId(d.id)} style={{ display:"grid", gridTemplateColumns:gridTpl, columnGap:gridGap, alignItems:"center", padding:"6px 8px", borderBottom:"1px solid #F5F5F5", cursor:"pointer", background:active?"#EEF4FF":i%2===0?"white":"#FAFAFA", borderLeft:active?"3px solid #102A63":"3px solid transparent" }}>
                 <div style={{ fontSize:12, fontWeight:600, color:"#1E293B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:6 }}>{d.clientName||"(sans nom)"}</div>
                 <div style={{ fontSize:11, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{d.clientCode||"—"}</div>
-                <div onClick={e=>e.stopPropagation()}>
-                  <select value={d.typeSuivi} onChange={e=>updRow(d.id,{typeSuivi:e.target.value})} style={cellSelect(ty.bg,ty.color)}>
-                    {SUIVI360_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
+                <BadgeSelect value={d.typeSuivi} options={SUIVI360_TYPES} onChange={v=>updRow(d.id,{typeSuivi:v})} />
                 <GraviteSelect value={d.gravite} onChange={v=>updRow(d.id,{gravite:v})} />
-                <div onClick={e=>e.stopPropagation()}>
-                  <select value={d.statut} onChange={e=>updRow(d.id,{statut:e.target.value})} style={cellSelect(st.bg,st.color)}>
-                    {SUIVI360_STATUTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
+                <BadgeSelect value={d.statut} options={SUIVI360_STATUTS} onChange={v=>updRow(d.id,{statut:v})} />
                 <div onClick={e=>e.stopPropagation()}>
                   <input type="date" value={d.dateProchainSuivi||""} onChange={e=>updRow(d.id,{dateProchainSuivi:e.target.value})} style={cellInp} />
                 </div>
@@ -16899,9 +16929,7 @@ function SuiviUnifieView({ settings }) {
               <div style={{ display:"grid", gridTemplateColumns:"1.3fr 0.8fr 1.2fr 1fr", gap:8, marginTop:12 }}>
                 <div>
                   {lbl("TYPE DE SUIVI")}
-                  <select value={sel.typeSuivi} onChange={e=>updSel({typeSuivi:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                    {SUIVI360_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
+                  <BadgeSelect value={sel.typeSuivi} options={SUIVI360_TYPES} onChange={v=>updSel({typeSuivi:v})} />
                 </div>
                 <div>
                   {lbl("PRIORITÉ")}
@@ -16909,9 +16937,7 @@ function SuiviUnifieView({ settings }) {
                 </div>
                 <div>
                   {lbl("STATUT")}
-                  <select value={sel.statut} onChange={e=>updSel({statut:e.target.value})} style={{ ...inp, cursor:"pointer" }}>
-                    {SUIVI360_STATUTS.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
+                  <BadgeSelect value={sel.statut} options={SUIVI360_STATUTS} onChange={v=>updSel({statut:v})} />
                 </div>
                 <div>
                   {lbl("PROCHAIN SUIVI")}
@@ -19109,7 +19135,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.688{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.689{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
