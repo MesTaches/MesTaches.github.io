@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v690-1788534750"/>
+  <meta name="app-version" content="v691-1788534750"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17076,6 +17076,7 @@ const ENCOURS_FIELDS = [
   { key:"datePiece",     header:"VW_ERP_CPT_ENCOURS[DATE_PIECE]" },
   { key:"dateEcheance",  header:"VW_ERP_CPT_ENCOURS[DATE_ECHEANCE]" },
   { key:"codeAffaire",   header:"VW_ERP_CPT_ENCOURS[CODE_AFFAIRE]" },
+  { key:"compteComptable", header:"VW_ERP_CPT_ENCOURS[COMPTE_COMPTABLE]" },
   { key:"joursRetard",   header:"[SumJours_de_retard]" },
   { key:"retard1_30",    header:"[SumRetard_1_à_30_jours]" },
   { key:"retard31_60",   header:"[SumRetard_31_à_60_jours]" },
@@ -17126,6 +17127,8 @@ function parseEncoursXLSX(arrayBuffer) {
     if (!row || row.every(c => c==="" || c===null || c===undefined)) continue;
     const codePayeur = String(get(row,"codePayeur")||"").trim();
     if (!codePayeur) continue;
+    const compteComptable = String(get(row,"compteComptable")||"").trim();
+    if (compteComptable !== "411000") continue;
     const codeAffaire = String(get(row,"codeAffaire")||"").trim();
     const numFacture = String(get(row,"numFacture")||"").trim();
     const datePiece = fmtDateCell(get(row,"datePiece"));
@@ -17301,6 +17304,7 @@ function EncoursClientsView({ settings }) {
 
   return (
     <div style={{ display:"flex", width:"100%", height:"100%", minHeight:"calc(100vh - 56px)", fontFamily:_FL, background:"#F7F6F3", flexDirection:"column" }}>
+      <style>{".enc-row{border-collapse:collapse}.enc-row>div{padding:0 8px;border-right:1px solid #EDEFF3;box-sizing:border-box;min-width:0}.enc-row>div:first-child{padding-left:10px}.enc-row>div:last-child{border-right:none;padding-right:10px}"}</style>
 
       <div style={{ background:"white", borderBottom:"1px solid #ECEAE5", padding:"10px 16px", display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Client, code payeur, n° facture…" style={{ border:"1px solid #E8E8E8", borderRadius:6, padding:"6px 9px", fontSize:12, outline:"none", width:230, fontFamily:_FL, flexShrink:0 }} />
@@ -17315,7 +17319,7 @@ function EncoursClientsView({ settings }) {
         <div style={{ flex:1 }} />
         {data && (
           <div style={{ fontSize:10, fontFamily:_FL, color:"#AAA", textAlign:"right", lineHeight:1.4 }}>
-            Import : {data.fileName}<br/>
+            Import : {data.fileName} · {(data.rows||[]).length} facture{(data.rows||[]).length!==1?"s":""} (compte 411000)<br/>
             {fmtDate(data.importedAt.split("T")[0])} {new Date(data.importedAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})} — instantané, pas de temps réel
           </div>
         )}
@@ -17335,21 +17339,21 @@ function EncoursClientsView({ settings }) {
             {!data ? "Aucune donnée importée — cliquez sur « Importer un export Excel »" : "Aucun résultat pour ces filtres"}
           </div>
         ) : (
-          <div style={{ minWidth:1150 }}>
-            <div style={{ display:"grid", gridTemplateColumns:groupGridTpl, columnGap:10, alignItems:"center", padding:"7px 10px", background:"#102A63", position:"sticky", top:0, zIndex:5 }}>
+          <div style={{ minWidth:1150, margin:"10px", border:"1px solid #E5E7EB", borderRadius:8, background:"white" }}>
+            <div className="enc-row" style={{ display:"grid", gridTemplateColumns:groupGridTpl, alignItems:"center", padding:"7px 0", background:"#102A63", borderRadius:"8px 8px 0 0", position:"sticky", top:0, zIndex:5 }}>
               <div />
-              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL }}>CLIENT</div>
-              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right" }}>FACTURES</div>
-              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right" }}>RETARD</div>
-              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right" }}>TOTAL RETARD</div>
+              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, borderRightColor:"rgba(255,255,255,0.15)" }}>CLIENT</div>
+              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right", borderRightColor:"rgba(255,255,255,0.15)" }}>FACTURES</div>
+              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right", borderRightColor:"rgba(255,255,255,0.15)" }}>RETARD</div>
+              <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"right", borderRightColor:"rgba(255,255,255,0.15)" }}>TOTAL RETARD</div>
               <div style={{ fontSize:9, fontWeight:700, color:"white", fontFamily:_FL, textAlign:"center" }}>STATUT</div>
             </div>
-            {groups.map(g => {
+            {groups.map((g, gi) => {
               const isOpen = expanded.has(g.key);
               const sv = sevStyle(g.maxJours, g.hasLitige);
               return (
                 <div key={g.key}>
-                  <div onClick={()=>toggleGroup(g.key)} style={{ display:"grid", gridTemplateColumns:groupGridTpl, columnGap:10, alignItems:"center", padding:"7px 10px", borderBottom:"1px solid #F0F0F0", cursor:"pointer", background: isOpen ? "#EEF4FF" : "white" }}>
+                  <div className="enc-row" onClick={()=>toggleGroup(g.key)} style={{ display:"grid", gridTemplateColumns:groupGridTpl, alignItems:"center", padding:"7px 0", borderBottom:"1px solid #F0F0F0", cursor:"pointer", background: isOpen ? "#EEF4FF" : (gi%2===0 ? "white" : "#FAFAFA") }}>
                     <div style={{ fontSize:10, color:"#999", transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</div>
                     <div style={{ overflow:"hidden" }}>
                       <div style={{ fontSize:12, fontWeight:700, color:"#1E293B", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.raisonSociale || "(sans nom)"}</div>
@@ -17364,7 +17368,7 @@ function EncoursClientsView({ settings }) {
                   </div>
                   {isOpen && (
                     <div>
-                      <div style={{ display:"grid", gridTemplateColumns:factGridTpl, columnGap:8, alignItems:"center", padding:"4px 10px 4px 40px", background:"#FAFAFA", borderBottom:"1px solid #F0F0F0" }}>
+                      <div className="enc-row" style={{ display:"grid", gridTemplateColumns:factGridTpl, alignItems:"center", padding:"4px 0 4px 40px", background:"#F3F4F6", borderBottom:"1px solid #E5E7EB", borderTop:"1px solid #E5E7EB" }}>
                         <div style={{ fontSize:8.5, fontWeight:700, color:"#9CA3AF" }}>N° FACTURE</div>
                         <div style={{ fontSize:8.5, fontWeight:700, color:"#9CA3AF" }}>CLIENT LIVRÉ</div>
                         <div style={{ fontSize:8.5, fontWeight:700, color:"#9CA3AF" }}>DATE PIÈCE</div>
@@ -17380,10 +17384,10 @@ function EncoursClientsView({ settings }) {
                         <div style={{ fontSize:8.5, fontWeight:700, color:"#9CA3AF" }}>RESPONSABLE</div>
                         <div style={{ fontSize:8.5, fontWeight:700, color:"#9CA3AF" }}>ACTION</div>
                       </div>
-                      {g.rows.map(r => {
+                      {g.rows.map((r, ri) => {
                         const ann = annotations[r.factureKey] || {};
                         return (
-                          <div key={r.id} style={{ display:"grid", gridTemplateColumns:factGridTpl, columnGap:8, alignItems:"center", padding:"4px 10px 4px 40px", borderBottom:"1px solid #F8F8F8" }}>
+                          <div key={r.id} className="enc-row" style={{ display:"grid", gridTemplateColumns:factGridTpl, alignItems:"center", padding:"4px 0 4px 40px", borderBottom:"1px solid #F0F0F0", background: ri%2===0 ? "white" : "#FAFAFA" }}>
                             <div style={{ fontSize:10.5, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.codeClient}>{r.numFacture || "—"}</div>
                             <div style={{ fontSize:10, color:"#6B7280", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.codeClient}>{r.nomClient || "—"}</div>
                             <div style={{ fontSize:10.5, color:"#6B7280", fontFamily:_DM }}>{r.datePiece ? fmtDate(r.datePiece) : "—"}</div>
@@ -19498,7 +19502,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.690{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.691{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
