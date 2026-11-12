@@ -146,3 +146,10 @@ contentieux_dossiers_v1, contentieux_settings_v1
 - **Crédit-bail** : si une PJ dépasse ~900 Ko, basculer sur IDB `creditbail_db` (champ `dataRef` au lieu de `data` inline).
 - **`MEETING_STORAGE` = `"taskmanager_meetings_v1"`** (clé localStorage/sync) est **différent de** **`MTG_KEY` = `"meetings"`** (nom du store IDB). Les deux pointent vers la même donnée mais par deux chemins.
 - **Fichier de 1 Mo** : les outils de recherche (Grep) peuvent retourner beaucoup de résultats — préférer des patterns précis avec contexte.
+
+## Synchronisation avec le dossier Claude (TASKS.md) — v.0.693
+
+Paramètres → Sauvegardes → « Synchronisation des tâches avec Claude ». L'utilisateur choisit une fois son dossier Claude (File System Access API, handle stocké dans `mestaches_fs_db` / clé `claudeDir`).
+- **Export** : à chaque modification des tâches (anti-rebond 2 s), `TASKS.md` est réécrit au format du plug-in Productivity (sections Active / Waiting On / Someday / Done ; Someday = priorité P4 ; Done = terminées depuis moins de 14 jours). Chaque ligne porte `<!-- id:... -->` pour retrouver la tâche.
+- **Import** : toutes les 30 s, au focus de l'onglet et via « Synchroniser maintenant ». Fusion à trois voies contre la dernière version écrite (`localStorage.claude_sync_last_written`) : seuls les champs modifiés dans le fichier sont appliqués. Tâche retirée du fichier → corbeille (garde-fou si trop de suppressions d'un coup).
+- Code : helpers `cls*` (`clsExportMarkdown`, `clsParseMarkdown`, `clsMergeTasks`) avant `importBackupJSON` ; boucle `runClaudeSync` dans `App` ; UI dans `BackupView`.

@@ -5,7 +5,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
   <meta http-equiv="Pragma" content="no-cache"/>
   <meta http-equiv="Expires" content="0"/>
-  <meta name="app-version" content="v692-1788534750"/>
+  <meta name="app-version" content="v693-1794475804"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
   <title>Mes Tâches</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1091,6 +1091,266 @@ async function autoBackupIfDue() {
     await bkWriteToFolder(handle);
     console.info("✓ Sauvegarde automatique écrite dans le dossier choisi.");
   } catch(e) { console.warn("autoBackupIfDue:", e && e.message); }
+}
+
+/* ─── Synchronisation des tâches avec le dossier Claude (TASKS.md) ───
+   Export : les tâches de l'app sont écrites dans TASKS.md (format du plug-in Productivity).
+   Import : les modifications faites dans TASKS.md (par Claude ou le tableau de bord) sont
+   reprises dans l'app. Fusion « à trois voies » : on compare le fichier à la dernière version
+   écrite par l'app ; seuls les champs modifiés dans le fichier sont appliqués.
+   Chrome/Edge uniquement (File System Access API). */
+const CLS_FILE = "TASKS.md";
+const CLS_DONE_DAYS = 14; // les tâches terminées restent visibles 14 jours dans TASKS.md
+const CLS_PRIO_TO_P = { urgente: "P1", haute: "P2", normale: "P3", basse: "P4" };
+const CLS_P_TO_PRIO = { P1: "urgente", P2: "haute", P3: "normale", P4: "basse" };
+
+async function clsSaveDirHandle(h) {
+  const db = await _bkOpenDb();
+  return new Promise((res, rej) => { const tx = db.transaction("handles","readwrite"); tx.objectStore("handles").put(h, "claudeDir"); tx.oncomplete = () => res(); tx.onerror = e => rej(e.target.error); });
+}
+async function clsGetDirHandle() {
+  try {
+    const db = await _bkOpenDb();
+    return await new Promise((res) => { const tx = db.transaction("handles","readonly"); const r = tx.objectStore("handles").get("claudeDir"); r.onsuccess = () => res(r.result || null); r.onerror = () => res(null); });
+  } catch(e) { return null; }
+}
+async function clsClearDirHandle() {
+  try { const db = await _bkOpenDb(); const tx = db.transaction("handles","readwrite"); tx.objectStore("handles").delete("claudeDir"); } catch(e) {}
+}
+
+function clsTodayIso() { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); }
+function clsClean(s) {
+  return String(s == null ? "" : s)
+    .replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/[\r\n\t]+/g, " ").replace(/\*\*/g, "").replace(/~~/g, "").replace(/·/g, "-")
+    .replace(/\s+/g, " ").trim();
+}
+function clsFmtDate(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  return m ? (m[3] + "/" + m[2] + "/" + m[1]) : "";
+}
+function clsParseDate(s) {
+  s = String(s || "").trim();
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return m[1] + "-" + m[2].padStart(2,"0") + "-" + m[3].padStart(2,"0");
+  m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/.exec(s);
+  if (m) { const y = m[3].length === 2 ? "20" + m[3] : m[3]; return y + "-" + m[2].padStart(2,"0") + "-" + m[1].padStart(2,"0"); }
+  return null;
+}
+function clsSectionOf(t) {
+  if (t.completed) return "done";
+  if (t.status === "waiting") return "waiting";
+  if (t.priority === "basse") return "someday";
+  return "active";
+}
+function clsSubTitle(s) { return clsClean(s && (s.title != null && s.title !== "" ? s.title : s.text)); }
+
+/* Génère le contenu de TASKS.md à partir des tâches de l'app. */
+function clsExportMarkdown(tasks, doneDates) {
+  const secs = { active: [], waiting: [], someday: [], done: [] };
+  const limit = new Date(); limit.setDate(limit.getDate() - CLS_DONE_DAYS);
+  const limitIso = limit.toISOString().split("T")[0];
+  (tasks || []).forEach(t => {
+    if (!t || !t.id || !clsClean(t.title)) return;
+    const sec = clsSectionOf(t);
+    if (sec === "done") {
+      const d = doneDates && doneDates[t.id];
+      if (!d || d === "old" || d < limitIso) return;
+    }
+    secs[sec].push(t);
+  });
+  const prioRank = { urgente: 0, haute: 1, normale: 2, basse: 3 };
+  const byPrioDate = (a, b) => ((prioRank[a.priority] ?? 2) - (prioRank[b.priority] ?? 2)) || String(a.dueDate || "9999").localeCompare(String(b.dueDate || "9999"));
+  secs.active.sort(byPrioDate); secs.waiting.sort(byPrioDate); secs.someday.sort(byPrioDate);
+  secs.done.sort((a, b) => String((doneDates||{})[b.id] || "").localeCompare(String((doneDates||{})[a.id] || "")));
+
+  const line = (t, sec) => {
+    const meta = [];
+    if (sec === "done") {
+      const d = clsFmtDate((doneDates||{})[t.id]);
+      if (d) meta.push("terminée le " + d);
+    } else {
+      if (sec !== "someday") meta.push(CLS_PRIO_TO_P[t.priority || "normale"] || "P3");
+      const cat = clsClean(t.category); if (cat) meta.push(cat);
+      const due = clsFmtDate(t.dueDate); if (due) meta.push("échéance " + due);
+      const resp = clsClean(t.responsable); if (resp) meta.push("pour " + resp);
+    }
+    let out = "- [" + (sec === "done" ? "x" : " ") + "] **" + clsClean(t.title) + "**" + (meta.length ? " - " + meta.join(" · ") : "") + " <!-- id:" + t.id + " -->\n";
+    (Array.isArray(t.subtasks) ? t.subtasks : []).forEach(s => {
+      const st = clsSubTitle(s); if (!st) return;
+      out += "  - [" + (s.completed ? "x" : " ") + "] " + st + (s.id ? " <!-- id:" + s.id + " -->" : "") + "\n";
+    });
+    return out;
+  };
+  let md = "# Tasks\n";
+  [["active","Active"],["waiting","Waiting On"],["someday","Someday"],["done","Done"]].forEach(([k, name]) => {
+    md += "\n## " + name + "\n";
+    secs[k].forEach(t => { md += line(t, k); });
+  });
+  return md;
+}
+
+/* Lit TASKS.md → { ok, tasks:[{id, sec, checked, title, prio, category, dueDate, responsable, notes:[], subtasks:[{id,title,completed}]}] } */
+function clsParseMarkdown(md) {
+  const out = { ok: false, tasks: [] };
+  if (typeof md !== "string") return out;
+  const lines = md.replace(/\r\n?/g, "\n").split("\n");
+  let sec = "active", cur = null;
+  const secOf = name => {
+    const n = name.toLowerCase();
+    if (/done|termin|fait/.test(n)) return "done";
+    if (/waiting|attente/.test(n)) return "waiting";
+    if (/someday|un jour|plus tard/.test(n)) return "someday";
+    return "active";
+  };
+  const takeId = text => {
+    let id = null;
+    text = text.replace(/<!--\s*id:\s*([^\s>]+)\s*-->/g, (m, g) => { id = g; return " "; });
+    return { id, text: text.replace(/\s+/g, " ").trim() };
+  };
+  for (const raw of lines) {
+    const h = /^##\s+(.+?)\s*$/.exec(raw);
+    if (h) { sec = secOf(h[1].replace(/\*/g, "")); out.ok = true; cur = null; continue; }
+    if (/^#\s+/.test(raw)) { out.ok = true; continue; }
+    const top = /^[-*]\s+\[( |x|X)\]\s*(.*)$/.exec(raw);
+    if (top) {
+      const { id, text } = takeId(top[2]);
+      let title = "", rest = "";
+      let m = /^\*\*(.+?)\*\*(.*)$/.exec(text);
+      if (m) { title = m[1]; rest = m[2]; }
+      else if ((m = /^~~(.+?)~~(.*)$/.exec(text))) { title = m[1]; rest = m[2]; }
+      else { const i = text.indexOf(" - "); if (i > 0) { title = text.slice(0, i); rest = text.slice(i); } else { title = text; } }
+      title = title.replace(/\*\*|~~/g, "").trim();
+      rest = rest.replace(/^\s*-\s*/, "").replace(/\*\*|~~/g, "").trim();
+      const t = { id, sec, checked: top[1] !== " ", title, prio: null, category: "", dueDate: "", responsable: "", extra: [], notes: [], subtasks: [] };
+      if (rest) {
+        const parts = rest.split(rest.indexOf("·") >= 0 ? /\s*·\s*/ : /\s*[,;]\s*/).map(x => x.trim()).filter(Boolean);
+        parts.forEach(p => {
+          let mm;
+          if ((mm = /^P([1-4])$/i.exec(p))) { t.prio = "P" + mm[1]; return; }
+          if ((mm = /^(?:échéance|echeance|due|pour le|avant le|le)\s+(.+)$/i.exec(p)) && clsParseDate(mm[1])) { t.dueDate = clsParseDate(mm[1]); return; }
+          if (/^(?:terminée? le|done|depuis|since)\b/i.test(p)) return;
+          if (/^\(?\d{1,4}[\/.\-]\d{1,2}[\/.\-]\d{1,4}\)?$/.test(p)) { if (!t.dueDate && sec !== "done") t.dueDate = clsParseDate(p.replace(/[()]/g, "")) || ""; return; }
+          if ((mm = /^(?:pour|for)\s+(.+)$/i.exec(p))) { t.responsable = mm[1].trim(); return; }
+          if (!t.category) t.category = p; else t.extra.push(p);
+        });
+      }
+      t.title = t.title || "(sans titre)";
+      out.tasks.push(t); cur = t; continue;
+    }
+    const sub = /^\s+[-*]\s+\[( |x|X)\]\s*(.*)$/.exec(raw);
+    if (sub && cur) {
+      const { id, text } = takeId(sub[2]);
+      const title = text.replace(/\*\*|~~/g, "").trim();
+      if (title) cur.subtasks.push({ id, title, completed: sub[1] !== " " });
+      continue;
+    }
+    const note = /^\s+[-*]\s+(.*)$/.exec(raw);
+    if (note && cur) { const n = note[1].trim(); if (n) cur.notes.push(n); continue; }
+  }
+  return out;
+}
+
+/* Fusion à trois voies : app (tasks) + fichier (fileP) + dernière version écrite (baseP).
+   Retourne { tasks, changed, added, updated, completed:[ids nouvellement terminés], deleted:[tâches], skippedDeletes } */
+function clsMergeTasks(tasks, fileP, baseP) {
+  const res = { tasks: tasks, changed: false, added: 0, updated: 0, completed: [], deleted: [], skippedDeletes: 0 };
+  if (!fileP || !fileP.ok) return res;
+  const appById = {}; (tasks || []).forEach(t => { if (t && t.id) appById[t.id] = t; });
+  const baseById = {}; ((baseP && baseP.tasks) || []).forEach(t => { if (t.id) baseById[t.id] = t; });
+  const fileIds = new Set();
+  const isDone = x => x.checked || x.sec === "done";
+  const newTasks = [];
+  const patches = {};
+  const nowIso = new Date().toISOString();
+
+  fileP.tasks.forEach(f => {
+    if (f.id) fileIds.add(f.id);
+    const app = f.id ? appById[f.id] : null;
+    if (!app) {
+      // Tâche connue de la base mais absente de l'app = supprimée dans l'app : la suppression l'emporte
+      if (f.id && baseById[f.id]) return;
+      // Tâche terminée sans identifiant : rien à créer
+      if (isDone(f) && !f.id) return;
+      const done = isDone(f);
+      const prio = f.sec === "someday" ? "basse" : (f.prio ? CLS_P_TO_PRIO[f.prio] : "normale");
+      const notes = f.notes.concat(f.extra);
+      newTasks.push({
+        id: uid(), title: f.title, category: f.category || "", type: "Tâche", dueDate: f.dueDate || "",
+        completed: done, status: done ? "done" : (f.sec === "waiting" ? "waiting" : "todo"),
+        priority: prio, notes: notes.length ? "<p>" + notes.map(n => String(n).replace(/</g, "&lt;")).join("<br/>") + "</p>" : "",
+        responsable: f.responsable || "", reminder: "none", recurrence: { type: "none" },
+        subtasks: f.subtasks.map(s => ({ id: uid(), title: s.title, completed: !!s.completed })),
+        pinned: false, createdAt: nowIso, totalTime: 0, inMyDay: false, source: "claude",
+      });
+      res.added++;
+      return;
+    }
+    const b = baseById[f.id];
+    if (!b) return; // pas de référence : on ne sait pas ce qui a changé, l'app fait foi
+    const p = {};
+    if (f.title !== b.title && f.title) p.title = f.title;
+    const fDone = isDone(f), bDone = isDone(b);
+    if (fDone !== bDone) {
+      p.completed = fDone;
+      p.status = fDone ? "done" : (f.sec === "waiting" ? "waiting" : "todo");
+      if (fDone && !app.completed) res.completed.push(app.id);
+    } else if (!fDone && f.sec !== b.sec) {
+      if (f.sec === "waiting") p.status = "waiting";
+      else if (b.sec === "waiting" && app.status === "waiting") p.status = "todo";
+      if (f.sec === "someday") p.priority = "basse";
+      else if (b.sec === "someday" && app.priority === "basse") p.priority = f.prio ? CLS_P_TO_PRIO[f.prio] : "normale";
+    }
+    if (!fDone && f.sec !== "someday" && f.prio !== b.prio && f.prio) p.priority = CLS_P_TO_PRIO[f.prio];
+    if (!fDone && f.category !== b.category) p.category = f.category;
+    if (!fDone && f.dueDate !== b.dueDate) p.dueDate = f.dueDate;
+    if (!fDone && f.responsable !== b.responsable) p.responsable = f.responsable;
+    // Sous-tâches
+    const bSubs = {}; b.subtasks.forEach(s => { if (s.id) bSubs[s.id] = s; });
+    const subsChanged = JSON.stringify(f.subtasks) !== JSON.stringify(b.subtasks);
+    if (subsChanged) {
+      let subs = (Array.isArray(app.subtasks) ? app.subtasks : []).slice();
+      const fSubIds = new Set(f.subtasks.filter(s => s.id).map(s => s.id));
+      // supprimées dans le fichier
+      subs = subs.filter(s => !(s.id && bSubs[s.id] && !fSubIds.has(s.id)));
+      f.subtasks.forEach(fs => {
+        if (fs.id && bSubs[fs.id]) {
+          const bs = bSubs[fs.id];
+          subs = subs.map(s => {
+            if (s.id !== fs.id) return s;
+            const n = { ...s };
+            if (fs.completed !== bs.completed) n.completed = fs.completed;
+            if (fs.title !== bs.title) { if (s.title != null || s.text == null) n.title = fs.title; else n.text = fs.title; }
+            return n;
+          });
+        } else if (!fs.id) {
+          subs.push({ id: uid(), title: fs.title, completed: !!fs.completed });
+        }
+      });
+      if (JSON.stringify(subs) !== JSON.stringify(app.subtasks || [])) p.subtasks = subs;
+    }
+    // On n'applique que ce qui diffère réellement de l'app
+    Object.keys(p).forEach(k => { if (JSON.stringify(p[k]) === JSON.stringify(app[k] == null ? (k === "subtasks" ? [] : "") : app[k])) delete p[k]; });
+    if (Object.keys(p).length) { patches[app.id] = p; res.updated++; }
+  });
+
+  // Suppressions : présentes dans la base, absentes du fichier, encore dans l'app
+  const delIds = Object.keys(baseById).filter(id => !fileIds.has(id) && appById[id] && !appById[id].completed);
+  const maxDel = Math.max(3, Math.floor(Object.keys(baseById).length * 0.3));
+  let toDelete = new Set();
+  const openBase = Object.values(baseById).filter(b => !isDone(b)).length;
+  if (delIds.length > maxDel || (delIds.length >= 2 && delIds.length >= openBase)) res.skippedDeletes = delIds.length; // garde-fou : fichier vidé ou réécrit par erreur
+  else toDelete = new Set(delIds);
+
+  if (!newTasks.length && !Object.keys(patches).length && !toDelete.size) return res;
+  res.changed = true;
+  const kept = [];
+  (tasks || []).forEach(t => {
+    if (t && toDelete.has(t.id)) { res.deleted.push(t); return; }
+    kept.push(t && patches[t.id] ? { ...t, ...patches[t.id] } : t);
+  });
+  res.tasks = newTasks.concat(kept);
+  return res;
 }
 
 async function importBackupJSON(file) {
@@ -7723,6 +7983,46 @@ function BackupView() {
   const changeFreq = (f) => { setAutoFreq(f); try { localStorage.setItem("auto_backup_freq", f); } catch {} };
   const disconnectFolder = async () => { await bkClearDirHandle(); setFolderName(null); setAutoEnabled(false); try { localStorage.setItem("auto_backup_enabled","0"); } catch {} setMsg({ type:"info", text:"Dossier déconnecté. Sauvegarde automatique désactivée." }); };
 
+  // ── Synchronisation des tâches avec le dossier Claude (TASKS.md) ──
+  const [clsFolder, setClsFolder] = React.useState(null);
+  const [clsEnabled, setClsEnabled] = React.useState(() => { try { return localStorage.getItem("claude_sync_enabled") === "1"; } catch { return false; } });
+  const readClsStatus = () => { try { return JSON.parse(localStorage.getItem("claude_sync_status") || "null"); } catch { return null; } };
+  const [clsStatus, setClsStatus] = React.useState(readClsStatus);
+  React.useEffect(() => {
+    clsGetDirHandle().then(h => { if (h) setClsFolder(h.name); });
+    const onSt = () => setClsStatus(readClsStatus());
+    window.addEventListener("claudeSyncStatus", onSt);
+    return () => window.removeEventListener("claudeSyncStatus", onSt);
+  }, []);
+  const clsChooseFolder = async () => {
+    try {
+      const handle = await window.showDirectoryPicker({ mode: "readwrite", id: "mestaches-claude" });
+      const ok = await bkEnsurePermission(handle, true);
+      if (!ok) { setMsg({ type:"err", text:"Permission d'écriture refusée sur ce dossier." }); return; }
+      await clsSaveDirHandle(handle);
+      // Nouveau dossier : on repart sans référence (les tâches déjà présentes dans le fichier sans identifiant seront importées)
+      try { localStorage.removeItem("claude_sync_last_written"); localStorage.setItem("claude_sync_enabled", "1"); } catch {}
+      setClsFolder(handle.name); setClsEnabled(true);
+      window.dispatchEvent(new CustomEvent("claudeSyncNow", { detail: { interactive: true } }));
+      setMsg({ type:"ok", text:"Synchronisation activée avec « " + handle.name + " » : TASKS.md est mis à jour automatiquement." });
+    } catch(e) {
+      if (e && e.name === "AbortError") return;
+      setMsg({ type:"err", text:"Impossible de configurer le dossier : " + (e.message || e) });
+    }
+  };
+  const clsToggle = () => {
+    const next = !clsEnabled; setClsEnabled(next);
+    try { localStorage.setItem("claude_sync_enabled", next ? "1" : "0"); } catch {}
+    if (next) window.dispatchEvent(new CustomEvent("claudeSyncNow", { detail: { interactive: true } }));
+  };
+  const clsSyncNow = () => window.dispatchEvent(new CustomEvent("claudeSyncNow", { detail: { interactive: true } }));
+  const clsDisconnect = async () => {
+    await clsClearDirHandle(); setClsFolder(null); setClsEnabled(false);
+    try { localStorage.setItem("claude_sync_enabled", "0"); localStorage.removeItem("claude_sync_last_written"); localStorage.removeItem("claude_sync_status"); } catch {}
+    setClsStatus(null);
+    setMsg({ type:"info", text:"Dossier Claude déconnecté. Synchronisation désactivée." });
+  };
+
   return (
     <div>
       <div style={{ fontSize: 12, color: "#888", fontFamily: _DM, marginBottom: 16 }}>
@@ -7739,6 +8039,47 @@ function BackupView() {
           <button onClick={()=>setMsg(null)} style={{ border:"none", background:"transparent", cursor:"pointer", fontSize:16, color:"inherit", lineHeight:1 }}>×</button>
         </div>
       )}
+
+      {/* Synchronisation des tâches avec le dossier Claude */}
+      <div style={{ background:"#EEF2FF", border:"1px solid #C7D2FE", borderRadius:12, padding:"16px 18px", marginBottom:18 }}>
+        <div style={{ fontSize: 13, fontWeight:700, fontFamily:_FL, color:"#102A63", marginBottom:6 }}>🤖 Synchronisation des tâches avec Claude (TASKS.md)</div>
+        {!fsSupported ? (
+          <div style={{ fontSize:11, color:"#92400E", fontFamily:_FL, background:"#FEF9C3", border:"1px solid #FCD34D", borderRadius:8, padding:"8px 10px" }}>
+            ⚠ Fonction disponible uniquement dans Chrome ou Edge sur ordinateur.
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize:11, color:"#102A63", fontFamily:_FL, marginBottom:12, opacity:0.85 }}>
+              Les tâches sont écrites dans le fichier TASKS.md du dossier choisi à chaque modification. Les ajouts, clôtures et modifications faits dans ce fichier (par Claude ou le tableau de bord) sont repris dans l'application toutes les 30 secondes et à chaque retour sur l'onglet. Une tâche retirée du fichier part dans la corbeille.
+            </div>
+            {clsFolder ? (
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:11, fontFamily:_FL, color:"#102A63" }}>📁 Dossier : <strong>{clsFolder}</strong></span>
+                  <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:11, fontFamily:_FL, color:"#102A63", userSelect:"none" }}>
+                    <input type="checkbox" checked={clsEnabled} onChange={clsToggle} style={{ accentColor:"#102A63", cursor:"pointer", width:14, height:14 }} />
+                    Activée
+                  </label>
+                </div>
+                {clsStatus && (
+                  <div style={{ fontSize:11, fontFamily:_FL, color: clsStatus.s === "ok" ? "#065F46" : clsStatus.s === "perm" ? "#92400E" : "#991B1B" }}>
+                    {clsStatus.s === "ok" ? "✓ Dernière synchronisation : " : clsStatus.s === "perm" ? "⚠ " : "✕ Erreur : "}
+                    {clsStatus.s === "ok" ? new Date(clsStatus.at).toLocaleString("fr-FR") : clsStatus.msg}
+                    {clsStatus.s === "ok" && clsStatus.msg ? " — " + clsStatus.msg : ""}
+                  </div>
+                )}
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <button onClick={clsSyncNow} style={Object.assign({}, S.btn("#102A63"), { fontSize:11, padding:"7px 14px" })}>Synchroniser maintenant</button>
+                  <button onClick={clsChooseFolder} style={Object.assign({}, S.ghost, { fontSize:11, padding:"7px 14px" })}>Changer de dossier</button>
+                  <button onClick={clsDisconnect} style={Object.assign({}, S.ghost, { fontSize:11, padding:"7px 14px", color:"#B91C1C" })}>Déconnecter</button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={clsChooseFolder} style={Object.assign({}, S.btn("#102A63"), { fontSize:11, padding:"8px 16px" })}>📁 Choisir le dossier Claude</button>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Sauvegarde automatique vers un dossier du PC */}
       <div style={{ background:"#F0FDF4", border:"1px solid #BBF7D0", borderRadius:12, padding:"16px 18px", marginBottom:18 }}>
@@ -18985,6 +19326,111 @@ function App() {
     }
   };
 
+  // ── Synchronisation avec le dossier Claude (TASKS.md) ──
+  const clsTasksRef = useRef(tasks);
+  clsTasksRef.current = tasks;
+  const clsBusyRef = useRef(false);
+  const clsTimerRef = useRef(null);
+  const [clsNeedPerm, setClsNeedPerm] = useState(false);
+  const runClaudeSync = React.useCallback(async (interactive) => {
+    try { if (localStorage.getItem("claude_sync_enabled") !== "1") return; } catch(e) { return; }
+    if (!bkFsSupported() || clsBusyRef.current) return;
+    clsBusyRef.current = true;
+    const setStatus = (s, msg) => { try { localStorage.setItem("claude_sync_status", JSON.stringify({ s, msg: msg || "", at: new Date().toISOString() })); } catch(e) {} window.dispatchEvent(new CustomEvent("claudeSyncStatus")); };
+    try {
+      const handle = await clsGetDirHandle();
+      if (!handle) return;
+      const ok = await bkEnsurePermission(handle, !!interactive);
+      if (!ok) { setClsNeedPerm(true); setStatus("perm", "Autorisation du dossier à renouveler"); return; }
+      setClsNeedPerm(false);
+      // 1) Lecture du fichier
+      let text = null;
+      try { const fh = await handle.getFileHandle(CLS_FILE); text = (await (await fh.getFile()).text()).replace(/\r\n?/g, "\n"); }
+      catch(e) { if (!e || e.name !== "NotFoundError") throw e; }
+      let lastWritten = null;
+      try { lastWritten = localStorage.getItem("claude_sync_last_written"); } catch(e) {}
+      let cur = clsTasksRef.current || [];
+      let summary = "";
+      // 2) Import des modifications faites dans TASKS.md
+      if (text !== null && text !== lastWritten) {
+        const r = clsMergeTasks(cur, clsParseMarkdown(text), lastWritten ? clsParseMarkdown(lastWritten) : null);
+        if (r.changed) {
+          let merged = r.tasks;
+          // Tâches récurrentes terminées depuis TASKS.md : créer l'occurrence suivante
+          r.completed.forEach(id => {
+            const t = merged.find(x => x.id === id);
+            if (!t || !t.recurrence || parseRec(t.recurrence).type === "none" || !t.dueDate) return;
+            const nextDate = nextOccurrence(t.recurrence, t.dueDate);
+            if (!nextDate) return;
+            const rec = parseRec(t.recurrence);
+            const newRec = rec.endType === "count" ? (rec.endCount > 1 ? { ...rec, endCount: rec.endCount - 1 } : null) : t.recurrence;
+            if (newRec !== null) merged = [{ ...t, id: uid(), completed: false, status: "todo", dueDate: nextDate, createdAt: new Date().toISOString(), totalTime: 0, recurrence: newRec }, ...merged];
+          });
+          // Supprimées dans TASKS.md → corbeille (récupérables 30 jours)
+          if (r.deleted.length) {
+            try {
+              const deleted = JSON.parse(localStorage.getItem("deletedTasks") || "[]").filter(t => Date.now() - t._deletedAt < 30 * 86400000);
+              r.deleted.forEach(t => deleted.push({ ...t, _deletedAt: Date.now() }));
+              localStorage.setItem("deletedTasks", JSON.stringify(deleted));
+            } catch(e) {}
+          }
+          setTasks(merged);
+          cur = merged;
+          clsTasksRef.current = merged;
+          const parts = [];
+          if (r.added) parts.push(r.added + " ajoutée(s)");
+          if (r.updated) parts.push(r.updated + " modifiée(s)");
+          if (r.deleted.length) parts.push(r.deleted.length + " mise(s) à la corbeille");
+          summary = "Import TASKS.md : " + parts.join(", ");
+          console.info("✓ " + summary);
+        }
+        if (r.skippedDeletes) console.warn("Synchro Claude : " + r.skippedDeletes + " suppressions ignorées par sécurité (trop de tâches retirées d'un coup).");
+      }
+      // 3) Dates de clôture (pour n'afficher que les tâches terminées récemment)
+      let doneDates = null;
+      try { doneDates = JSON.parse(localStorage.getItem("claude_sync_done_dates") || "null"); } catch(e) {}
+      const firstRun = !doneDates;
+      doneDates = doneDates || {};
+      const todayIso = clsTodayIso();
+      const ids = new Set();
+      cur.forEach(t => { if (!t || !t.id) return; ids.add(t.id); if (t.completed) { if (!doneDates[t.id]) doneDates[t.id] = firstRun ? "old" : todayIso; } else if (doneDates[t.id]) delete doneDates[t.id]; });
+      Object.keys(doneDates).forEach(id => { if (!ids.has(id)) delete doneDates[id]; });
+      try { localStorage.setItem("claude_sync_done_dates", JSON.stringify(doneDates)); } catch(e) {}
+      // 4) Export
+      const out = clsExportMarkdown(cur, doneDates);
+      if (out !== text) {
+        const fh = await handle.getFileHandle(CLS_FILE, { create: true });
+        const w = await fh.createWritable();
+        await w.write(new Blob([out], { type: "text/markdown" }));
+        await w.close();
+      }
+      try { localStorage.setItem("claude_sync_last_written", out); localStorage.setItem("claude_sync_last", new Date().toISOString()); } catch(e) {}
+      setStatus("ok", summary);
+    } catch(e) {
+      console.warn("Synchro Claude :", e && e.message);
+      setStatus("err", (e && e.message) || String(e));
+    } finally { clsBusyRef.current = false; }
+  }, []);
+  // Export après chaque modification des tâches (anti-rebond 2 s)
+  useEffect(() => {
+    if (!tasksReady || !appReady) return;
+    clearTimeout(clsTimerRef.current);
+    clsTimerRef.current = setTimeout(() => runClaudeSync(false), 2000);
+    return () => clearTimeout(clsTimerRef.current);
+  }, [tasks, tasksReady, appReady]);
+  // Import : toutes les 30 s, au retour sur l'onglet, et sur demande (Paramètres)
+  useEffect(() => {
+    if (!tasksReady || !appReady) return;
+    const iv = setInterval(() => { if (!document.hidden) runClaudeSync(false); }, 30000);
+    const onFocus = () => runClaudeSync(false);
+    const onVis = () => { if (!document.hidden) runClaudeSync(false); };
+    const onNow = (e) => runClaudeSync(!!(e && e.detail && e.detail.interactive));
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("claudeSyncNow", onNow);
+    return () => { clearInterval(iv); window.removeEventListener("focus", onFocus); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("claudeSyncNow", onNow); };
+  }, [tasksReady, appReady]);
+
   const saveSettingsFn = s => { setSettings(s); appDbSet("settings", s); };
 
   const openNew = (arg = "") => { const pre = (arg && typeof arg === "object") ? arg : { dueDate: arg }; setModal({ id: uid(), title: "", category: "", type: "", dueDate: "", completed: false, status: "todo", priority: "normale", notes: "", reminder: "none", recurrence: { type: "none" }, subtasks: [], pinned: false, createdAt: new Date().toISOString(), totalTime: 0, inMyDay: false, ...pre }); };
@@ -19135,7 +19581,7 @@ function App() {
         </>}
         {/* Footer version */}
         <div style={{ marginTop: "auto", padding: "14px 18px", borderTop: "1px solid rgba(255,255,255,0.08)", fontSize: 9, fontFamily: "'DM Mono',monospace", color: "rgba(255,255,255,0.25)", lineHeight: 1.6, flexShrink: 0 }}>
-          v.0.692{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
+          v.0.693{" — "}{new Date().toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"})}{" "}{new Date().toLocaleTimeString("fr-FR",{timeZone:"Europe/Paris",hour:"2-digit",minute:"2-digit"})}
         </div>
       </div>
 
@@ -19319,6 +19765,12 @@ function App() {
 
       {modal && <TaskModal task={modal} onSave={handleSave} onClose={() => setModal(null)} onAddTask={addTask} settings={settings} />}
       <Toast notifs={toasts} onDismiss={id => { dismissedRef.current.add(id); setToasts(p => p.filter(x => x.id !== id)); }} />
+      {clsNeedPerm && (
+        <button onClick={() => runClaudeSync(true)} title="Le navigateur demande de confirmer l'accès au dossier Claude"
+          style={{ position:"fixed", bottom:20, left:"50%", transform:"translateX(-50%)", zIndex:9999, background:"#102A63", color:"#fff", border:"none", borderRadius:20, padding:"9px 18px", fontSize:12, fontFamily:_FL, cursor:"pointer", boxShadow:"0 4px 14px rgba(0,0,0,0.25)" }}>
+          🔄 Réactiver la synchronisation avec Claude
+        </button>
+      )}
       {undoTask && <UndoBanner task={undoTask} onUndo={undoDelete} onDismiss={() => setUndoTask(null)} />}
 
       {/* ── Global Search ── */}
